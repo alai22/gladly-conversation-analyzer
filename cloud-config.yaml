@@ -1,0 +1,120 @@
+# AWS CloudFormation / Elastic Beanstalk configuration
+# This file contains cloud service configurations for deploying Gladly
+
+# Variables that will be injected from environment
+Variables:
+  # Storage configuration
+  STORAGE_TYPE: !Ref StorageType  # s3, azure, or local
+  
+  # S3 Configuration
+  S3_BUCKET_NAME: !Ref S3BucketName
+  S3_REGION: !Ref S3Region
+  S3_FILE_KEY: conversation_items.jsonl
+  
+  # Azure Configuration (if using Azure)
+  AZURE_CONNECTION_STRING: !Ref AzureConnectionString
+  AZURE_CONTAINER_NAME: !Ref AzureContainerName
+  AZURE_BLOB_NAME: conversation_items.jsonl
+  
+  # API Configuration
+  ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+  CLAUDE_MODEL: claude-3-5-sonnet-20241022
+  
+  # Flask Configuration
+  FLASK_ENV: production
+  PORT: 5000
+  HOST: 0.0.0.0
+
+# Parameter definitions for CloudFormation
+Parameters:
+  StorageType:
+    Type: String
+    Default: s3
+    AllowedValues: [s3, azure, local]
+    Description: Storage backend type
+  
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for conversation data
+    NoEcho: false
+  
+  S3Region:
+    Type: String
+    Default: us-east-1
+    Description: AWS region for S3 bucket
+  
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic Claude API key
+  
+  # Optional parameters
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues: [t3.small, t3.medium, t3.large, m5.large, m5.xlarge]
+    Description: EC2 instance type
+  
+  EnvironmentName:
+    Type: String
+    Default: gladly-production
+    Description: Environment name for resource identification
+
+# Resources
+Resources:
+  # IAM Role for EC2
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+  
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref EC2InstanceRole
+  
+  # Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Gladly application
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5000
+        ToPort: 5000
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+
+# Outputs
+Outputs:
+  ApplicationURL:
+    Description: URL of the deployed application
+    Value: !Sub 'http://${EC2Instance.PublicIp}:5000'
+    Export:
+      Name: !Sub '${EnvironmentName}-ApplicationURL'
+  
+  EC2InstanceIP:
+    Description: Public IP address of the EC2 instance
+    Value: !Ref EC2Instance
+    Export:
+      Name: !Sub '${EnvironmentName}-EC2InstanceIP'

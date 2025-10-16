@@ -1,0 +1,66 @@
+# Build artifacts
+build/
+dist/
+
+# Development files
+.git/
+.gitignore
+README*.md
+QUICK_START.md
+EXAMPLES.md
+DEPLOYMENT.md
+
+# Environment files
+.env
+.env.*
+!env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test files
+test_*
+*_test.py
+
+# Temporary files
+.tmp/
+temp/
+
+# Virtual environment
+venv/
+
+# Node dependencies (will be installed fresh)
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Documentation (keep only essential)
+/*.pdf
+
+# Shell scripts (not needed in container)
+*.sh
+
+# Terraform files
+*.tfstate*
+.terraform/
+
+# Certificate files
+*.pem
+*.key

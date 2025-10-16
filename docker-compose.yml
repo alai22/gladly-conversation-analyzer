@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  gladly-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      # Storage Configuration
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_FILE_KEY=${S3_FILE_KEY:-conversation_items.jsonl}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Azure Storage Configuration
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
+      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME:-gladly-conversations}
+      - AZURE_BLOB_NAME=${AZURE_BLOB_NAME:-conversation_items.jsonl}
+      
+      # API Configuration
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-3-5-sonnet-20241022}
+      
+      # Flask Configuration
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - PORT=${PORT:-5000}
+      - HOST=${HOST:-0.0.0.0}
+      
+      # Local file fallback
+      - LOCAL_FILE_PATH=${LOCAL_FILE_PATH:-conversation_items.jsonl}
+    
+    volumes:
+      # Optional: Mount local config for development
+      - ./config_cloud.py:/app/config_local.py:ro
+      
+      # Optional: Mount conversation data for local development
+      - ${CONVERSATION_DATA_PATH:-./conversation_items.jsonl}:/app/conversation_items.jsonl:ro
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - gladly-network
+
+networks:
+  gladly-network:
+    driver: bridge
