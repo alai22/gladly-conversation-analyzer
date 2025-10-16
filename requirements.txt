@@ -1,6 +1,6 @@
 # Core Flask dependencies
 flask>=3.1.2
-flask-cors>=6.1.0
+flask-cors>=6.0.0
 
 # HTTP Client
 requests>=2.31.0
