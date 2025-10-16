@@ -3,13 +3,21 @@ from flask_cors import CORS
 import os
 from app import app as api_app
 
+# Create main app
 app = Flask(__name__, static_folder="build")
 
 # Enable CORS for all origins in production
 CORS(app)
 
-# Mount API routes
-app.register_blueprint(api_app)
+# Instead of registering as blueprint, we'll merge the routes
+# Copy all routes from api_app to our main app
+for rule in api_app.url_map.iter_rules():
+    app.add_url_rule(
+        rule.rule,
+        endpoint=rule.endpoint,
+        view_func=api_app.view_functions[rule.endpoint],
+        methods=rule.methods
+    )
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
