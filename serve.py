@@ -9,15 +9,16 @@ app = Flask(__name__, static_folder="build")
 # Enable CORS for all origins in production
 CORS(app)
 
-# Instead of registering as blueprint, we'll merge the routes
-# Copy all routes from api_app to our main app
+# Copy only the API routes from api_app, excluding built-in Flask routes
 for rule in api_app.url_map.iter_rules():
-    app.add_url_rule(
-        rule.rule,
-        endpoint=rule.endpoint,
-        view_func=api_app.view_functions[rule.endpoint],
-        methods=rule.methods
-    )
+    # Skip built-in Flask routes like 'static'
+    if rule.endpoint not in ['static']:
+        app.add_url_rule(
+            rule.rule,
+            endpoint=rule.endpoint,
+            view_func=api_app.view_functions[rule.endpoint],
+            methods=rule.methods
+        )
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
