@@ -28,10 +28,6 @@ def serve(path):
     else:
         return send_from_directory(app.static_folder, "index.html")
 
-@app.route("/health")
-def health_check():
-    return {"status": "ok", "service": "gladly-conversation-analyzer"}
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     host = os.environ.get("HOST", "0.0.0.0")
