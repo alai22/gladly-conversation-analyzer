@@ -4,9 +4,11 @@ import PromptInput from './components/PromptInput';
 import ConversationDisplay from './components/ConversationDisplay';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
+import Login from './components/Login';
 import axios from 'axios';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [conversations, setConversations] = useState({
     claude: [],
     conversations: [],
@@ -23,6 +25,24 @@ function App() {
     stream: false
   });
   const [healthStatus, setHealthStatus] = useState(null);
+
+  // Check if user is already authenticated (from sessionStorage)
+  useEffect(() => {
+    const authenticated = sessionStorage.getItem('authenticated');
+    if (authenticated === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+    sessionStorage.setItem('authenticated', 'true');
+  };
+
+  // If not authenticated, show login screen
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   // Check backend health on component mount
   useEffect(() => {
