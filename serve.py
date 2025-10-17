@@ -9,10 +9,10 @@ app = Flask(__name__, static_folder="build")
 # Enable CORS for all origins in production
 CORS(app)
 
-# Copy only the API routes from api_app, excluding built-in Flask routes
+# Copy only the API routes from api_app, excluding built-in Flask routes and root route
 for rule in api_app.url_map.iter_rules():
-    # Skip built-in Flask routes like 'static'
-    if rule.endpoint not in ['static']:
+    # Skip built-in Flask routes like 'static' and the root route '/'
+    if rule.endpoint not in ['static', 'index']:
         app.add_url_rule(
             rule.rule,
             endpoint=rule.endpoint,
