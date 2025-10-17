@@ -22,6 +22,10 @@ AWS_ACCESS_KEY_ID = "your-access-key"
 AWS_SECRET_ACCESS_KEY = "your-secret-key"
 
 # Anthropic API Configuration
-ANTHROPIC_API_KEY = "your-api-key-here"
+# Use environment variable ANTHROPIC_API_KEY instead
+import os
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
+CONVERSATION_FILE = "conversation_items.jsonl"
+
 
