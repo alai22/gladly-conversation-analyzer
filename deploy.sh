@@ -70,6 +70,10 @@ case $ENVIRONMENT in
         docker run -d \
             -p 80:5000 \
             --restart unless-stopped \
+            -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+            -e S3_BUCKET_NAME="${S3_BUCKET_NAME}" \
+            -e AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
+            -e AWS_REGION="${AWS_DEFAULT_REGION}" \
             --name gladly-prod \
             $PROJECT_NAME:$ENVIRONMENT
         
