@@ -34,20 +34,17 @@ function App() {
     }
   }, []);
 
+  // Check backend health on component mount (only when authenticated)
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkHealth();
+    }
+  }, [isAuthenticated]);
+
   const handleLogin = () => {
     setIsAuthenticated(true);
     sessionStorage.setItem('authenticated', 'true');
   };
-
-  // If not authenticated, show login screen
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  // Check backend health on component mount
-  useEffect(() => {
-    checkHealth();
-  }, []);
 
   const checkHealth = async () => {
     try {
@@ -57,6 +54,11 @@ function App() {
       setHealthStatus({ status: 'unhealthy', error: error.message });
     }
   };
+
+  // If not authenticated, show login screen
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   const addConversation = (type, userMessage, response, metadata = {}) => {
     const newConversation = {
