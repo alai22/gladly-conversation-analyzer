@@ -230,7 +230,7 @@ function App() {
       'conversations': 'Search Data', 
       'ask': 'Ask Claude (RAG)'
     };
-    return modeTitles(currentMode) || 'Unknown Mode';
+    return modeTitles[currentMode] || 'Unknown Mode';
   };
 
   return (
