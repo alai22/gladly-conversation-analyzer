@@ -6,6 +6,8 @@ config_local.py
 .env.development
 *.key
 *.pem
+update_fixed.sh
+user-data-script.sh
 
 # Python
 __pycache__/
