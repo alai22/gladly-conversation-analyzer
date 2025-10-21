@@ -377,7 +377,17 @@ Analysis Focus: {plan['analysis_focus']}
 
 Please analyze the conversation data and answer the question: "{question}"
 
-Be specific and reference the actual conversation content when possible. Look for patterns, themes, and specific examples in the data. Provide detailed insights based on the retrieved conversations."""
+Be specific and reference the actual conversation content when possible. Look for patterns, themes, and specific examples in the data. Provide detailed insights based on the retrieved conversations.
+
+IMPORTANT: Format your response using proper Markdown formatting:
+- Use **bold** for headings and important terms
+- Use bullet points (- or *) for lists
+- Use proper indentation for sub-items
+- Use numbered lists (1., 2., 3.) for sequential items
+- Use ## for main headings and ### for sub-headings
+- Use `code formatting` for specific terms or IDs when needed
+
+Make your response well-structured and easy to read with clear visual hierarchy."""
         
         response = claude_client.send_message(
             message=question,

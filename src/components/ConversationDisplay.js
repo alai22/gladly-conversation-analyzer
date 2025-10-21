@@ -3,6 +3,7 @@ import { Bot, User, Search, Database, Clock, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 function ConversationDisplay({ conversations, isLoading, error }) {
   const getIcon = (type) => {
@@ -145,8 +146,9 @@ function ConversationDisplay({ conversations, isLoading, error }) {
                     {formatTimestamp(conversation.timestamp)}
                   </span>
                 </div>
-                <div className="prose prose-sm max-w-none">
+                <div className="markdown-content">
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || '');
