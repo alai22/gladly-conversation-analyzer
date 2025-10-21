@@ -7,7 +7,8 @@ from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 import json
 import os
-from claude_api_client import ClaudeAPIClient, ConversationAnalyzer
+from claude_api_client import ClaudeAPIClient
+from public_s3_analyzer import PublicS3ConversationAnalyzer
 
 app = Flask(__name__)
 CORS(app)
@@ -21,7 +22,11 @@ def initialize_clients():
     global claude_client, conversation_analyzer
     try:
         claude_client = ClaudeAPIClient()
-        conversation_analyzer = ConversationAnalyzer()
+        # Use public S3 analyzer instead of local file
+        bucket_name = os.getenv('S3_BUCKET_NAME', 'gladly-conversations-alai22')
+        file_key = os.getenv('S3_FILE_KEY', 'conversation_items.json')
+        region = os.getenv('AWS_DEFAULT_REGION', 'us-east-2')
+        conversation_analyzer = PublicS3ConversationAnalyzer(bucket_name, file_key, region)
         return True
     except Exception as e:
         print(f"Error initializing clients: {e}")
