@@ -51,7 +51,7 @@ class ClaudeService:
             payload["system"] = system_prompt
         
         try:
-            logger.info("Sending message to Claude", model=model, max_tokens=max_tokens)
+            logger.info(f"Sending message to Claude: model={model}, max_tokens={max_tokens}")
             response = requests.post(
                 f"{self.base_url}/messages",
                 headers=self.headers,
@@ -61,14 +61,14 @@ class ClaudeService:
             response.raise_for_status()
             
             response_data = response.json()
-            logger.info("Claude response received", tokens_used=response_data.get('usage', {}).get('output_tokens', 0))
+            logger.info(f"Claude response received: tokens_used={response_data.get('usage', {}).get('output_tokens', 0)}")
             
             return ClaudeResponse.from_api_response(response_data, model)
         
         except requests.exceptions.RequestException as e:
-            logger.error("Claude API request failed", error=str(e))
+            logger.error(f"Claude API request failed: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error("Response details", response_text=e.response.text)
+                logger.error(f"Response details: {e.response.text}")
             raise
     
     def stream_message(self, 
@@ -95,7 +95,7 @@ class ClaudeService:
             payload["system"] = system_prompt
         
         try:
-            logger.info("Streaming message to Claude", model=model, max_tokens=max_tokens)
+            logger.info(f"Streaming message to Claude: model={model}, max_tokens={max_tokens}")
             response = requests.post(
                 f"{self.base_url}/messages",
                 headers=self.headers,
@@ -119,7 +119,7 @@ class ClaudeService:
                             continue
         
         except requests.exceptions.RequestException as e:
-            logger.error("Claude streaming request failed", error=str(e))
+            logger.error(f"Claude streaming request failed: {str(e)}")
             raise
     
     def is_available(self) -> bool:

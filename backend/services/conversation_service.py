@@ -27,9 +27,9 @@ class ConversationService:
             self.conversations = [
                 ConversationItem.from_dict(conv) for conv in raw_conversations
             ]
-            logger.info("Conversations loaded", count=len(self.conversations))
+            logger.info(f"Conversations loaded: {len(self.conversations)}")
         except Exception as e:
-            logger.error("Failed to load conversations", error=str(e))
+            logger.error(f"Failed to load conversations: {str(e)}")
             self.conversations = []
     
     def get_summary(self) -> ConversationSummary:
@@ -100,7 +100,7 @@ class ConversationService:
                 if len(results) >= limit:
                     break
         
-        logger.info("Search completed", query=query, results_count=len(results))
+        logger.info(f"Search completed: query={query}, results_count={len(results)}")
         return results
     
     def semantic_search_conversations(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -157,7 +157,7 @@ class ConversationService:
         scored_results.sort(key=lambda x: x[1], reverse=True)
         results = [item for item, score in scored_results[:limit]]
         
-        logger.info("Semantic search completed", query=query, results_count=len(results))
+        logger.info(f"Semantic search completed: query={query}, results_count={len(results)}")
         return results
     
     def get_recent_conversations(self, hours: int = 24) -> List[Dict[str, Any]]:
@@ -180,7 +180,7 @@ class ConversationService:
                     # If timestamp parsing fails, skip this conversation
                     continue
         
-        logger.info("Recent conversations retrieved", hours=hours, count=len(recent_conversations))
+        logger.info(f"Recent conversations retrieved: hours={hours}, count={len(recent_conversations)}")
         return recent_conversations
     
     def is_available(self) -> bool:

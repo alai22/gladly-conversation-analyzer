@@ -22,7 +22,7 @@ class RAGService:
     
     def process_query(self, question: str, model: str = None, max_tokens: int = 2000) -> Dict[str, Any]:
         """Process a RAG query"""
-        logger.info("Starting RAG query processing", question=question[:100])
+        logger.info(f"Starting RAG query processing: {question[:100]}")
         
         # Initialize RAG process tracking
         rag_process = RAGProcess(steps=[])
@@ -116,7 +116,7 @@ Respond with valid JSON only."""
             })
             
         except Exception as e:
-            logger.warning("Query planning failed, using fallback", error=str(e))
+            logger.warning(f"Query planning failed, using fallback: {str(e)}")
             plan = {
                 "search_terms": [question],
                 "content_types": ["CHAT_MESSAGE", "EMAIL", "CONVERSATION_NOTE"],

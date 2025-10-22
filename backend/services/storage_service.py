@@ -71,7 +71,7 @@ class StorageService:
         try:
             # Try public S3 access first
             s3_url = f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{self.file_key}"
-            logger.info("Attempting to load from public S3", url=s3_url)
+            logger.info(f"Attempting to load from public S3: {s3_url}")
             
             response = requests.get(s3_url)
             response.raise_for_status()
@@ -80,7 +80,7 @@ class StorageService:
             return self._parse_content(content)
             
         except Exception as e:
-            logger.warning("Public S3 access failed, trying authenticated access", error=str(e))
+            logger.warning(f"Public S3 access failed, trying authenticated access: {str(e)}")
             
             # Fallback to authenticated S3 access
             response = self.s3_client.get_object(
@@ -129,5 +129,5 @@ class StorageService:
                         logger.error("Failed to parse JSON content")
                         return []
         
-        logger.info("Content parsed successfully", count=len(conversations))
+        logger.info(f"Content parsed successfully: {len(conversations)} conversations")
         return conversations
