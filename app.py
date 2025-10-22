@@ -5,6 +5,10 @@ Modular Flask application for Gladly Conversation Analyzer
 from flask import Flask, render_template_string
 from flask_cors import CORS
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import blueprints
 from backend.api.routes.claude_routes import claude_bp

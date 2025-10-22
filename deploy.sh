@@ -45,6 +45,16 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
     print_warning "You'll need to set this in your cloud environment"
 fi
 
+if [ -z "$GLADLY_API_KEY" ]; then
+    print_warning "GLADLY_API_KEY environment variable is not set"
+    print_warning "You'll need to set this for Gladly downloads"
+fi
+
+if [ -z "$GLADLY_AGENT_EMAIL" ]; then
+    print_warning "GLADLY_AGENT_EMAIL environment variable is not set"
+    print_warning "You'll need to set this for Gladly downloads"
+fi
+
 if [ -z "$S3_BUCKET_NAME" ] && [ "$ENVIRONMENT" != "development" ]; then
     print_warning "S3_BUCKET_NAME environment variable is not set"
     print_warning "You'll need to set this for cloud deployment"
@@ -71,6 +81,8 @@ case $ENVIRONMENT in
             -p 80:5000 \
             --restart unless-stopped \
             -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+            -e GLADLY_API_KEY="${GLADLY_API_KEY}" \
+            -e GLADLY_AGENT_EMAIL="${GLADLY_AGENT_EMAIL}" \
             -e S3_BUCKET_NAME="${S3_BUCKET_NAME}" \
             -e AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
             -e AWS_REGION="${AWS_DEFAULT_REGION}" \
@@ -91,6 +103,8 @@ case $ENVIRONMENT in
         echo "  gunzip -c $PROJECT_NAME-$ENVIRONMENT.tar.gz | docker load"
         echo "  docker run -d -p 80:5000 --restart unless-stopped --name gladly-app \\"
         echo "    -e ANTHROPIC_API_KEY=\$ANTHROPIC_API_KEY \\"
+        echo "    -e GLADLY_API_KEY=\$GLADLY_API_KEY \\"
+        echo "    -e GLADLY_AGENT_EMAIL=\$GLADLY_AGENT_EMAIL \\"
         echo "    -e S3_BUCKET_NAME=\$S3_BUCKET_NAME \\"
         echo "    -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \\"
         echo "    -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \\"

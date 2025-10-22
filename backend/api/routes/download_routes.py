@@ -13,9 +13,13 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from typing import Dict, Optional
 import logging
+from dotenv import load_dotenv
 
 from backend.services.gladly_download_service import GladlyDownloadService
 from backend.utils.config import Config
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logger = logging.getLogger(__name__)

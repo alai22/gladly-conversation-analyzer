@@ -4,6 +4,10 @@ Configuration utilities
 
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Config:
@@ -12,6 +16,10 @@ class Config:
     # API Configuration
     ANTHROPIC_API_KEY: Optional[str] = os.getenv('ANTHROPIC_API_KEY')
     CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-20241022')
+    
+    # Gladly API Configuration
+    GLADLY_API_KEY: Optional[str] = os.getenv('GLADLY_API_KEY')
+    GLADLY_AGENT_EMAIL: Optional[str] = os.getenv('GLADLY_AGENT_EMAIL')
     
     # Storage Configuration
     STORAGE_TYPE: str = os.getenv('STORAGE_TYPE', 's3')
