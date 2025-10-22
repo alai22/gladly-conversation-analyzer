@@ -1,31 +1,7 @@
 import React from 'react';
-import { Bot, Database, Search, MessageSquare, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { Database, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 
-const Sidebar = ({ currentMode, setCurrentMode, healthStatus, onRefreshHealth }) => {
-  const modes = [
-    {
-      id: 'claude',
-      name: 'Claude Chat',
-      description: 'Direct Claude API interaction',
-      icon: Bot,
-      color: 'text-blue-600 bg-blue-50 hover:bg-blue-100'
-    },
-    {
-      id: 'conversations',
-      name: 'Search Data',
-      description: 'Search conversation data',
-      icon: Search,
-      color: 'text-green-600 bg-green-50 hover:bg-green-100'
-    },
-    {
-      id: 'ask',
-      name: 'Ask Claude (RAG)',
-      description: 'RAG-powered analysis of conversation data',
-      icon: MessageSquare,
-      color: 'text-purple-600 bg-purple-50 hover:bg-purple-100'
-    }
-  ];
-
+const Sidebar = ({ healthStatus, onRefreshHealth }) => {
   const getHealthStatusIcon = () => {
     if (!healthStatus) return <RefreshCw className="h-4 w-4 animate-spin" />;
     if (healthStatus.status === 'healthy') return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -74,37 +50,8 @@ const Sidebar = ({ currentMode, setCurrentMode, healthStatus, onRefreshHealth })
         </div>
       </div>
 
-      {/* Mode Selection */}
-      <div className="flex-1 p-6">
-        <h3 className="text-sm font-medium text-gray-900 mb-4">Modes</h3>
-        <div className="space-y-2">
-          {modes.map((mode) => {
-            const Icon = mode.icon;
-            const isActive = currentMode === mode.id;
-            
-            return (
-              <button
-                key={mode.id}
-                onClick={() => setCurrentMode(mode.id)}
-                className={`w-full flex items-start space-x-3 p-3 rounded-lg text-left transition-colors ${
-                  isActive 
-                    ? mode.color 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{mode.name}</div>
-                  <div className="text-xs opacity-75 mt-0.5">{mode.description}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Footer */}
-      <div className="p-6 border-t border-gray-200">
+      <div className="mt-auto p-6 border-t border-gray-200">
         <div className="text-xs text-gray-500">
           <div className="mb-2">
             <strong>Backend Status:</strong>

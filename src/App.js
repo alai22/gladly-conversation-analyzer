@@ -5,6 +5,7 @@ import ConversationDisplay from './components/ConversationDisplay';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
 import Login from './components/Login';
+import ModeSelector from './components/ModeSelector';
 import axios from 'axios';
 
 function App() {
@@ -14,7 +15,7 @@ function App() {
     conversations: [],
     ask: []
   });
-  const [currentMode, setCurrentMode] = useState('claude'); // 'claude', 'conversations', 'ask'
+  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -259,8 +260,6 @@ function App() {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <Sidebar 
-        currentMode={currentMode}
-        setCurrentMode={setCurrentMode}
         healthStatus={healthStatus}
         onRefreshHealth={checkHealth}
       />
@@ -270,23 +269,16 @@ function App() {
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Bot className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {getModeTitle()}
-                  {getCurrentConversationCount() > 0 && (
-                    <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {getCurrentConversationCount()} messages
-                    </span>
-                  )}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {currentMode === 'claude' && 'Direct Claude API interaction'}
-                  {currentMode === 'conversations' && 'Search conversation data'}
-                  {currentMode === 'ask' && 'RAG-powered analysis: Claude plans, retrieves, and analyzes conversation data'}
-                </p>
-              </div>
+            <div className="flex items-center space-x-4">
+              <ModeSelector 
+                currentMode={currentMode} 
+                setCurrentMode={setCurrentMode} 
+              />
+              {getCurrentConversationCount() > 0 && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {getCurrentConversationCount()} messages
+                </span>
+              )}
             </div>
             <div className="flex items-center space-x-3">
               <button
