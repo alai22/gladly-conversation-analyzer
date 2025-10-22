@@ -36,9 +36,7 @@ class RAGService:
         # Step 3: Data Analysis
         response = self._analyze_data(question, relevant_data, plan, model, max_tokens, rag_process)
         
-        logger.info("RAG query processing completed", 
-                   data_retrieved=len(relevant_data), 
-                   tokens_used=response.tokens_used)
+        logger.info(f"RAG query processing completed: data_retrieved={len(relevant_data)}, tokens_used={response.tokens_used}")
         
         return {
             'success': True,
