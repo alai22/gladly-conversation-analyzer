@@ -1,14 +1,16 @@
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 import os
-from app import app as api_app, initialize_clients
+from app import app as api_app
 
-# Initialize Claude client and conversation analyzer
-print("Initializing clients...")
-if initialize_clients():
-    print("✅ Clients initialized successfully")
-else:
-    print("⚠️ Warning: Failed to initialize clients")
+# Initialize services (they initialize themselves when imported)
+print("Initializing services...")
+try:
+    from backend.services.claude_service import ClaudeService
+    from backend.services.conversation_service import ConversationService
+    print("✅ Services initialized successfully")
+except Exception as e:
+    print(f"⚠️ Warning: Failed to initialize services: {e}")
 
 # Create main app
 app = Flask(__name__, static_folder="build")
