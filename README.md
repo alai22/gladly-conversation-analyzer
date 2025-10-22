@@ -27,12 +27,30 @@ S3_BUCKET_NAME=your-conversation-bucket (if using S3)
 ```
 
 ### 3. Deploy
+
+**On Linux/Mac:**
 ```bash
 # Production deployment
 ./deploy.sh production
 
 # Development
 ./deploy.sh development
+```
+
+**On Windows:**
+```cmd
+# Production deployment
+.\deploy.bat production
+
+# Development
+.\deploy.bat development
+```
+
+**Alternative (Windows PowerShell with Git Bash):**
+```bash
+# If you have Git Bash installed, you can use the .sh script
+bash deploy.sh production
+bash deploy.sh development
 ```
 
 ## 🏗️ Architecture
@@ -87,19 +105,33 @@ npm run build
 ```
 
 ### Running Locally
+
+**Option 1: Using the deployment script**
+
+**On Linux/Mac:**
 ```bash
-# Option 1: Using the deployment script
 chmod +x deploy.sh
 ./deploy.sh development
+```
 
-# Option 2: Manual startup
-# Terminal 1 (Backend)
+**On Windows:**
+```cmd
+.\deploy.bat development
+```
+
+**Option 2: Manual startup**
+
+**Terminal 1 (Backend):**
+```bash
 # On Linux/Mac:
 source venv/bin/activate && python app.py
+
 # On Windows:
 venv\Scripts\activate && python app.py
+```
 
-# Terminal 2 (Frontend - if developing)
+**Terminal 2 (Frontend - if developing):**
+```bash
 npm start
 ```
 
@@ -147,6 +179,8 @@ exit
 ```
 
 #### Step 3: Deploy Application
+
+**On Linux/Mac:**
 ```bash
 # Clone your repository
 git clone https://github.com/YOUR_USERNAME/gladly-conversation-analyzer.git
@@ -159,6 +193,20 @@ export S3_BUCKET_NAME="your-bucket-name"
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
 ./deploy.sh production
+```
+
+**On Windows:**
+```cmd
+# Clone your repository
+git clone https://github.com/YOUR_USERNAME/gladly-conversation-analyzer.git
+cd gladly-conversation-analyzer
+
+# Build and deploy
+set ANTHROPIC_API_KEY=your-api-key
+set S3_BUCKET_NAME=your-bucket-name
+set AWS_ACCESS_KEY_ID=your-access-key
+set AWS_SECRET_ACCESS_KEY=your-secret-key
+.\deploy.bat production
 ```
 
 ### Option B: Docker Containers
