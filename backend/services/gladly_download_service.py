@@ -87,6 +87,17 @@ class GladlyDownloadService:
     
     def read_conversation_ids_from_csv(self, csv_file: str) -> List[str]:
         """Read conversation IDs from the CSV file"""
+        logger.info(f"Reading conversation IDs from CSV file: {csv_file}")
+        
+        # Check if file exists and add debugging info
+        if not os.path.exists(csv_file):
+            logger.error(f"CSV file not found: {csv_file}")
+            logger.error(f"Current working directory: {os.getcwd()}")
+            logger.error(f"Files in current directory: {os.listdir('.')}")
+            if os.path.exists('data'):
+                logger.error(f"Files in data directory: {os.listdir('data')}")
+            return []
+        
         conversation_ids = []
         
         try:

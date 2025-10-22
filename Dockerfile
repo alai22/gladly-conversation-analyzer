@@ -35,6 +35,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy Python application
 COPY *.py ./
 COPY backend/ ./backend/
+COPY data/ ./data/
 COPY config_cloud.py ./config_local.py
 
 # Copy built React app
