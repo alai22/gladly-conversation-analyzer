@@ -7,6 +7,8 @@ const DownloadManager = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [batchSize, setBatchSize] = useState(500);
   const [maxDuration, setMaxDuration] = useState(30);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Fetch download status
   const fetchDownloadStatus = async () => {
@@ -58,7 +60,9 @@ const DownloadManager = () => {
         },
         body: JSON.stringify({
           batch_size: batchSize,
-          max_duration_minutes: maxDuration
+          max_duration_minutes: maxDuration,
+          start_date: startDate || null,
+          end_date: endDate || null
         }),
       });
       
@@ -187,10 +191,10 @@ const DownloadManager = () => {
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${downloadStats.completion_percentage}%` }}
                   ></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Download Controls */}
           <div className="mb-8">
@@ -235,7 +239,7 @@ const DownloadManager = () => {
               </div>
             ) : (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Batch Size
@@ -251,6 +255,32 @@ const DownloadManager = () => {
                       <option value={2000}>2000 conversations (~5 min)</option>
                       <option value={5000}>5000 conversations (~12 min)</option>
                     </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date (Optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date (Optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      placeholder="YYYY-MM-DD"
+                    />
                   </div>
                   
                   <div>
@@ -277,6 +307,26 @@ const DownloadManager = () => {
                     </button>
                   </div>
                 </div>
+                
+                {/* Date Filter Help */}
+                {(startDate || endDate) && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-blue-800">Date Range Filter Active</h3>
+                        <div className="mt-1 text-sm text-blue-700">
+                          <p>Only conversations from <strong>{startDate || 'beginning'}</strong> to <strong>{endDate || 'end'}</strong> will be downloaded.</p>
+                          <p className="mt-1">Leave dates empty to download all conversations.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {downloadStatus?.error && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">

@@ -89,10 +89,23 @@ def start_download():
         data = request.get_json() or {}
         batch_size = data.get('batch_size', 500)
         max_duration_minutes = data.get('max_duration_minutes', 30)
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
         
         # Validate batch size
         if not isinstance(batch_size, int) or batch_size <= 0:
             return jsonify({'status': 'error', 'message': 'Invalid batch size'}), 400
+        
+        # Validate date parameters
+        if start_date and not isinstance(start_date, str):
+            return jsonify({'status': 'error', 'message': 'Invalid start_date format'}), 400
+        
+        if end_date and not isinstance(end_date, str):
+            return jsonify({'status': 'error', 'message': 'Invalid end_date format'}), 400
+        
+        # Validate date range
+        if start_date and end_date and start_date > end_date:
+            return jsonify({'status': 'error', 'message': 'Start date must be before end date'}), 400
         
         # Initialize download service
         download_service = GladlyDownloadService()
@@ -113,7 +126,7 @@ def start_download():
         # Start download in background thread
         download_thread = threading.Thread(
             target=_run_download,
-            args=(batch_size, max_duration_minutes),
+            args=(batch_size, max_duration_minutes, start_date, end_date),
             daemon=True
         )
         download_thread.start()
@@ -254,7 +267,7 @@ def get_download_stats():
         logger.error(f"Error getting download stats: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-def _run_download(batch_size: int, max_duration_minutes: int):
+def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = None, end_date: str = None):
     """Run the download in background thread"""
     global download_state, download_service
     
@@ -270,6 +283,8 @@ def _run_download(batch_size: int, max_duration_minutes: int):
             output_file="gladly_conversations_batch.jsonl",
             max_duration_minutes=max_duration_minutes,
             batch_size=batch_size,
+            start_date=start_date,
+            end_date=end_date,
             progress_callback=_update_progress
         )
         

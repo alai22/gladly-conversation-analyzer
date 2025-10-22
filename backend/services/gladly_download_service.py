@@ -132,6 +132,7 @@ class GladlyDownloadService:
     
     def download_batch(self, csv_file: str, output_file: str = None, 
                       max_duration_minutes: int = 30, batch_size: int = 500,
+                      start_date: str = None, end_date: str = None,
                       progress_callback: Optional[Callable] = None):
         """Download conversations in batches with time limit"""
         
@@ -139,6 +140,17 @@ class GladlyDownloadService:
         
         if not conversation_ids:
             logger.error("No conversation IDs found in CSV file")
+            return
+        
+        # Filter by date range if specified
+        if start_date or end_date:
+            conversation_ids = self.filter_conversations_by_date(
+                csv_file, conversation_ids, start_date, end_date
+            )
+            logger.info(f"After date filtering: {len(conversation_ids)} conversations")
+        
+        if not conversation_ids:
+            logger.info("No conversations found in the specified date range")
             return
         
         if output_file is None:
@@ -279,3 +291,63 @@ class GladlyDownloadService:
             logger.error(f"Error getting download statistics: {e}")
         
         return stats
+    
+    def filter_conversations_by_date(self, csv_file: str, conversation_ids: List[str], 
+                                   start_date: str = None, end_date: str = None) -> List[str]:
+        """Filter conversation IDs by date range from CSV file"""
+        
+        try:
+            filtered_ids = []
+            
+            with open(csv_file, 'r', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                
+                for row in reader:
+                    conversation_id = row.get('Conversation ID', '').strip()
+                    
+                    # Skip if this conversation ID is not in our list
+                    if conversation_id not in conversation_ids:
+                        continue
+                    
+                    # Get the timestamp from the CSV
+                    timestamp_str = row.get('Timestamp Created At Date', '').strip()
+                    
+                    if not timestamp_str:
+                        continue
+                    
+                    try:
+                        # Parse the timestamp (format: YYYY-MM-DD)
+                        conversation_date = datetime.strptime(timestamp_str, '%Y-%m-%d').date()
+                        
+                        # Check date range
+                        include_conversation = True
+                        
+                        if start_date:
+                            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                            if conversation_date < start_date_obj:
+                                include_conversation = False
+                        
+                        if end_date:
+                            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                            if conversation_date > end_date_obj:
+                                include_conversation = False
+                        
+                        if include_conversation:
+                            filtered_ids.append(conversation_id)
+                            
+                    except ValueError as e:
+                        logger.warning(f"Could not parse date '{timestamp_str}' for conversation {conversation_id}: {e}")
+                        continue
+            
+            logger.info(f"Date filtering: {len(filtered_ids)} conversations match date range")
+            if start_date:
+                logger.info(f"Start date filter: {start_date}")
+            if end_date:
+                logger.info(f"End date filter: {end_date}")
+                
+            return filtered_ids
+            
+        except Exception as e:
+            logger.error(f"Error filtering conversations by date: {e}")
+            # Return original list if filtering fails
+            return conversation_ids
