@@ -33,7 +33,7 @@ def health_check():
         })
     
     except Exception as e:
-        logger.error("Health check error", error=str(e))
+        logger.error(f"Health check error: {str(e)}")
         return jsonify({
             'status': 'unhealthy',
             'error': str(e)

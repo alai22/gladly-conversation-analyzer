@@ -31,12 +31,12 @@ def conversations_ask():
         if not question:
             return jsonify({'error': 'Question is required'}), 400
         
-        logger.info("RAG query request", question=question[:100], model=model, max_tokens=max_tokens)
+        logger.info(f"RAG query request: question={question[:100]}, model={model}, max_tokens={max_tokens}")
         
         result = rag_service.process_query(question, model, max_tokens)
         
         return jsonify(result)
     
     except Exception as e:
-        logger.error("RAG query error", error=str(e))
+        logger.error(f"RAG query error: {str(e)}")
         return jsonify({'error': str(e)}), 500

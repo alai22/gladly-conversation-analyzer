@@ -28,7 +28,7 @@ def conversations_summary():
         })
     
     except Exception as e:
-        logger.error("Conversation summary error", error=str(e))
+        logger.error(f"Conversation summary error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -43,7 +43,7 @@ def conversations_search():
         if not query:
             return jsonify({'error': 'Query is required'}), 400
         
-        logger.info("Conversation search request", query=query, limit=limit)
+        logger.info(f"Conversation search request: query={query}, limit={limit}")
         
         results = conversation_service.semantic_search_conversations(query, limit)
         
@@ -61,5 +61,5 @@ def conversations_search():
         })
     
     except Exception as e:
-        logger.error("Conversation search error", error=str(e))
+        logger.error(f"Conversation search error: {str(e)}")
         return jsonify({'error': str(e)}), 500

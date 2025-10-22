@@ -29,7 +29,7 @@ def claude_chat():
         if not message:
             return jsonify({'error': 'Message is required'}), 400
         
-        logger.info("Claude chat request", model=model, max_tokens=max_tokens, stream=stream)
+        logger.info(f"Claude chat request: model={model}, max_tokens={max_tokens}, stream={stream}")
         
         if stream:
             # For streaming, we'll collect all chunks and return them
@@ -65,5 +65,5 @@ def claude_chat():
             })
     
     except Exception as e:
-        logger.error("Claude chat error", error=str(e))
+        logger.error(f"Claude chat error: {str(e)}")
         return jsonify({'error': str(e)}), 500
