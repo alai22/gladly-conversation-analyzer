@@ -125,5 +125,7 @@ gladly_batch_download.log
 test_results.json
 api_test_results.json
 
-# CSV files with conversation data
-Conversation Metrics (ID, Topic, Channel, Agent).csv
+# Data directory (CSV index files are included for download manager functionality)
+# Downloaded conversation files are still excluded (see below)
+data/*.jsonl
+data/*.log

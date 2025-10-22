@@ -54,7 +54,7 @@ def main():
     
     # Download with custom batch size
     downloader.download_batch(
-        csv_file="Conversation Metrics (ID, Topic, Channel, Agent).csv",
+        csv_file="data/conversation_metrics.csv",
         output_file="gladly_conversations_batch.jsonl",
         max_duration_minutes=60,  # Large time limit, we'll stop by count
         batch_size=batch_size

@@ -3,7 +3,7 @@
 Gladly Conversation Downloader
 
 This script downloads conversation items from the Gladly API using conversation IDs
-from the CSV file 'Conversation Metrics (ID, Topic, Channel, Agent).csv'.
+from the CSV file 'data/conversation_metrics.csv'.
 """
 
 import csv
@@ -181,7 +181,7 @@ def main():
         return
     
     # Configuration
-    csv_file = "Conversation Metrics (ID, Topic, Channel, Agent).csv"
+    csv_file = "data/conversation_metrics.csv"
     
     # Initialize downloader
     downloader = GladlyDownloader(api_key, agent_email)

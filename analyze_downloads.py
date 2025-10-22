@@ -114,7 +114,7 @@ class ConversationAnalyzer:
         
         return stats
     
-    def analyze_csv_file(self, csv_file: str = "Conversation Metrics (ID, Topic, Channel, Agent).csv") -> int:
+    def analyze_csv_file(self, csv_file: str = "data/conversation_metrics.csv") -> int:
         """Analyze the CSV file to get total conversation count"""
         logger.info(f"\nAnalyzing CSV file: {csv_file}")
         

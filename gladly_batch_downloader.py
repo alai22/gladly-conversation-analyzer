@@ -230,7 +230,7 @@ def main():
         return
     
     # Configuration
-    csv_file = "Conversation Metrics (ID, Topic, Channel, Agent).csv"
+    csv_file = "data/conversation_metrics.csv"
     
     # Initialize downloader
     downloader = BatchedGladlyDownloader(api_key, agent_email)

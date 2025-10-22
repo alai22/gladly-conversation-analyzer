@@ -239,7 +239,7 @@ def get_download_stats():
                     pass
         
         # Get total conversations in CSV
-        csv_file = "Conversation Metrics (ID, Topic, Channel, Agent).csv"
+        csv_file = "data/conversation_metrics.csv"
         total_in_csv = 0
         if os.path.exists(csv_file):
             try:
@@ -279,7 +279,7 @@ def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = 
         
         # Run the download
         download_service.download_batch(
-            csv_file="Conversation Metrics (ID, Topic, Channel, Agent).csv",
+            csv_file="data/conversation_metrics.csv",
             output_file="gladly_conversations_batch.jsonl",
             max_duration_minutes=max_duration_minutes,
             batch_size=batch_size,
