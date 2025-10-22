@@ -12,6 +12,25 @@ git pull origin main
 if [ -f .env ]; then
     echo "📋 Loading environment variables from .env file..."
     export $(grep -v '^#' .env | xargs)
+    
+    # Verify key loading
+    if [ -n "$ANTHROPIC_API_KEY" ]; then
+        echo "✅ ANTHROPIC_API_KEY loaded: ${ANTHROPIC_API_KEY:0:12}..."
+    else
+        echo "❌ ANTHROPIC_API_KEY not found in .env file"
+    fi
+    
+    if [ -n "$GLADLY_API_KEY" ]; then
+        echo "✅ GLADLY_API_KEY loaded: ${GLADLY_API_KEY:0:12}..."
+    else
+        echo "❌ GLADLY_API_KEY not found in .env file"
+    fi
+    
+    if [ -n "$GLADLY_AGENT_EMAIL" ]; then
+        echo "✅ GLADLY_AGENT_EMAIL loaded: $GLADLY_AGENT_EMAIL"
+    else
+        echo "❌ GLADLY_AGENT_EMAIL not found in .env file"
+    fi
 else
     echo "❌ ERROR: No .env file found!"
     echo "Please create a .env file with your API keys before running this script."

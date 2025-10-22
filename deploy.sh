@@ -43,21 +43,29 @@ docker build -t $PROJECT_NAME:$ENVIRONMENT .
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     print_warning "ANTHROPIC_API_KEY environment variable is not set"
     print_warning "You'll need to set this in your cloud environment"
+else
+    print_status "ANTHROPIC_API_KEY is set: ${ANTHROPIC_API_KEY:0:12}..."
 fi
 
 if [ -z "$GLADLY_API_KEY" ]; then
     print_warning "GLADLY_API_KEY environment variable is not set"
     print_warning "You'll need to set this for Gladly downloads"
+else
+    print_status "GLADLY_API_KEY is set: ${GLADLY_API_KEY:0:12}..."
 fi
 
 if [ -z "$GLADLY_AGENT_EMAIL" ]; then
     print_warning "GLADLY_AGENT_EMAIL environment variable is not set"
     print_warning "You'll need to set this for Gladly downloads"
+else
+    print_status "GLADLY_AGENT_EMAIL is set: $GLADLY_AGENT_EMAIL"
 fi
 
 if [ -z "$S3_BUCKET_NAME" ] && [ "$ENVIRONMENT" != "development" ]; then
     print_warning "S3_BUCKET_NAME environment variable is not set"
     print_warning "You'll need to set this for cloud deployment"
+else
+    print_status "S3_BUCKET_NAME is set: $S3_BUCKET_NAME"
 fi
 
 case $ENVIRONMENT in
