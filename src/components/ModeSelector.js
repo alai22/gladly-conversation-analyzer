@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Database, Search, MessageSquare, ChevronDown } from 'lucide-react';
+import { Bot, Database, Search, MessageSquare, ChevronDown, Download } from 'lucide-react';
 
 const ModeSelector = ({ currentMode, setCurrentMode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,6 +26,13 @@ const ModeSelector = ({ currentMode, setCurrentMode }) => {
       description: 'RAG-powered analysis of conversation data',
       icon: MessageSquare,
       color: 'text-purple-600'
+    },
+    {
+      id: 'download',
+      name: 'Download Manager',
+      description: 'Download conversation data from Gladly',
+      icon: Download,
+      color: 'text-orange-600'
     }
   ];
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Bot, User, Settings, Database, MessageSquare, Search } from 'lucide-react';
+import { Send, Bot, User, Settings, Database, MessageSquare, Search, Download } from 'lucide-react';
 import PromptInput from './components/PromptInput';
 import ConversationDisplay from './components/ConversationDisplay';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
 import Login from './components/Login';
 import ModeSelector from './components/ModeSelector';
+import DownloadManager from './components/DownloadManager';
 import axios from 'axios';
 
 function App() {
@@ -13,9 +14,10 @@ function App() {
   const [conversations, setConversations] = useState({
     claude: [],
     conversations: [],
-    ask: []
+    ask: [],
+    download: []
   });
-  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask'
+  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -251,7 +253,8 @@ function App() {
     const modeTitles = {
       'claude': 'Claude Chat',
       'conversations': 'Search Data', 
-      'ask': 'Ask Claude (RAG)'
+      'ask': 'Ask Claude (RAG)',
+      'download': 'Download Manager'
     };
     return modeTitles[currentMode] || 'Unknown Mode';
   };
@@ -316,27 +319,33 @@ function App() {
           />
         )}
 
-        {/* Conversation Display */}
+        {/* Main Content Area */}
         <div className="flex-1 overflow-hidden">
-          <ConversationDisplay
-            conversations={getCurrentConversations()}
-            isLoading={isLoading}
-            error={error}
-          />
+          {currentMode === 'download' ? (
+            <DownloadManager />
+          ) : (
+            <ConversationDisplay
+              conversations={getCurrentConversations()}
+              isLoading={isLoading}
+              error={error}
+            />
+          )}
         </div>
 
         {/* Prompt Input */}
-        <div className="bg-white border-t border-gray-200 p-6">
-          <PromptInput
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            placeholder={
-              currentMode === 'claude' ? 'Ask Claude anything...' :
-              currentMode === 'conversations' ? 'Search conversation data...' :
-              'Ask Claude to analyze your conversation data (e.g., "What are the main customer complaints?")'
-            }
-          />
-        </div>
+        {currentMode !== 'download' && (
+          <div className="bg-white border-t border-gray-200 p-6">
+            <PromptInput
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              placeholder={
+                currentMode === 'claude' ? 'Ask Claude anything...' :
+                currentMode === 'conversations' ? 'Search conversation data...' :
+                'Ask Claude to analyze your conversation data (e.g., "What are the main customer complaints?")'
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -115,3 +115,15 @@ jspm_packages/
 # Conversation data files (add these if they contain sensitive info)
 # conversation_items.json
 # conversation_items.jsonl
+
+# Downloaded conversation files (large files - don't commit to git)
+gladly_conversations_*.jsonl
+gladly_conversations_downloaded.jsonl
+gladly_conversations_batch.jsonl
+gladly_download.log
+gladly_batch_download.log
+test_results.json
+api_test_results.json
+
+# CSV files with conversation data
+Conversation Metrics (ID, Topic, Channel, Agent).csv
