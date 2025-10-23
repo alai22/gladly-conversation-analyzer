@@ -16,6 +16,7 @@ import logging
 from dotenv import load_dotenv
 
 from backend.services.gladly_download_service import GladlyDownloadService
+from backend.services.conversation_tracker import ConversationTracker
 from backend.utils.config import Config
 
 # Load environment variables from .env file
@@ -174,41 +175,31 @@ def stop_download():
 
 @download_bp.route('/history', methods=['GET'])
 def get_download_history():
-    """Get download history and statistics"""
+    """Get detailed conversation download history"""
     try:
-        # Get list of downloaded files
-        downloaded_files = []
-        for file in os.listdir('.'):
-            if file.startswith('gladly_conversations') and file.endswith('.jsonl'):
-                file_path = file
-                file_size = os.path.getsize(file_path)
-                file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
-                
-                # Count conversations in file
-                conversation_count = 0
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            if line.strip():
-                                conversation_count += 1
-                except Exception:
-                    pass
-                
-                downloaded_files.append({
-                    'filename': file,
-                    'size_mb': round(file_size / (1024 * 1024), 2),
-                    'conversation_count': conversation_count,
-                    'created_at': file_mtime.isoformat()
-                })
+        # Get query parameters for pagination
+        limit = request.args.get('limit', 100, type=int)
+        offset = request.args.get('offset', 0, type=int)
         
-        # Sort by creation time (newest first)
-        downloaded_files.sort(key=lambda x: x['created_at'], reverse=True)
+        # Initialize conversation tracker
+        tracker = ConversationTracker()
+        
+        # Get conversation history with pagination
+        conversations = tracker.get_conversation_history(limit=limit, offset=offset)
+        
+        # Get conversation statistics
+        stats = tracker.get_conversation_stats()
         
         return jsonify({
             'status': 'success',
             'data': {
-                'files': downloaded_files,
-                'total_files': len(downloaded_files)
+                'conversations': conversations,
+                'pagination': {
+                    'limit': limit,
+                    'offset': offset,
+                    'total': stats['total_downloaded']
+                },
+                'stats': stats
             }
         })
         
@@ -220,23 +211,11 @@ def get_download_history():
 def get_download_stats():
     """Get overall download statistics"""
     try:
-        # Analyze all downloaded files
-        total_conversations = 0
-        total_size_mb = 0
+        # Initialize conversation tracker
+        tracker = ConversationTracker()
         
-        for file in os.listdir('.'):
-            if file.startswith('gladly_conversations') and file.endswith('.jsonl'):
-                file_size = os.path.getsize(file)
-                total_size_mb += file_size / (1024 * 1024)
-                
-                # Count conversations
-                try:
-                    with open(file, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            if line.strip():
-                                total_conversations += 1
-                except Exception:
-                    pass
+        # Get conversation statistics
+        stats = tracker.get_conversation_stats()
         
         # Get total conversations in CSV
         csv_file = "data/conversation_metrics.csv"
@@ -250,16 +229,19 @@ def get_download_stats():
             except Exception:
                 pass
         
-        completion_percentage = (total_conversations / total_in_csv * 100) if total_in_csv > 0 else 0
+        completion_percentage = (stats['total_downloaded'] / total_in_csv * 100) if total_in_csv > 0 else 0
         
         return jsonify({
             'status': 'success',
             'data': {
-                'total_downloaded': total_conversations,
+                'total_downloaded': stats['total_downloaded'],
                 'total_in_csv': total_in_csv,
-                'remaining': max(0, total_in_csv - total_conversations),
+                'remaining': max(0, total_in_csv - stats['total_downloaded']),
                 'completion_percentage': round(completion_percentage, 2),
-                'total_size_mb': round(total_size_mb, 2)
+                'date_range': stats['date_range'],
+                'channels': stats['channels'],
+                'agents': stats['agents'],
+                'topics': stats['topics']
             }
         })
         

@@ -42,7 +42,7 @@ const DownloadManager = () => {
       const response = await fetch('/api/download/history');
       const data = await response.json();
       if (data.status === 'success') {
-        setDownloadHistory(data.data.files);
+        setDownloadHistory(data.data.conversations);
       }
     } catch (error) {
       console.error('Error fetching download history:', error);
@@ -346,42 +346,85 @@ const DownloadManager = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        File Name
+                        Conversation ID
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Conversations
+                        Conversation Date
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Size
+                        Channel
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Created
+                        Agent
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Topics
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Downloaded At
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {downloadHistory.map((file, index) => (
-                      <tr key={index}>
+                    {downloadHistory.map((conversation, index) => (
+                      <tr key={conversation.conversation_id || index}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {file.filename}
+                          <span className="font-mono text-xs">{conversation.conversation_id}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {file.conversation_count.toLocaleString()}
+                          {conversation.conversation_date}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatFileSize(file.size_mb)}
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            conversation.channel === 'EMAIL' ? 'bg-blue-100 text-blue-800' :
+                            conversation.channel === 'CHAT' ? 'bg-green-100 text-green-800' :
+                            conversation.channel === 'PHONE' ? 'bg-purple-100 text-purple-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {conversation.channel || 'Unknown'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(file.created_at).toLocaleString()}
+                          {conversation.agent || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                          <div className="truncate" title={conversation.topics}>
+                            {conversation.topics || 'No topics'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(conversation.download_timestamp).toLocaleString()}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                
+                {/* Pagination */}
+                {downloadStats && downloadStats.total_downloaded > 100 && (
+                  <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                    <div className="flex-1 flex justify-between sm:hidden">
+                      <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Previous
+                      </button>
+                      <button className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                      </button>
+                    </div>
+                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm text-gray-700">
+                          Showing <span className="font-medium">1</span> to <span className="font-medium">100</span> of{' '}
+                          <span className="font-medium">{downloadStats.total_downloaded.toLocaleString()}</span> conversations
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                No download files found
+                No conversations downloaded yet
               </div>
             )}
           </div>

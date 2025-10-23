@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from backend.utils.config import Config
 from backend.services.storage_service import StorageService
+from backend.services.conversation_tracker import ConversationTracker
 
 # Load environment variables
 load_dotenv()
@@ -45,6 +46,9 @@ class GladlyDownloadService:
         
         # Initialize storage service
         self.storage_service = StorageService()
+        
+        # Initialize conversation tracker
+        self.conversation_tracker = ConversationTracker()
         
     def download_conversation_items(self, conversation_id: str) -> Optional[Dict]:
         """Download conversation items for a specific conversation ID"""
@@ -168,8 +172,8 @@ class GladlyDownloadService:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = f"gladly_conversations_batch_{timestamp}.jsonl"
         
-        # Get already processed IDs
-        processed_ids = self.get_processed_ids(output_file)
+        # Get already processed IDs from conversation tracker
+        processed_ids = self.conversation_tracker.get_downloaded_conversation_ids()
         
         # Filter out already processed IDs
         remaining_ids = [cid for cid in conversation_ids if cid not in processed_ids]
@@ -197,6 +201,9 @@ class GladlyDownloadService:
                 
                 logger.info(f"Processing conversation {i}/{len(remaining_ids)}: {conversation_id}")
                 
+                # Get conversation metadata from CSV
+                conversation_metadata = self.get_conversation_metadata_from_csv(csv_file, conversation_id)
+                
                 conversation_data = self.download_conversation_items(conversation_id)
                 
                 if conversation_data:
@@ -210,6 +217,18 @@ class GladlyDownloadService:
                     # Write to JSONL file
                     outfile.write(json.dumps(conversation_data) + '\n')
                     downloaded_count += 1
+                    
+                    # Track the conversation
+                    if conversation_metadata:
+                        self.conversation_tracker.track_conversation(
+                            conversation_id=conversation_id,
+                            conversation_date=conversation_metadata.get('conversation_date', ''),
+                            download_timestamp=datetime.now().isoformat(),
+                            file_name=output_file,
+                            topics=conversation_metadata.get('topics', ''),
+                            channel=conversation_metadata.get('channel', ''),
+                            agent=conversation_metadata.get('agent', '')
+                        )
                 else:
                     failed_count += 1
                 
@@ -362,3 +381,26 @@ class GladlyDownloadService:
             logger.error(f"Error filtering conversations by date: {e}")
             # Return original list if filtering fails
             return conversation_ids
+    
+    def get_conversation_metadata_from_csv(self, csv_file: str, conversation_id: str) -> Optional[Dict]:
+        """Get metadata for a specific conversation from CSV file"""
+        try:
+            with open(csv_file, 'r', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                
+                for row in reader:
+                    if row.get('Conversation ID', '').strip() == conversation_id:
+                        return {
+                            'conversation_date': row.get('Timestamp Created At Date', '').strip(),
+                            'topics': row.get('Topics', '').strip(),
+                            'channel': row.get('Last Channel', '').strip(),
+                            'agent': row.get('Assigned Agent Name - Current', '').strip(),
+                            'conversation_link': row.get('Conversation Link', '').strip()
+                        }
+            
+            logger.warning(f"No metadata found for conversation {conversation_id}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting conversation metadata: {e}")
+            return None
