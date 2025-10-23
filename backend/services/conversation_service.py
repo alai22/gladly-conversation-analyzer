@@ -183,6 +183,12 @@ class ConversationService:
         logger.info(f"Recent conversations retrieved: hours={hours}, count={len(recent_conversations)}")
         return recent_conversations
     
+    def refresh_conversations(self):
+        """Refresh conversations from storage (useful after aggregation)"""
+        logger.info("Refreshing conversations from storage")
+        self.load_conversations()
+        logger.info(f"Conversations refreshed: {len(self.conversations)}")
+    
     def is_available(self) -> bool:
         """Check if conversation service is available"""
         return len(self.conversations) > 0

@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from backend.services.gladly_download_service import GladlyDownloadService
 from backend.services.conversation_tracker import ConversationTracker
+from backend.services.s3_conversation_aggregator import S3ConversationAggregator
 from backend.utils.config import Config
 
 # Load environment variables from .env file
@@ -282,13 +283,45 @@ def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = 
         download_state['is_running'] = False
         download_state['end_time'] = datetime.now()
 
-def _update_progress(current: int, total: int, downloaded: int, failed: int):
-    """Update download progress"""
-    global download_state
-    
-    download_state.update({
-        'current_batch': current,
-        'total_batches': total,
-        'downloaded_count': downloaded,
-        'failed_count': failed
-    })
+@download_bp.route('/aggregate', methods=['POST'])
+def aggregate_conversations():
+    """Aggregate downloaded conversations and refresh RAG data"""
+    try:
+        # Initialize aggregator
+        aggregator = S3ConversationAggregator()
+        
+        # Perform aggregation
+        result = aggregator.refresh_rag_data()
+        
+        if result['status'] == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': f"Successfully aggregated {result['total_conversations']} conversations from {result['files_processed']} files",
+                'data': result
+            })
+        else:
+            return jsonify({
+                'status': 'warning',
+                'message': result.get('message', 'Aggregation completed with warnings'),
+                'data': result
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error aggregating conversations: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@download_bp.route('/aggregate/status', methods=['GET'])
+def get_aggregation_status():
+    """Get status of aggregated conversation file"""
+    try:
+        aggregator = S3ConversationAggregator()
+        status = aggregator.get_aggregation_status()
+        
+        return jsonify({
+            'status': 'success',
+            'data': status
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting aggregation status: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500

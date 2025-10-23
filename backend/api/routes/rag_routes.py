@@ -37,6 +37,22 @@ def conversations_ask():
         
         return jsonify(result)
     
+@rag_bp.route('/refresh', methods=['POST'])
+def refresh_conversations():
+    """Refresh conversation data from storage"""
+    try:
+        logger.info("Refreshing conversation data for RAG system")
+        conversation_service.refresh_conversations()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Conversation data refreshed: {len(conversation_service.conversations)} conversations loaded',
+            'data': {
+                'total_conversations': len(conversation_service.conversations),
+                'is_available': conversation_service.is_available()
+            }
+        })
+    
     except Exception as e:
-        logger.error(f"RAG query error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error refreshing conversations: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
