@@ -37,6 +37,10 @@ def conversations_ask():
         
         return jsonify(result)
     
+    except Exception as e:
+        logger.error(f"RAG query error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @rag_bp.route('/refresh', methods=['POST'])
 def refresh_conversations():
     """Refresh conversation data from storage"""
