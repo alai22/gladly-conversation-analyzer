@@ -6,6 +6,7 @@ const DownloadManager = () => {
   const [downloadHistory, setDownloadHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [aggregationStatus, setAggregationStatus] = useState(null);
+  const [isAggregating, setIsAggregating] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [batchSize, setBatchSize] = useState(500);
   const [maxDuration, setMaxDuration] = useState(30);
