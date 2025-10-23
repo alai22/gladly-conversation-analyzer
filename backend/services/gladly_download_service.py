@@ -271,11 +271,19 @@ class GladlyDownloadService:
             
             logger.info(f"Uploading {local_file} to S3: s3://{Config.S3_BUCKET_NAME}/{s3_key}")
             
-            # Use the storage service to upload
+            # Use boto3 to upload the file
+            import boto3
+            s3_client = boto3.client('s3')
+            
             with open(local_file, 'rb') as f:
-                # This would need to be implemented in StorageService
-                # For now, just log the intention
-                logger.info(f"Would upload to S3: {s3_key}")
+                s3_client.put_object(
+                    Bucket=Config.S3_BUCKET_NAME,
+                    Key=s3_key,
+                    Body=f,
+                    ContentType='application/json'
+                )
+            
+            logger.info(f"Successfully uploaded to S3: {s3_key}")
                 
         except Exception as e:
             logger.error(f"Error uploading to S3: {e}")
