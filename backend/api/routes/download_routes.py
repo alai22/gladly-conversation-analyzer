@@ -310,6 +310,31 @@ def aggregate_conversations():
         logger.error(f"Error aggregating conversations: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@download_bp.route('/migrate-tracking', methods=['POST'])
+def migrate_tracking_data():
+    """Migrate local tracking data to S3"""
+    try:
+        tracker = ConversationTracker()
+        success = tracker.migrate_local_to_s3()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Successfully migrated {len(tracker.conversations)} conversations to S3',
+                'data': {
+                    'total_conversations': len(tracker.conversations)
+                }
+            })
+        else:
+            return jsonify({
+                'status': 'warning',
+                'message': 'No local tracking data found to migrate'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error migrating tracking data: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @download_bp.route('/aggregate/status', methods=['GET'])
 def get_aggregation_status():
     """Get status of aggregated conversation file"""

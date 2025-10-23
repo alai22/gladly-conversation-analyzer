@@ -6,7 +6,7 @@ const DownloadManager = () => {
   const [downloadHistory, setDownloadHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [aggregationStatus, setAggregationStatus] = useState(null);
-  const [isAggregating, setIsAggregating] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
   const [batchSize, setBatchSize] = useState(500);
   const [maxDuration, setMaxDuration] = useState(30);
   const [startDate, setStartDate] = useState('');
@@ -61,6 +61,37 @@ const DownloadManager = () => {
       }
     } catch (error) {
       console.error('Error fetching aggregation status:', error);
+    }
+  };
+
+  // Migrate tracking data to S3
+  const migrateTrackingData = async () => {
+    setIsMigrating(true);
+    try {
+      const response = await fetch('/api/download/migrate-tracking', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        alert(`✅ ${data.message}`);
+        // Refresh all data
+        await Promise.all([
+          fetchDownloadStats(),
+          fetchDownloadHistory(),
+          fetchAggregationStatus()
+        ]);
+      } else {
+        alert(`⚠️ ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error migrating tracking data:', error);
+      alert('❌ Failed to migrate tracking data');
+    } finally {
+      setIsMigrating(false);
     }
   };
 
@@ -310,6 +341,40 @@ const DownloadManager = () => {
                 '🔄 Aggregate Conversations for RAG'
               )}
             </button>
+            
+            {/* Migration Button - only show if no conversations tracked */}
+            {downloadStats && downloadStats.total_downloaded === 0 && (
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h3 className="text-sm font-medium text-yellow-800 mb-2">
+                  Data Persistence Issue
+                </h3>
+                <p className="text-sm text-yellow-700 mb-3">
+                  Your downloaded conversations may exist in S3 but tracking data was lost during deployment. 
+                  Click below to recover your download history.
+                </p>
+                <button
+                  onClick={migrateTrackingData}
+                  disabled={isMigrating}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                    isMigrating
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                  }`}
+                >
+                  {isMigrating ? (
+                    <div className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Migrating...
+                    </div>
+                  ) : (
+                    '🔧 Recover Download History'
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Download Controls */}
