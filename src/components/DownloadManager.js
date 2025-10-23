@@ -38,6 +38,19 @@ const DownloadManager = () => {
     }
   };
 
+  // Fetch download history
+  const fetchDownloadHistory = async () => {
+    try {
+      const response = await fetch('/api/download/history');
+      const data = await response.json();
+      if (data.status === 'success') {
+        setDownloadHistory(data.data.conversations);
+      }
+    } catch (error) {
+      console.error('Error fetching download history:', error);
+    }
+  };
+
   // Fetch aggregation status
   const fetchAggregationStatus = async () => {
     try {
