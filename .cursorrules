@@ -1,0 +1,19 @@
+# Cursor AI Rules for Gladly Conversation Analyzer
+
+## Project Overview
+- Flask backend with React frontend
+- Docker-based deployment on AWS EC2
+- HTTPS support with SSL certificates
+- IAM roles for S3 access (no AWS credentials)
+
+## Deployment Workflow
+- Local development → Push to GitHub
+- EC2: Pull from GitHub → Deploy with ./deploy.sh production
+- Uses .env files for environment variables
+- Infrastructure managed with Terraform
+
+## Key Files
+- deploy.sh - Main deployment script
+- setup_https_infrastructure.sh - One-time HTTPS setup
+- .env - Environment variables (on EC2)
+- terraform/main.tf - Infrastructure config
