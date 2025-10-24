@@ -39,6 +39,18 @@ variable "github_repository" {
   default     = "https://github.com/YOUR_USERNAME/gladly-conversation-analyzer"
 }
 
+variable "domain_name" {
+  description = "Domain name for SSL certificate (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "certificate_arn" {
+  description = "ARN of existing SSL certificate (optional)"
+  type        = string
+  default     = ""
+}
+
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -165,64 +177,19 @@ resource "random_id" "bucket_suffix" {
   byte_length = 8
 }
 
-# IAM Role for EC2
-resource "aws_iam_role" "gladly_ec2_role" {
-  name = "${var.environment}-ec2-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2://"
-        }
-      }
-    ]
-  })
-
-  tags = {
-    Name        = "${var.environment}-ec2-role"
-    Environment = var.environment
-  }
+# Use existing IAM role GladlyS3FA
+data "aws_iam_role" "gladly_s3_role" {
+  name = "GladlyS3FA"
 }
 
 resource "aws_iam_instance_profile" "gladly_profile" {
   name = "${var.environment}-ec2-profile"
-  role = aws_iam_role.gladly_ec2_role.name
+  role = data.aws_iam_role.gladly_s3_role.name
 
   tags = {
     Name        = "${var.environment}-ec2-profile"
     Environment = var.environment
   }
-}
-
-resource "aws_iam_role_policy" "gladly_s3_policy" {
-  name = "${var.environment}-s3-policy"
-  role = aws_iam_role.gladly_ec2_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = "${aws_s3_bucket.conversation_data.arn}/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket"
-        ]
-        Resource = aws_s3_bucket.conversation_data.arn
-      }
-    ]
-  })
 }
 
 # User data script for EC2
@@ -341,10 +308,79 @@ resource "aws_lb_target_group" "gladly_tg" {
   }
 }
 
-resource "aws_lb_listener" "gladly_listener" {
+# SSL Certificate (if domain_name is provided)
+resource "aws_acm_certificate" "gladly_cert" {
+  count = var.domain_name != "" ? 1 : 0
+  
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "${var.environment}-cert"
+    Environment = var.environment
+  }
+}
+
+# Certificate validation (if domain_name is provided)
+resource "aws_acm_certificate_validation" "gladly_cert_validation" {
+  count = var.domain_name != "" ? 1 : 0
+  
+  certificate_arn         = aws_acm_certificate.gladly_cert[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.gladly_cert_validation : record.fqdn]
+}
+
+# Route53 record for certificate validation (if domain_name is provided)
+resource "aws_route53_record" "gladly_cert_validation" {
+  for_each = var.domain_name != "" ? {
+    for dvo in aws_acm_certificate.gladly_cert[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main[0].zone_id
+}
+
+# Route53 zone lookup (if domain_name is provided)
+data "aws_route53_zone" "main" {
+  count = var.domain_name != "" ? 1 : 0
+  name  = var.domain_name
+}
+
+# HTTP listener (redirects to HTTPS)
+resource "aws_lb_listener" "gladly_listener_http" {
   load_balancer_arn = aws_lb.gladly_alb.arn
   port              = "80"
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# HTTPS listener
+resource "aws_lb_listener" "gladly_listener_https" {
+  load_balancer_arn = aws_lb.gladly_alb.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  certificate_arn   = var.certificate_arn != "" ? var.certificate_arn : (var.domain_name != "" ? aws_acm_certificate_validation.gladly_cert_validation[0].certificate_arn : null)
 
   default_action {
     type             = "forward"
@@ -355,7 +391,22 @@ resource "aws_lb_listener" "gladly_listener" {
 # Outputs
 output "application_url" {
   description = "URL of the deployed application"
+  value       = "https://${aws_lb.gladly_alb.dns_name}"
+}
+
+output "application_url_http" {
+  description = "HTTP URL of the deployed application (redirects to HTTPS)"
   value       = "http://${aws_lb.gladly_alb.dns_name}"
+}
+
+output "application_url_custom_domain" {
+  description = "Custom domain URL (if domain_name is provided)"
+  value       = var.domain_name != "" ? "https://${var.domain_name}" : null
+}
+
+output "ssl_certificate_arn" {
+  description = "ARN of the SSL certificate"
+  value       = var.certificate_arn != "" ? var.certificate_arn : (var.domain_name != "" ? aws_acm_certificate.gladly_cert[0].arn : null)
 }
 
 output "bucket_name" {

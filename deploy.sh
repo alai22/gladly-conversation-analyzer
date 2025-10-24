@@ -83,8 +83,25 @@ case $ENVIRONMENT in
     
     "production")
         print_status "Deploying for production..."
-        print_warning "Make sure to set all required environment variables!"
+        
+        # Check if .env file exists and load it
+        if [ -f ".env" ]; then
+            print_status "Loading environment variables from .env file..."
+            export $(grep -v '^#' .env | xargs)
+        else
+            print_warning ".env file not found. Using environment variables from system."
+        fi
+        
+        print_warning "Make sure all required environment variables are set!"
         print_status "Starting container as daemon..."
+        
+        # Stop existing container if running
+        if docker ps -q -f name=gladly-prod | grep -q .; then
+            print_status "Stopping existing container..."
+            docker stop gladly-prod
+            docker rm gladly-prod
+        fi
+        
         docker run -d \
             -p 80:5000 \
             --restart unless-stopped \
@@ -92,15 +109,14 @@ case $ENVIRONMENT in
             -e GLADLY_API_KEY="${GLADLY_API_KEY}" \
             -e GLADLY_AGENT_EMAIL="${GLADLY_AGENT_EMAIL}" \
             -e S3_BUCKET_NAME="${S3_BUCKET_NAME}" \
-            -e AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" \
-            -e AWS_REGION="${AWS_DEFAULT_REGION}" \
-            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+            -e AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}" \
+            -e AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}" \
             --name gladly-prod \
             $PROJECT_NAME:$ENVIRONMENT
         
         print_status "Application deployed at http://localhost"
         print_status "Check logs with: docker logs gladly-prod"
+        print_info "Note: Using IAM role for S3 access (no AWS credentials needed)"
         ;;
     
     "ec2")
