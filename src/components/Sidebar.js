@@ -63,6 +63,11 @@ const Sidebar = ({ healthStatus, onRefreshHealth }) => {
               }`} />
               <span>Claude API</span>
             </div>
+            {healthStatus?.error && !healthStatus.claude_initialized && (
+              <div className="ml-4 text-xs text-red-600 mt-1">
+                {healthStatus.error}
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${
                 healthStatus?.conversation_analyzer_initialized ? 'bg-green-400' : 'bg-red-400'

@@ -13,10 +13,21 @@ logger = get_logger('rag_routes')
 # Create blueprint
 rag_bp = Blueprint('rag', __name__, url_prefix='/api/conversations')
 
-# Initialize services
-claude_service = ClaudeService()
+# Initialize services with error handling
+try:
+    claude_service = ClaudeService()
+except Exception as e:
+    logger.error(f"Failed to initialize ClaudeService: {str(e)}")
+    claude_service = None
+
 conversation_service = ConversationService()
-rag_service = RAGService(claude_service, conversation_service)
+
+# Initialize RAG service only if Claude service is available
+if claude_service is not None:
+    rag_service = RAGService(claude_service, conversation_service)
+else:
+    rag_service = None
+    logger.warning("RAGService not initialized - ClaudeService unavailable")
 
 
 @rag_bp.route('/ask', methods=['POST'])
@@ -33,13 +44,51 @@ def conversations_ask():
         
         logger.info(f"RAG query request: question={question[:100]}, model={model}, max_tokens={max_tokens}")
         
+        # Check if Claude service is initialized
+        if claude_service is None or rag_service is None:
+            error_msg = "Claude API service is not initialized. Please check ANTHROPIC_API_KEY configuration."
+            logger.error(error_msg)
+            return jsonify({
+                'error': error_msg, 
+                'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
+            }), 503
+        
+        # Check if Claude service is available before processing
+        try:
+            if not claude_service.is_available():
+                error_msg = "Claude API is not available. Please check ANTHROPIC_API_KEY configuration."
+                logger.error(error_msg)
+                return jsonify({'error': error_msg, 'details': 'Claude API health check failed. Verify API key is set correctly and has proper permissions.'}), 503
+        except Exception as e:
+            error_msg = f"Claude API availability check failed: {str(e)}"
+            logger.error(error_msg)
+            return jsonify({'error': error_msg, 'details': 'Unable to verify Claude API connection. Check API key and network connectivity.'}), 503
+        
         result = rag_service.process_query(question, model, max_tokens)
         
         return jsonify(result)
     
+    except ValueError as e:
+        # Handle configuration errors (e.g., missing API key)
+        error_msg = f"Configuration error: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({'error': error_msg, 'details': 'Please check your API configuration (ANTHROPIC_API_KEY)'}), 500
     except Exception as e:
+        # Log full exception for debugging
+        import traceback
         logger.error(f"RAG query error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Provide more detailed error information
+        error_details = str(e)
+        if hasattr(e, 'response') and hasattr(e.response, 'text'):
+            error_details = f"{str(e)} - Response: {e.response.text}"
+        
+        return jsonify({
+            'error': str(e),
+            'details': error_details,
+            'type': type(e).__name__
+        }), 500
 
 @rag_bp.route('/refresh', methods=['POST'])
 def refresh_conversations():

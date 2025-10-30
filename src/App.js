@@ -162,7 +162,9 @@ function App() {
         throw new Error(response.data.error || 'Unknown error');
       }
     } catch (error) {
-      setError(error.response?.data?.error || error.message);
+      const errorMessage = error.response?.data?.error || error.message;
+      const errorDetails = error.response?.data?.details;
+      setError(errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -202,7 +204,9 @@ function App() {
         throw new Error(response.data.error || 'Unknown error');
       }
     } catch (error) {
-      setError(error.response?.data?.error || error.message);
+      const errorMessage = error.response?.data?.error || error.message;
+      const errorDetails = error.response?.data?.details;
+      setError(errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage);
     } finally {
       setIsLoading(false);
     }

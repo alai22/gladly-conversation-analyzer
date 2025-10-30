@@ -86,10 +86,16 @@ function ConversationDisplay({ conversations, isLoading, error }) {
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Error</h3>
-          <p className="text-gray-600">{error}</p>
+          <div className="text-gray-600 whitespace-pre-line text-left bg-red-50 p-4 rounded-lg border border-red-200">
+            {error.split('\n').map((line, index) => (
+              <p key={index} className={index === 0 ? 'font-medium mb-2' : index > 0 && line.trim() ? 'text-sm mb-1' : ''}>
+                {line}
+              </p>
+            ))}
+          </div>
         </div>
       </div>
     );

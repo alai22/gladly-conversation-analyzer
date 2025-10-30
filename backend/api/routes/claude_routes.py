@@ -11,14 +11,27 @@ logger = get_logger('claude_routes')
 # Create blueprint
 claude_bp = Blueprint('claude', __name__, url_prefix='/api/claude')
 
-# Initialize service
-claude_service = ClaudeService()
+# Initialize service with error handling
+try:
+    claude_service = ClaudeService()
+except Exception as e:
+    logger.error(f"Failed to initialize ClaudeService: {str(e)}")
+    claude_service = None
 
 
 @claude_bp.route('/chat', methods=['POST'])
 def claude_chat():
     """Send message to Claude API"""
     try:
+        # Check if Claude service is initialized
+        if claude_service is None:
+            error_msg = "Claude API service is not initialized. Please check ANTHROPIC_API_KEY configuration."
+            logger.error(error_msg)
+            return jsonify({
+                'error': error_msg,
+                'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
+            }), 503
+        
         data = request.get_json()
         message = data.get('message')
         model = data.get('model', 'claude-3-5-sonnet-20241022')
