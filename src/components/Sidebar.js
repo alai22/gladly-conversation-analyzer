@@ -1,7 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 
 const Sidebar = ({ healthStatus, onRefreshHealth }) => {
+  const [downloadStats, setDownloadStats] = useState(null);
+
+  // Fetch download stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/download/stats');
+        const data = await response.json();
+        if (data.status === 'success') {
+          setDownloadStats(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching download stats:', error);
+      }
+    };
+
+    fetchStats();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const getHealthStatusIcon = () => {
     if (!healthStatus) return <RefreshCw className="h-4 w-4 animate-spin" />;
     if (healthStatus.status === 'healthy') return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -49,6 +71,44 @@ const Sidebar = ({ healthStatus, onRefreshHealth }) => {
           </button>
         </div>
       </div>
+
+      {/* Conversation Stats */}
+      {downloadStats && (
+        <div className="p-6 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            <div className="mb-2">
+              <strong>Conversations:</strong>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Available</span>
+                <span className="font-semibold text-blue-600">{downloadStats.total_in_csv?.toLocaleString() || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Downloaded</span>
+                <span className="font-semibold text-green-600">{downloadStats.total_downloaded?.toLocaleString() || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Remaining</span>
+                <span className="font-semibold text-yellow-600">{downloadStats.remaining?.toLocaleString() || 0}</span>
+              </div>
+              {downloadStats.completion_percentage !== undefined && (
+                <div className="mt-2">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div 
+                      className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(downloadStats.completion_percentage, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-center mt-1 text-xs">
+                    {downloadStats.completion_percentage.toFixed(1)}% Complete
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="mt-auto p-6 border-t border-gray-200">

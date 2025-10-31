@@ -12,6 +12,7 @@ const DownloadManager = () => {
   const [maxDuration, setMaxDuration] = useState(30);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [csvDateRange, setCsvDateRange] = useState(null);
 
   // Fetch download status
   const fetchDownloadStatus = async () => {
@@ -62,6 +63,19 @@ const DownloadManager = () => {
       }
     } catch (error) {
       console.error('Error fetching aggregation status:', error);
+    }
+  };
+
+  // Fetch CSV date range
+  const fetchCsvDateRange = async () => {
+    try {
+      const response = await fetch('/api/download/csv-date-range');
+      const data = await response.json();
+      if (data.status === 'success') {
+        setCsvDateRange(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching CSV date range:', error);
     }
   };
 
@@ -203,6 +217,7 @@ const DownloadManager = () => {
     fetchDownloadStats();
     fetchDownloadHistory();
     fetchAggregationStatus();
+    fetchCsvDateRange();
   }, []);
 
   const formatTime = (seconds) => {
@@ -377,6 +392,24 @@ const DownloadManager = () => {
               </div>
             )}
           </div>
+
+          {/* CSV Date Range Info */}
+          {csvDateRange && csvDateRange.earliest_date && csvDateRange.latest_date && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">Available Date Range in CSV</h3>
+              <div className="text-sm text-blue-800">
+                <p>
+                  <strong>Earliest:</strong> {new Date(csvDateRange.earliest_date).toLocaleDateString()}
+                </p>
+                <p>
+                  <strong>Latest:</strong> {new Date(csvDateRange.latest_date).toLocaleDateString()}
+                </p>
+                <p className="mt-2 text-blue-700">
+                  Total conversations available: <strong>{csvDateRange.total_conversations?.toLocaleString() || 'N/A'}</strong>
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Download Controls */}
           <div className="mb-8">

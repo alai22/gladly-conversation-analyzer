@@ -250,6 +250,19 @@ def get_download_stats():
         logger.error(f"Error getting download stats: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+def _update_progress(current: int, total: int, downloaded: int, failed: int):
+    """Update download progress state"""
+    global download_state
+    
+    download_state['current_batch'] = current
+    download_state['total_batches'] = total
+    download_state['downloaded_count'] = downloaded
+    download_state['failed_count'] = failed
+    
+    # Calculate progress percentage
+    if total > 0:
+        download_state['progress_percentage'] = (current / total) * 100
+
 def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = None, end_date: str = None):
     """Run the download in background thread"""
     global download_state, download_service
@@ -349,4 +362,58 @@ def get_aggregation_status():
         
     except Exception as e:
         logger.error(f"Error getting aggregation status: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@download_bp.route('/csv-date-range', methods=['GET'])
+def get_csv_date_range():
+    """Get available date range from CSV file"""
+    try:
+        csv_file = "data/conversation_metrics.csv"
+        
+        if not os.path.exists(csv_file):
+            return jsonify({
+                'status': 'error',
+                'message': 'CSV file not found'
+            }), 404
+        
+        import csv
+        
+        dates = []
+        
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                timestamp_str = row.get('Timestamp Created At Date', '').strip()
+                if timestamp_str:
+                    try:
+                        # Parse the date (format: YYYY-MM-DD)
+                        date_obj = datetime.strptime(timestamp_str, '%Y-%m-%d').date()
+                        dates.append(date_obj)
+                    except ValueError:
+                        continue
+        
+        if not dates:
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'earliest_date': None,
+                    'latest_date': None,
+                    'total_conversations': 0
+                }
+            })
+        
+        earliest_date = min(dates)
+        latest_date = max(dates)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'earliest_date': earliest_date.isoformat(),
+                'latest_date': latest_date.isoformat(),
+                'total_conversations': len(dates)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting CSV date range: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
