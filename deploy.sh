@@ -105,7 +105,7 @@ case $ENVIRONMENT in
         fi
         
         docker run -d \
-            -p 80:5000 \
+            -p 127.0.0.1:5000:5000 \
             --restart unless-stopped \
             -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
             -e CLAUDE_MODEL="${CLAUDE_MODEL:-claude-3-opus-20240229}" \
@@ -117,9 +117,11 @@ case $ENVIRONMENT in
             --name gladly-prod \
             $PROJECT_NAME:$ENVIRONMENT
         
-        print_status "Application deployed at http://localhost"
+        print_status "Application deployed on localhost:5000 (nginx proxies HTTPS to this)"
+        print_status "Access via HTTPS: https://your-ip-or-domain"
         print_status "Check logs with: docker logs gladly-prod"
         print_info "Note: Using IAM role for S3 access (no AWS credentials needed)"
+        print_info "Note: Nginx handles ports 80/443, Docker runs on localhost:5000"
         ;;
     
     "ec2")
