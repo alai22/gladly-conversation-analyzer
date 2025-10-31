@@ -141,7 +141,7 @@ class ConversationTracker:
         self._save_tracking_data()
         logger.debug(f"Tracked conversation {conversation_id}")
     
-    def get_conversation_history(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def get_conversation_history(self, limit: int = 50, offset: int = 0) -> List[Dict]:
         """Get conversation download history with pagination"""
         # Sort by download timestamp (newest first)
         sorted_conversations = sorted(

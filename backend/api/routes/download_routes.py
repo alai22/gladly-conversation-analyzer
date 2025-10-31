@@ -19,6 +19,7 @@ from backend.services.gladly_download_service import GladlyDownloadService
 from backend.services.conversation_tracker import ConversationTracker
 from backend.services.s3_conversation_aggregator import S3ConversationAggregator
 from backend.utils.config import Config
+from backend.utils.email_service import EmailService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -179,7 +180,7 @@ def get_download_history():
     """Get detailed conversation download history"""
     try:
         # Get query parameters for pagination
-        limit = request.args.get('limit', 100, type=int)
+        limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
         # Initialize conversation tracker
@@ -263,13 +264,16 @@ def _update_progress(current: int, total: int, downloaded: int, failed: int):
     if total > 0:
         download_state['progress_percentage'] = (current / total) * 100
     
-    # Log progress to console for debugging
-    logger.info(f"[PROGRESS UPDATE] {current}/{total} ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
-    print(f"[PROGRESS] {current}/{total} conversations processed ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
+    # Log progress to console for debugging with timestamp
+    timestamp = datetime.now().strftime("%H:%M:%S")  # HH:MM:SS format
+    logger.info(f"[{timestamp}] [PROGRESS UPDATE] {current}/{total} ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
+    print(f"[{timestamp}] [PROGRESS] {current}/{total} conversations processed ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
 
 def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = None, end_date: str = None):
     """Run the download in background thread"""
     global download_state, download_service
+    
+    start_time = datetime.now()
     
     try:
         if not download_service:
@@ -292,13 +296,51 @@ def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = 
         download_state['is_running'] = False
         download_state['end_time'] = datetime.now()
         
+        # Calculate elapsed time
+        elapsed_time = (download_state['end_time'] - start_time).total_seconds()
+        
         logger.info("Download completed successfully")
+        
+        # Send email notification
+        try:
+            email_service = EmailService()
+            date_range = (start_date, end_date) if start_date or end_date else None
+            email_service.send_download_completion_notification(
+                to_email="alai@halocollar.com",
+                batch_size=batch_size,
+                downloaded_count=download_state['downloaded_count'],
+                failed_count=download_state['failed_count'],
+                elapsed_time_seconds=elapsed_time,
+                date_range=date_range,
+                error=None
+            )
+        except Exception as email_error:
+            logger.warning(f"Failed to send email notification: {email_error}")
         
     except Exception as e:
         logger.error(f"Error in download thread: {e}")
         download_state['error'] = str(e)
         download_state['is_running'] = False
         download_state['end_time'] = datetime.now()
+        
+        # Calculate elapsed time
+        elapsed_time = (download_state['end_time'] - start_time).total_seconds() if download_state['end_time'] else None
+        
+        # Send email notification for error
+        try:
+            email_service = EmailService()
+            date_range = (start_date, end_date) if start_date or end_date else None
+            email_service.send_download_completion_notification(
+                to_email="alai@halocollar.com",
+                batch_size=batch_size,
+                downloaded_count=download_state.get('downloaded_count', 0),
+                failed_count=download_state.get('failed_count', 0),
+                elapsed_time_seconds=elapsed_time,
+                date_range=date_range,
+                error=str(e)
+            )
+        except Exception as email_error:
+            logger.warning(f"Failed to send email notification: {email_error}")
 
 @download_bp.route('/aggregate', methods=['POST'])
 def aggregate_conversations():

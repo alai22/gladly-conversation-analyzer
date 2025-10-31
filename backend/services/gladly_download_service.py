@@ -55,15 +55,17 @@ class GladlyDownloadService:
         url = f"{self.base_url}/api/v1/conversations/{conversation_id}/items"
         
         try:
-            logger.info(f"[API CALL] Starting download for conversation ID: {conversation_id}")
-            print(f"[GLADLY API] GET {url} - Starting request for conversation {conversation_id}")
+            timestamp = datetime.now().strftime("%H:%M:%S")  # HH:MM:SS format
+            logger.info(f"[{timestamp}] [API CALL] Starting download for conversation ID: {conversation_id}")
+            print(f"[{timestamp}] [GLADLY API] GET {url} - Starting request for conversation {conversation_id}")
             
             start_time = time.time()
             response = self.session.get(url, timeout=30)
             elapsed = time.time() - start_time
             
-            logger.info(f"[API CALL] Response for {conversation_id}: HTTP {response.status_code} (took {elapsed:.2f}s)")
-            print(f"[GLADLY API] Response: HTTP {response.status_code} for conversation {conversation_id} (took {elapsed:.2f}s)")
+            response_timestamp = datetime.now().strftime("%H:%M:%S")
+            logger.info(f"[{response_timestamp}] [API CALL] Response for {conversation_id}: HTTP {response.status_code} (took {elapsed:.2f}s)")
+            print(f"[{response_timestamp}] [GLADLY API] Response: HTTP {response.status_code} for conversation {conversation_id} (took {elapsed:.2f}s)")
             
             if response.status_code == 200:
                 if not response.text.strip():
@@ -212,8 +214,9 @@ class GladlyDownloadService:
                     # For the first conversation, update immediately to show we've started
                     progress_callback(0, len(remaining_ids), downloaded_count, failed_count)
                 
-                logger.info(f"[PROGRESS] Processing conversation {i}/{len(remaining_ids)}: {conversation_id}")
-                print(f"[PROGRESS] Starting conversation {i}/{len(remaining_ids)}: {conversation_id}")
+                timestamp = datetime.now().strftime("%H:%M:%S")  # HH:MM:SS format
+                logger.info(f"[{timestamp}] [PROGRESS] Processing conversation {i}/{len(remaining_ids)}: {conversation_id}")
+                print(f"[{timestamp}] [PROGRESS] Starting conversation {i}/{len(remaining_ids)}: {conversation_id}")
                 
                 # Get conversation metadata from CSV
                 conversation_metadata = self.get_conversation_metadata_from_csv(csv_file, conversation_id)

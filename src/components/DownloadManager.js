@@ -24,11 +24,18 @@ const DownloadManager = () => {
         const prevStatus = downloadStatus;
         setDownloadStatus(data.data);
         
-        // Log status changes to console
+        // Log status changes to console with timestamp
         if (data.data.is_running) {
           if (!prevStatus || prevStatus.current_batch !== data.data.current_batch) {
-            console.log(`[DOWNLOAD STATUS] Progress: ${data.data.current_batch}/${data.data.total_batches} (${data.data.progress_percentage.toFixed(1)}%)`);
-            console.log(`[DOWNLOAD STATUS] Downloaded: ${data.data.downloaded_count} | Failed: ${data.data.failed_count}`);
+            const timestamp = new Date().toLocaleTimeString('en-US', { 
+              hour12: false, 
+              hour: '2-digit', 
+              minute: '2-digit', 
+              second: '2-digit',
+              fractionalSecondDigits: 3
+            });
+            console.log(`[${timestamp}] [DOWNLOAD STATUS] Progress: ${data.data.current_batch}/${data.data.total_batches} (${data.data.progress_percentage.toFixed(1)}%)`);
+            console.log(`[${timestamp}] [DOWNLOAD STATUS] Downloaded: ${data.data.downloaded_count} | Failed: ${data.data.failed_count}`);
           }
         }
       }
@@ -163,7 +170,14 @@ const DownloadManager = () => {
   // Start download
   const startDownload = async () => {
     setIsLoading(true);
-    console.log('[DOWNLOAD] Starting download with params:', {
+    const timestamp = new Date().toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      fractionalSecondDigits: 3
+    });
+    console.log(`[${timestamp}] [DOWNLOAD] Starting download with params:`, {
       batch_size: batchSize,
       max_duration_minutes: maxDuration,
       start_date: startDate || null,
@@ -185,10 +199,17 @@ const DownloadManager = () => {
       });
       
       const data = await response.json();
-      console.log('[DOWNLOAD] Start response:', data);
+      const responseTimestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3
+      });
+      console.log(`[${responseTimestamp}] [DOWNLOAD] Start response:`, data);
       
       if (data.status === 'success') {
-        console.log('[DOWNLOAD] Download started successfully');
+        console.log(`[${responseTimestamp}] [DOWNLOAD] Download started successfully`);
         // Refresh data
         await Promise.all([
           fetchDownloadStatus(),
@@ -243,8 +264,14 @@ const DownloadManager = () => {
         const response = await fetch('/api/download/status');
         const data = await response.json();
         if (data.status === 'success' && data.data.is_running) {
-          // Log progress to console for debugging
-          console.log(`[DOWNLOAD PROGRESS] ${data.data.current_batch}/${data.data.total_batches} (${data.data.progress_percentage.toFixed(1)}%) - Downloaded: ${data.data.downloaded_count}, Failed: ${data.data.failed_count}`);
+          // Log progress to console for debugging with timestamp
+          const timestamp = new Date().toLocaleTimeString('en-US', { 
+            hour12: false, 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit'
+          });
+          console.log(`[${timestamp}] [DOWNLOAD PROGRESS] ${data.data.current_batch}/${data.data.total_batches} (${data.data.progress_percentage.toFixed(1)}%) - Downloaded: ${data.data.downloaded_count}, Failed: ${data.data.failed_count}`);
           
           // Update state
           setDownloadStatus(data.data);
@@ -516,7 +543,12 @@ const DownloadManager = () => {
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-yellow-800">Download in Progress</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-yellow-800">Download in Progress</h3>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                        ✓ Running on Server
+                      </span>
+                    </div>
                     <p className="text-yellow-700">
                       {downloadStatus.current_batch} / {downloadStatus.total_batches} conversations
                       ({downloadStatus.progress_percentage.toFixed(1)}%)
@@ -529,6 +561,13 @@ const DownloadManager = () => {
                         Elapsed: {formatTime(downloadStatus.elapsed_time)}
                       </p>
                     )}
+                    <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      <p className="font-semibold mb-1">ℹ️ Downloads Continue in Background</p>
+                      <p className="text-blue-700">
+                        Downloads run on the server and will continue even if you close this browser tab. 
+                        Progress is automatically saved. You can safely close the browser and check back later.
+                      </p>
+                    </div>
                     <p className="text-xs text-yellow-600 mt-2">
                       💡 Check browser console (F12) for detailed API call logs
                     </p>
@@ -554,6 +593,26 @@ const DownloadManager = () => {
               </div>
             ) : (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                {/* Info about background downloads */}
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-blue-800">Downloads Run on Server</h3>
+                      <div className="mt-2 text-sm text-blue-700">
+                        <p>
+                          Downloads continue running in the background on the server, even if you close your browser. 
+                          All progress is automatically saved. You can safely start a download and close this tab.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
