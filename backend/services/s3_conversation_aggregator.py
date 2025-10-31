@@ -356,11 +356,23 @@ class S3ConversationAggregator:
         """Trigger RAG system to refresh conversation data"""
         try:
             import requests
-            response = requests.post('http://localhost:5000/api/conversations/refresh', timeout=30)
+            
+            # Try to determine the base URL from environment or config
+            base_url = os.getenv('FLASK_BASE_URL', 'http://localhost:5000')
+            
+            refresh_url = f"{base_url}/api/conversations/refresh"
+            logger.info(f"Triggering RAG refresh at {refresh_url}")
+            
+            response = requests.post(refresh_url, timeout=30)
             if response.status_code == 200:
-                logger.info("RAG system refresh triggered successfully")
+                result = response.json()
+                logger.info(f"RAG system refresh triggered successfully: {result.get('message', '')}")
             else:
-                logger.warning(f"RAG refresh failed with status {response.status_code}")
+                logger.warning(f"RAG refresh failed with status {response.status_code}: {response.text}")
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Could not connect to Flask app for RAG refresh (this is normal if app isn't running yet): {e}")
+            logger.info("Conversation service will refresh on next query or manual refresh")
         except Exception as e:
-            logger.error(f"Failed to trigger RAG refresh: {e}")
-            raise
+            logger.warning(f"Failed to trigger RAG refresh via HTTP: {e}")
+            logger.info("Conversation service will refresh on next query or manual refresh")
+            # Don't raise - this is non-critical

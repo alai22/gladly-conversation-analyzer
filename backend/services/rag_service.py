@@ -24,6 +24,15 @@ class RAGService:
         """Process a RAG query"""
         logger.info(f"Starting RAG query processing: {question[:100]}")
         
+        # Check if conversations are loaded, and if not, try to refresh
+        if not self.conversation_service.is_available():
+            logger.info("Conversations not available, attempting to refresh...")
+            try:
+                self.conversation_service.refresh_conversations()
+                logger.info(f"Conversations refreshed: {len(self.conversation_service.conversations)} items loaded")
+            except Exception as e:
+                logger.warning(f"Failed to auto-refresh conversations: {e}")
+        
         # Initialize RAG process tracking
         rag_process = RAGProcess(steps=[])
         
@@ -136,27 +145,87 @@ Respond with valid JSON only."""
             'total_searched': 0,
             'by_content_type': {},
             'by_search_term': {},
-            'filtered_out': 0
+            'filtered_out': 0,
+            'total_available': len(self.conversation_service.conversations),
+            'diagnostics': {}
         }
         
         # Check if conversations are loaded
         if not self.conversation_service.is_available():
             logger.warning("No conversations loaded in conversation service - retrieval will return empty")
+            retrieval_stats['diagnostics']['error'] = 'No conversations loaded in service'
+            retrieval_stats['diagnostics']['service_status'] = {
+                'is_available': False,
+                'conversation_count': len(self.conversation_service.conversations)
+            }
             rag_process.retrieval_stats = retrieval_stats
             rag_process.update_step(2, 'completed', retrieval_stats, 
-                                   "Warning: No conversation data is currently loaded. Please ensure conversations have been downloaded and aggregated.")
+                                   "Warning: No conversation data is currently loaded. Please ensure conversations have been downloaded and aggregated, then refresh the conversation service.")
             return []
+        
+        # Log diagnostic info
+        total_available = len(self.conversation_service.conversations)
+        retrieval_stats['diagnostics']['total_available'] = total_available
+        retrieval_stats['diagnostics']['search_terms_count'] = len(plan['search_terms'])
+        
+        # Sample a few conversations to check structure
+        if total_available > 0:
+            sample_item = self.conversation_service.conversations[0]
+            retrieval_stats['diagnostics']['sample_item_structure'] = {
+                'has_id': bool(sample_item.id),
+                'has_customer_id': bool(sample_item.customer_id),
+                'has_conversation_id': bool(sample_item.conversation_id),
+                'has_content': bool(sample_item.content),
+                'content_type': sample_item.content_type,
+                'searchable_text_length': len(sample_item.searchable_text) if sample_item.searchable_text else 0
+            }
         
         # Search using the planned terms with semantic search
         for term in plan['search_terms']:
+            term_limit = max(1, plan['max_items'] // len(plan['search_terms']))
             results = self.conversation_service.semantic_search_conversations(
-                term, limit=plan['max_items'] // len(plan['search_terms'])
+                term, limit=term_limit
             )
             relevant_data.extend(results)
-            retrieval_stats['by_search_term'][term] = len(results)
+            retrieval_stats['by_search_term'][term] = {
+                'count': len(results),
+                'limit_requested': term_limit
+            }
             retrieval_stats['total_searched'] += len(results)
-            
+            logger.info(f"Search term '{term}': found {len(results)} results (requested {term_limit})")
+        
         logger.info(f"Retrieved {len(relevant_data)} items using search terms: {plan['search_terms']}")
+        
+        # If no results from semantic search, use fallback: return sample of conversations
+        if len(relevant_data) == 0 and total_available > 0:
+            logger.warning(f"Semantic search returned 0 results for terms {plan['search_terms']}. Using fallback: returning sample of conversations.")
+            retrieval_stats['diagnostics']['fallback_used'] = True
+            retrieval_stats['diagnostics']['fallback_reason'] = 'Semantic search returned no results'
+            
+            # Get a diverse sample of conversations
+            fallback_limit = min(plan['max_items'], total_available)
+            # Try to get different content types for diversity
+            content_type_counts = {}
+            seen_dicts = set()
+            
+            for item in self.conversation_service.conversations:
+                if len(relevant_data) >= fallback_limit:
+                    break
+                    
+                item_dict = item.to_dict()
+                # Create a hashable representation to check for duplicates
+                item_key = (item_dict.get('id'), item_dict.get('conversationId'))
+                if item_key in seen_dicts:
+                    continue
+                seen_dicts.add(item_key)
+                
+                content_type = item.content_type
+                content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
+                relevant_data.append(item_dict)
+            
+            retrieval_stats['by_search_term']['_fallback'] = {'count': len(relevant_data), 'reason': 'No semantic matches found'}
+            retrieval_stats['total_searched'] = len(relevant_data)
+            logger.info(f"Fallback: Returning {len(relevant_data)} sample conversations")
         
         # Filter by content types if specified
         if plan['content_types'] != ["all"]:
@@ -164,6 +233,11 @@ Respond with valid JSON only."""
             relevant_data = [item for item in relevant_data 
                            if item.get('content', {}).get('type') in plan['content_types']]
             retrieval_stats['filtered_out'] = before_filter - len(relevant_data)
+            retrieval_stats['diagnostics']['content_type_filter'] = {
+                'requested_types': plan['content_types'],
+                'before_filter': before_filter,
+                'after_filter': len(relevant_data)
+            }
             
             # Count by content type
             for item in relevant_data:
@@ -175,15 +249,19 @@ Respond with valid JSON only."""
             recent_ids = {item.get('id') for item in self.conversation_service.get_recent_conversations(24)}
             if recent_ids:
                 relevant_data = [item for item in relevant_data if item.get('id') in recent_ids]
+                retrieval_stats['diagnostics']['time_filter'] = {'type': 'last_24_hours', 'matched_ids': len(recent_ids)}
             else:
                 # If no recent conversations, keep what we have but note it in stats
                 logger.warning("Time filter 'last_24_hours' found no recent conversations, keeping all search results")
+                retrieval_stats['diagnostics']['time_filter'] = {'type': 'last_24_hours', 'warning': 'No recent conversations found'}
         elif plan['time_filters'] == "last_7_days":
             recent_ids = {item.get('id') for item in self.conversation_service.get_recent_conversations(24 * 7)}
             if recent_ids:
                 relevant_data = [item for item in relevant_data if item.get('id') in recent_ids]
+                retrieval_stats['diagnostics']['time_filter'] = {'type': 'last_7_days', 'matched_ids': len(recent_ids)}
             else:
                 logger.warning("Time filter 'last_7_days' found no recent conversations, keeping all search results")
+                retrieval_stats['diagnostics']['time_filter'] = {'type': 'last_7_days', 'warning': 'No recent conversations found'}
         
         # Remove duplicates and limit
         seen_ids = set()
@@ -197,9 +275,14 @@ Respond with valid JSON only."""
         
         retrieval_stats['final_count'] = len(unique_data)
         retrieval_stats['duplicates_removed'] = len(relevant_data) - len(unique_data)
+        retrieval_stats['diagnostics']['unique_items'] = len(unique_data)
+        retrieval_stats['diagnostics']['duplicates_removed'] = len(relevant_data) - len(unique_data)
         
         rag_process.retrieval_stats = retrieval_stats
-        rag_process.update_step(2, 'completed', retrieval_stats)
+        status_message = f"Retrieved {len(unique_data)} conversation items"
+        if retrieval_stats.get('diagnostics', {}).get('fallback_used'):
+            status_message += " (using fallback: semantic search returned no results)"
+        rag_process.update_step(2, 'completed', retrieval_stats, status_message if len(unique_data) > 0 else None)
         
         return unique_data
     

@@ -106,6 +106,7 @@ class ConversationService:
     def semantic_search_conversations(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Enhanced semantic search with concept mappings"""
         if not self.conversations:
+            logger.warning(f"Semantic search called but no conversations available (total: {len(self.conversations)})")
             return []
         
         query_lower = query.lower()
@@ -121,7 +122,9 @@ class ConversationService:
             'battery': ['battery', 'charge', 'charging', 'power', 'dead battery', 'low battery'],
             'gps': ['gps', 'location', 'tracking', 'coordinates', 'position', 'map'],
             'app': ['app', 'application', 'software', 'mobile', 'phone', 'device'],
-            'customer_service': ['customer service', 'support', 'help', 'assistance', 'agent', 'representative']
+            'customer_service': ['customer service', 'support', 'help', 'assistance', 'agent', 'representative'],
+            'topic': ['topic', 'theme', 'subject', 'matter', 'subject matter'],
+            'common': ['common', 'frequent', 'often', 'typical', 'usual', 'regular']
         }
         
         # Find related concepts
@@ -130,23 +133,43 @@ class ConversationService:
             if any(term in query_lower for term in terms):
                 related_terms.update(terms)
         
-        # Add original query terms
-        related_terms.update(query.split())
+        # Add original query terms (split into words)
+        related_terms.update(word.lower() for word in query.split())
+        
+        # Also try partial word matches for better coverage
+        query_words = query_lower.split()
+        for word in query_words:
+            related_terms.add(word)
+            # Add partial matches (stems)
+            if len(word) > 4:
+                related_terms.add(word[:4])
+        
+        items_checked = 0
+        items_with_searchable_text = 0
         
         for item in self.conversations:
+            items_checked += 1
             score = 0
+            
+            # Check if item has searchable text
+            searchable = item.searchable_text
+            if searchable:
+                items_with_searchable_text += 1
             
             # Calculate relevance score
             for term in related_terms:
                 term_lower = term.lower()
-                if term_lower in item.searchable_text:
+                if term_lower and searchable and term_lower in searchable:
                     # Higher score for exact matches
                     if term_lower == query_lower:
                         score += 10
                     # Medium score for related terms
                     elif term_lower in concept_mappings.get(query_lower, []):
                         score += 5
-                    # Lower score for other related terms
+                    # Lower score for partial matches
+                    elif any(term_lower in mapped_term for mapped_term in concept_mappings.values()):
+                        score += 2
+                    # Even lower score for other related terms
                     else:
                         score += 1
             
@@ -157,7 +180,16 @@ class ConversationService:
         scored_results.sort(key=lambda x: x[1], reverse=True)
         results = [item for item, score in scored_results[:limit]]
         
-        logger.info(f"Semantic search completed: query={query}, results_count={len(results)}")
+        logger.info(f"Semantic search: query='{query}', checked={items_checked} items, "
+                   f"with_searchable_text={items_with_searchable_text}, scored={len(scored_results)}, "
+                   f"returning={len(results)} results")
+        
+        # Debug: log why search might have failed
+        if len(results) == 0 and items_checked > 0:
+            logger.warning(f"Semantic search returned 0 results for '{query}'. "
+                          f"Checked {items_checked} items, {items_with_searchable_text} had searchable text. "
+                          f"Sample searchable text length: {len(self.conversations[0].searchable_text) if self.conversations else 0}")
+        
         return results
     
     def get_recent_conversations(self, hours: int = 24) -> List[Dict[str, Any]]:
