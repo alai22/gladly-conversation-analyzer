@@ -34,7 +34,7 @@ def claude_chat():
         
         data = request.get_json()
         message = data.get('message')
-        model = data.get('model', 'claude-3-opus-20240229')
+        model = data.get('model', 'claude-sonnet-4')  # Default to Sonnet 4 (non-dated alias)
         max_tokens = data.get('max_tokens', 1000)
         system_prompt = data.get('system_prompt')
         stream = data.get('stream', False)

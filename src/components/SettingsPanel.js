@@ -10,11 +10,16 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
   };
 
   const models = [
-    'claude-3-opus-20240229',
+    // Claude 4 models (non-dated aliases - recommended for robustness)
+    'claude-sonnet-4',
+    'claude-opus-4',
+    // Claude 3 models (dated snapshots)
     'claude-3-sonnet-20240229',
+    'claude-3-opus-20240229',
     'claude-3-haiku-20240307',
-    'claude-3-5-sonnet-20241022',
+    // Legacy Claude 3.5 models (will be aliased by backend)
     'claude-3-5-sonnet',
+    'claude-3-5-sonnet-20241022',
     'claude-3-5-haiku-20241022'
   ];
 

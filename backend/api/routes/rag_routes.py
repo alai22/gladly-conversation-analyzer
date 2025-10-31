@@ -36,7 +36,7 @@ def conversations_ask():
     try:
         data = request.get_json()
         question = data.get('question')
-        model = data.get('model', 'claude-3-opus-20240229')
+        model = data.get('model', 'claude-sonnet-4')  # Default to Sonnet 4 (non-dated alias)
         max_tokens = data.get('max_tokens', 2000)
         
         if not question:
