@@ -2,8 +2,7 @@
 API routes for Claude interactions
 """
 
-from flask import Blueprint, request, jsonify
-from ...services.claude_service import ClaudeService
+from flask import Blueprint, request, jsonify, g
 from ...utils.logging import get_logger
 
 logger = get_logger('claude_routes')
@@ -11,18 +10,22 @@ logger = get_logger('claude_routes')
 # Create blueprint
 claude_bp = Blueprint('claude', __name__, url_prefix='/api/claude')
 
-# Initialize service with error handling
-try:
-    claude_service = ClaudeService()
-except Exception as e:
-    logger.error(f"Failed to initialize ClaudeService: {str(e)}")
-    claude_service = None
-
 
 @claude_bp.route('/chat', methods=['POST'])
 def claude_chat():
     """Send message to Claude API"""
     try:
+        # Get service from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({
+                'error': 'Service container not initialized',
+                'details': 'Internal server error: service container unavailable'
+            }), 500
+        
+        claude_service = service_container.get_claude_service()
+        
         # Check if Claude service is initialized
         if claude_service is None:
             error_msg = "Claude API service is not initialized. Please check ANTHROPIC_API_KEY configuration."

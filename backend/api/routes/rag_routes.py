@@ -2,10 +2,7 @@
 API routes for RAG-powered analysis
 """
 
-from flask import Blueprint, request, jsonify
-from ...services.rag_service import RAGService
-from ...services.claude_service import ClaudeService
-from ...services.conversation_service import ConversationService
+from flask import Blueprint, request, jsonify, g
 from ...utils.logging import get_logger
 
 logger = get_logger('rag_routes')
@@ -13,27 +10,20 @@ logger = get_logger('rag_routes')
 # Create blueprint
 rag_bp = Blueprint('rag', __name__, url_prefix='/api/conversations')
 
-# Initialize services with error handling
-try:
-    claude_service = ClaudeService()
-except Exception as e:
-    logger.error(f"Failed to initialize ClaudeService: {str(e)}")
-    claude_service = None
-
-conversation_service = ConversationService()
-
-# Initialize RAG service only if Claude service is available
-if claude_service is not None:
-    rag_service = RAGService(claude_service, conversation_service)
-else:
-    rag_service = None
-    logger.warning("RAGService not initialized - ClaudeService unavailable")
-
 
 @rag_bp.route('/ask', methods=['POST'])
 def conversations_ask():
     """Ask Claude about conversation data with detailed RAG process information"""
     try:
+        # Get services from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        claude_service = service_container.get_claude_service()
+        rag_service = service_container.get_rag_service()
+        
         data = request.get_json()
         question = data.get('question')
         model = data.get('model', 'claude-sonnet-4')  # Default to Sonnet 4 (non-dated alias)
@@ -105,6 +95,14 @@ def conversations_ask():
 def refresh_conversations():
     """Refresh conversation data from storage"""
     try:
+        # Get service from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'status': 'error', 'message': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        
         logger.info("Refreshing conversation data for RAG system")
         conversation_service.refresh_conversations()
         

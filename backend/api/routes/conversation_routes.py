@@ -2,8 +2,7 @@
 API routes for conversation data interactions
 """
 
-from flask import Blueprint, request, jsonify
-from ...services.conversation_service import ConversationService
+from flask import Blueprint, request, jsonify, g
 from ...models.response import SearchResult
 from ...utils.logging import get_logger
 
@@ -12,14 +11,18 @@ logger = get_logger('conversation_routes')
 # Create blueprint
 conversation_bp = Blueprint('conversations', __name__, url_prefix='/api/conversations')
 
-# Initialize service
-conversation_service = ConversationService()
-
 
 @conversation_bp.route('/summary')
 def conversations_summary():
     """Get conversation data summary"""
     try:
+        # Get service from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
         summary = conversation_service.get_summary()
         
         return jsonify({
@@ -36,6 +39,14 @@ def conversations_summary():
 def conversations_search():
     """Search conversations"""
     try:
+        # Get service from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        
         data = request.get_json()
         query = data.get('query')
         limit = data.get('limit', 10)
@@ -69,6 +80,14 @@ def conversations_search():
 def get_conversation(conversation_id):
     """Get all items for a specific conversation ID"""
     try:
+        # Get service from container (injected via Flask's g)
+        service_container = g.get('service_container')
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        
         logger.info(f"Get conversation request: conversation_id={conversation_id}")
         
         items = conversation_service.get_conversation_by_id(conversation_id)

@@ -23,10 +23,22 @@ from backend.api.middleware.error_handlers import register_error_handlers
 # Import utilities
 from backend.utils.config import Config
 from backend.utils.logging import setup_logging, get_logger
+from backend.core.service_container import ServiceContainer
 
 # Setup logging
 logger = setup_logging()
 app_logger = get_logger('app')
+
+# Create global service container
+_service_container = None
+
+def get_service_container() -> ServiceContainer:
+    """Get the global service container instance"""
+    global _service_container
+    if _service_container is None:
+        _service_container = ServiceContainer()
+        app_logger.info("Service container created")
+    return _service_container
 
 def create_app():
     """Create and configure the Flask application"""
@@ -37,6 +49,14 @@ def create_app():
     
     # Create Flask app
     app = Flask(__name__)
+    
+    # Initialize service container and make it available via Flask's g
+    from flask import g
+    
+    @app.before_request
+    def before_request():
+        """Initialize service container for each request"""
+        g.service_container = get_service_container()
     
     # Enable CORS
     CORS(app)
