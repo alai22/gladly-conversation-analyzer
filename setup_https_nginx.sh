@@ -136,23 +136,32 @@ else
     # Self-signed certificate setup
     print_status "Generating self-signed certificate..."
     mkdir -p /etc/nginx/ssl
+    
+    # Use IP address or a default name for CN
+    CERT_CN="$PUBLIC_IP"
+    if [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        CERT_CN="ec2-instance"
+    else
+        CERT_CN="$DOMAIN_NAME"
+    fi
+    
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/nginx/ssl/gladly.key \
         -out /etc/nginx/ssl/gladly.crt \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN_NAME"
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=$CERT_CN"
     
     cat > /etc/nginx/conf.d/gladly.conf <<EOF
 server {
-    listen 80;
-    server_name $DOMAIN_NAME $PUBLIC_IP;
+    listen 80 default_server;
+    server_name _;
     
     # Redirect HTTP to HTTPS
     return 301 https://\$host\$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    server_name $DOMAIN_NAME $PUBLIC_IP;
+    listen 443 ssl http2 default_server;
+    server_name _;
 
     # SSL certificate
     ssl_certificate /etc/nginx/ssl/gladly.crt;
