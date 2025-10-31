@@ -17,6 +17,46 @@ class Config:
     ANTHROPIC_API_KEY: Optional[str] = os.getenv('ANTHROPIC_API_KEY')
     CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-3-opus-20240229')
     
+    # Model aliases and fallbacks
+    # Maps requested models to available working models
+    MODEL_ALIASES = {
+        'claude-3-5-sonnet': 'claude-3-opus-20240229',
+        'claude-3-5-sonnet-20241022': 'claude-3-opus-20240229',
+        'claude-3-5-sonnet-20240620': 'claude-3-opus-20240229',
+        'claude-3-5-haiku-20241022': 'claude-3-haiku-20240307',
+    }
+    
+    # List of verified working models (tested with current API key)
+    VERIFIED_MODELS = [
+        'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307'
+    ]
+    
+    # Fallback model if configured model doesn't work
+    FALLBACK_MODEL = 'claude-3-opus-20240229'
+    
+    @classmethod
+    def resolve_model(cls, requested_model: Optional[str] = None) -> str:
+        """
+        Resolve a model name, applying aliases and fallbacks.
+        
+        Args:
+            requested_model: The requested model name (or None to use default)
+            
+        Returns:
+            A working model name
+        """
+        model = requested_model or cls.CLAUDE_MODEL
+        
+        # Check if it's an alias
+        if model in cls.MODEL_ALIASES:
+            logger = __import__('logging').getLogger('config')
+            logger.info(f"Model alias '{model}' mapped to '{cls.MODEL_ALIASES[model]}'")
+            return cls.MODEL_ALIASES[model]
+        
+        return model
+    
     # Gladly API Configuration
     GLADLY_API_KEY: Optional[str] = os.getenv('GLADLY_API_KEY')
     GLADLY_AGENT_EMAIL: Optional[str] = os.getenv('GLADLY_AGENT_EMAIL')

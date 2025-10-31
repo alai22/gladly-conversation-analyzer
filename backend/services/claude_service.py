@@ -33,8 +33,10 @@ class ClaudeService:
                     model: str = None,
                     max_tokens: int = 1000,
                     system_prompt: Optional[str] = None) -> ClaudeResponse:
-        """Send a message to Claude API"""
-        model = model or Config.CLAUDE_MODEL
+        """Send a message to Claude API with automatic model fallback"""
+        # Resolve model through aliases and fallbacks
+        requested_model = model or Config.CLAUDE_MODEL
+        model = Config.resolve_model(requested_model)
         
         payload = {
             "model": model,
@@ -66,6 +68,26 @@ class ClaudeService:
             return ClaudeResponse.from_api_response(response_data, model)
         
         except requests.exceptions.RequestException as e:
+            # If model not found error and we haven't tried fallback yet
+            if hasattr(e, 'response') and e.response is not None:
+                error_data = e.response.json() if e.response.headers.get('content-type', '').startswith('application/json') else {}
+                error_type = error_data.get('error', {}).get('type', '')
+                
+                if error_type == 'not_found_error' and model != Config.FALLBACK_MODEL and requested_model != Config.FALLBACK_MODEL:
+                    logger.warning(f"Model '{model}' not found, falling back to '{Config.FALLBACK_MODEL}'")
+                    # Retry with fallback model
+                    payload['model'] = Config.FALLBACK_MODEL
+                    response = requests.post(
+                        f"{self.base_url}/messages",
+                        headers=self.headers,
+                        json=payload,
+                        timeout=30
+                    )
+                    response.raise_for_status()
+                    response_data = response.json()
+                    logger.info(f"Claude response received with fallback model: tokens_used={response_data.get('usage', {}).get('output_tokens', 0)}")
+                    return ClaudeResponse.from_api_response(response_data, Config.FALLBACK_MODEL)
+            
             logger.error(f"Claude API request failed: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response details: {e.response.text}")
@@ -76,8 +98,10 @@ class ClaudeService:
                       model: str = None,
                       max_tokens: int = 1000,
                       system_prompt: Optional[str] = None) -> Generator[Dict[str, Any], None, None]:
-        """Stream a message from Claude API"""
-        model = model or Config.CLAUDE_MODEL
+        """Stream a message from Claude API with automatic model fallback"""
+        # Resolve model through aliases and fallbacks
+        requested_model = model or Config.CLAUDE_MODEL
+        model = Config.resolve_model(requested_model)
         
         payload = {
             "model": model,
@@ -123,30 +147,49 @@ class ClaudeService:
             raise
     
     def is_available(self) -> bool:
-        """Check if Claude service is available"""
-        try:
-            # Simple health check - send a minimal request
-            response = requests.post(
-                f"{self.base_url}/messages",
-                headers=self.headers,
-                json={
-                    "model": Config.CLAUDE_MODEL,
-                    "max_tokens": 10,
-                    "messages": [{"role": "user", "content": "test"}]
-                },
-                timeout=10
-            )
-            if response.status_code == 200:
-                return True
-            else:
-                logger.warning(f"Claude health check returned status {response.status_code}: {response.text}")
-                return False
-        except requests.exceptions.Timeout:
-            logger.warning("Claude health check timed out")
-            return False
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Claude health check failed: {str(e)}")
-            return False
-        except Exception as e:
-            logger.warning(f"Claude health check error: {str(e)}")
-            return False
+        """Check if Claude service is available, trying fallback models if needed"""
+        # Resolve the configured model first
+        model = Config.resolve_model()
+        
+        # Try configured/aliased model first
+        models_to_try = [model]
+        
+        # Add fallback if it's different
+        if Config.FALLBACK_MODEL not in models_to_try:
+            models_to_try.append(Config.FALLBACK_MODEL)
+        
+        # Try verified models as last resort
+        for verified_model in Config.VERIFIED_MODELS:
+            if verified_model not in models_to_try:
+                models_to_try.append(verified_model)
+                break  # Only need one fallback
+        
+        for test_model in models_to_try:
+            try:
+                response = requests.post(
+                    f"{self.base_url}/messages",
+                    headers=self.headers,
+                    json={
+                        "model": test_model,
+                        "max_tokens": 10,
+                        "messages": [{"role": "user", "content": "test"}]
+                    },
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    if test_model != model:
+                        logger.info(f"Health check: '{model}' unavailable, using working model '{test_model}'")
+                    return True
+                else:
+                    logger.warning(f"Model '{test_model}' health check returned status {response.status_code}")
+            except requests.exceptions.Timeout:
+                logger.warning(f"Model '{test_model}' health check timed out")
+                continue
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Model '{test_model}' health check failed: {str(e)}")
+                continue
+            except Exception as e:
+                logger.warning(f"Model '{test_model}' health check error: {str(e)}")
+                continue
+        
+        return False
