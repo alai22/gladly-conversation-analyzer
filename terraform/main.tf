@@ -15,30 +15,6 @@ provider "aws" {
 }
 
 # Variables
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-  default     = "gladly-prod"
-}
-
-variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t3.medium"
-}
-
-variable "github_repository" {
-  description = "GitHub repository URL"
-  type        = string
-  default     = "https://github.com/YOUR_USERNAME/gladly-conversation-analyzer"
-}
-
 variable "domain_name" {
   description = "Domain name for SSL certificate (optional)"
   type        = string

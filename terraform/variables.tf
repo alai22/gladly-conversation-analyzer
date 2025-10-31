@@ -6,7 +6,7 @@ variable "aws_region" {
   default     = "us-east-1"
   
   validation {
-    condition     = can(regex("^[a-z][a-z-]+[a-z]$", var.aws_region))
+    condition     = can(regex("^[a-z][a-z-]+[a-z0-9]$", var.aws_region))
     error_message = "AWS region must be a valid region format."
   }
 }
