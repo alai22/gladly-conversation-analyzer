@@ -183,6 +183,13 @@ class ConversationService:
         logger.info(f"Recent conversations retrieved: hours={hours}, count={len(recent_conversations)}")
         return recent_conversations
     
+    def get_conversation_by_id(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """Get all items for a specific conversation ID"""
+        results = [item.to_dict() for item in self.conversations 
+                   if item.conversation_id == conversation_id]
+        logger.info(f"Retrieved {len(results)} items for conversation ID: {conversation_id}")
+        return results
+    
     def refresh_conversations(self):
         """Refresh conversations from storage (useful after aggregation)"""
         logger.info("Refreshing conversations from storage")

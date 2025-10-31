@@ -1,11 +1,15 @@
-import React from 'react';
-import { Bot, User, Search, Database, Clock, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot, User, Search, Database, Clock, AlertCircle, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import axios from 'axios';
 
 function ConversationDisplay({ conversations, isLoading, error }) {
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
+  const [conversationDetails, setConversationDetails] = useState(null);
+  const [loadingConversation, setLoadingConversation] = useState(false);
   const getIcon = (type) => {
     switch (type) {
       case 'claude':
@@ -34,6 +38,40 @@ function ConversationDisplay({ conversations, isLoading, error }) {
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();
+  };
+
+  // Detect if a string looks like a conversation ID (alphanumeric, typically 20+ chars)
+  const isConversationId = (text) => {
+    const cleanText = String(text).trim();
+    // Conversation IDs are typically alphanumeric strings of reasonable length
+    // Gladly conversation IDs are usually 20+ characters
+    return /^[a-zA-Z0-9_-]{15,}$/.test(cleanText);
+  };
+
+  const handleConversationIdClick = async (conversationId) => {
+    setSelectedConversationId(conversationId);
+    setLoadingConversation(true);
+    setConversationDetails(null);
+
+    try {
+      const response = await axios.get(`/api/conversations/${conversationId}`);
+      if (response.data.success) {
+        setConversationDetails(response.data);
+      } else {
+        setConversationDetails({ error: response.data.error || 'Conversation not found' });
+      }
+    } catch (error) {
+      setConversationDetails({
+        error: error.response?.data?.error || error.message || 'Failed to load conversation'
+      });
+    } finally {
+      setLoadingConversation(false);
+    }
+  };
+
+  const closeConversationModal = () => {
+    setSelectedConversationId(null);
+    setConversationDetails(null);
   };
 
   const renderMetadata = (metadata) => {
@@ -158,16 +196,35 @@ function ConversationDisplay({ conversations, isLoading, error }) {
                     components={{
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || '');
-                        return !inline && match ? (
-                          <SyntaxHighlighter
-                            style={tomorrow}
-                            language={match[1]}
-                            PreTag="div"
-                            {...props}
-                          >
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        ) : (
+                        if (!inline && match) {
+                          return (
+                            <SyntaxHighlighter
+                              style={tomorrow}
+                              language={match[1]}
+                              PreTag="div"
+                              {...props}
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          );
+                        }
+                        
+                        // Check if this inline code contains a conversation ID
+                        const codeText = String(children).trim();
+                        if (inline && isConversationId(codeText)) {
+                          return (
+                            <code 
+                              className={`${className} cursor-pointer text-blue-600 hover:text-blue-800 hover:underline font-semibold`}
+                              onClick={() => handleConversationIdClick(codeText)}
+                              title="Click to view conversation"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          );
+                        }
+                        
+                        return (
                           <code className={className} {...props}>
                             {children}
                           </code>
@@ -191,6 +248,102 @@ function ConversationDisplay({ conversations, isLoading, error }) {
           <div className="flex items-center space-x-3">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
             <span className="text-gray-600">Processing...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Conversation Details Modal */}
+      {selectedConversationId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center space-x-2">
+                <Database className="h-5 w-5 text-purple-600" />
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Conversation: <code className="text-blue-600">{selectedConversationId}</code>
+                </h2>
+              </div>
+              <button
+                onClick={closeConversationModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingConversation ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center space-x-3">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <span className="text-gray-600">Loading conversation...</span>
+                  </div>
+                </div>
+              ) : conversationDetails?.error ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 text-red-800">
+                    <AlertCircle className="h-5 w-5" />
+                    <span>{conversationDetails.error}</span>
+                  </div>
+                </div>
+              ) : conversationDetails?.items ? (
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-600 mb-4">
+                    Found {conversationDetails.count} item(s) in this conversation
+                  </div>
+                  {conversationDetails.items.map((item, index) => {
+                    const content = item.content || {};
+                    const contentType = content.type || 'Unknown';
+                    return (
+                      <div key={item.id || index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                              {contentType}
+                            </span>
+                            {item.timestamp && (
+                              <span className="text-xs text-gray-500">
+                                <Clock className="h-3 w-3 inline mr-1" />
+                                {formatTimestamp(item.timestamp)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {item.customerId && (
+                          <div className="text-sm text-gray-600 mb-2">
+                            <span className="font-medium">Customer:</span> {item.customerId}
+                          </div>
+                        )}
+                        {content.content && (
+                          <div className="mt-2">
+                            <div className="text-sm font-medium text-gray-700 mb-1">Content:</div>
+                            <div className="text-sm text-gray-800 bg-white p-3 rounded border border-gray-200 whitespace-pre-wrap">
+                              {content.content}
+                            </div>
+                          </div>
+                        )}
+                        {content.subject && (
+                          <div className="mt-2">
+                            <div className="text-sm font-medium text-gray-700 mb-1">Subject:</div>
+                            <div className="text-sm text-gray-800">{content.subject}</div>
+                          </div>
+                        )}
+                        {content.body && (
+                          <div className="mt-2">
+                            <div className="text-sm font-medium text-gray-700 mb-1">Body:</div>
+                            <div className="text-sm text-gray-800 bg-white p-3 rounded border border-gray-200 whitespace-pre-wrap">
+                              {content.body}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

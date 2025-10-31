@@ -31,18 +31,19 @@ def format_conversation_for_claude(conversations: list, max_items: int = 50) -> 
     conversation_text = "Retrieved Conversation Data:\n\n"
     items_to_process = conversations[:max_items]
     
-    for i, item in enumerate(items_to_process, 1):
+    for item in items_to_process:
         content = item.get('content', {})
         timestamp = item.get('timestamp', 'No timestamp')
         content_type = content.get('type', 'Unknown type')
         customer_id = item.get('customerId', 'Unknown customer')
         conversation_id = item.get('conversationId', 'Unknown conversation')
+        item_id = item.get('id', 'Unknown item')
         
-        conversation_text += f"--- Item {i} ---\n"
+        # Use conversation ID as the primary identifier
+        conversation_text += f"--- Conversation ID: {conversation_id} (Item ID: {item_id}) ---\n"
         conversation_text += f"Type: {content_type}\n"
         conversation_text += f"Timestamp: {timestamp}\n"
         conversation_text += f"Customer: {customer_id}\n"
-        conversation_text += f"Conversation: {conversation_id}\n"
         
         # Add content based on type (truncate long content)
         if 'content' in content:
@@ -76,12 +77,14 @@ Please analyze the conversation data and answer the question: "{question}"
 
 Be specific and reference the actual conversation content when possible. Look for patterns, themes, and specific examples in the data. Provide detailed insights based on the retrieved conversations.
 
+IMPORTANT: When referencing specific conversations, ALWAYS use the Conversation ID (e.g., `abc123xyz`) instead of item numbers. Format conversation IDs using backticks for code formatting like this: `conversation-id-here`. This makes it easy for users to identify and access the specific conversations.
+
 IMPORTANT: Format your response using proper Markdown formatting:
 - Use **bold** for headings and important terms
 - Use bullet points (- or *) for lists
 - Use proper indentation for sub-items
 - Use numbered lists (1., 2., 3.) for sequential items
 - Use ## for main headings and ### for sub-headings
-- Use `code formatting` for specific terms or IDs when needed
+- Use `code formatting` for conversation IDs and specific terms when needed
 
 Make your response well-structured and easy to read with clear visual hierarchy."""

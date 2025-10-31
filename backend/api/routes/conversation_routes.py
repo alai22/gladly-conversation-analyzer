@@ -63,3 +63,30 @@ def conversations_search():
     except Exception as e:
         logger.error(f"Conversation search error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/<conversation_id>', methods=['GET'])
+def get_conversation(conversation_id):
+    """Get all items for a specific conversation ID"""
+    try:
+        logger.info(f"Get conversation request: conversation_id={conversation_id}")
+        
+        items = conversation_service.get_conversation_by_id(conversation_id)
+        
+        if not items:
+            return jsonify({
+                'success': False,
+                'error': f'Conversation {conversation_id} not found',
+                'items': []
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id,
+            'items': items,
+            'count': len(items)
+        })
+    
+    except Exception as e:
+        logger.error(f"Get conversation error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
