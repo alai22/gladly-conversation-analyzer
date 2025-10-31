@@ -146,18 +146,19 @@ else
         -subj "/C=US/ST=State/L=City/O=Organization/CN=${CERT_CN}"
     
     # Create nginx config with proper escaping
+    # Remove default_server to avoid conflicts with existing nginx config
     cat > /etc/nginx/conf.d/gladly.conf <<'NGINXEOF'
 server {
-    listen 80 default_server;
-    server_name _;
+    listen 80;
+    listen [::]:80;
     
     # Redirect HTTP to HTTPS
     return 301 https://$host$request_uri;
 }
 
 server {
-    listen 443 ssl http2 default_server;
-    server_name _;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
 NGINXEOF
     
     # Add SSL and proxy config (using single quotes to prevent variable expansion)
