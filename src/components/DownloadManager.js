@@ -14,6 +14,7 @@ const DownloadManager = () => {
   const [endDate, setEndDate] = useState('');
   const [csvDateRange, setCsvDateRange] = useState(null);
   const [csvDateBreakdown, setCsvDateBreakdown] = useState(null);
+  const [aggregationError, setAggregationError] = useState(null);
 
   // Fetch download status
   const fetchDownloadStatus = async () => {
@@ -157,11 +158,21 @@ const DownloadManager = () => {
         // Refresh aggregation status
         await fetchAggregationStatus();
       } else {
-        alert(`⚠️ ${data.message}`);
+        // Set error state to show in modal
+        const errorMessage = data.message || data.error || 'Unknown error occurred';
+        setAggregationError({
+          message: errorMessage,
+          diagnostics: data.data?.diagnostics || null
+        });
+        
+        // Also log diagnostics to console for debugging
+        if (data.data && data.data.diagnostics) {
+          console.error('Aggregation diagnostics:', data.data.diagnostics);
+        }
       }
     } catch (error) {
       console.error('Error aggregating conversations:', error);
-      alert('❌ Failed to aggregate conversations');
+      alert(`❌ Failed to aggregate conversations: ${error.message}`);
     } finally {
       setIsAggregating(false);
     }
@@ -921,10 +932,72 @@ const DownloadManager = () => {
               </div>
             )}
           </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
 
-export default DownloadManager;
+      {/* Aggregation Error Modal */}
+      {aggregationError && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="h-6 w-6 text-yellow-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  No Conversation Files Found
+                </h3>
+                <button
+                  onClick={() => setAggregationError(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 p-4 rounded border border-gray-200 font-sans">
+                  {aggregationError.message}
+                </pre>
+              </div>
+
+              {aggregationError.diagnostics && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Diagnostics:</h4>
+                  <div className="bg-gray-50 p-4 rounded border border-gray-200 text-xs font-mono overflow-x-auto">
+                    <div className="space-y-1">
+                      <div><span className="font-semibold">Bucket:</span> {aggregationError.diagnostics.bucket_name || 'N/A'}</div>
+                      <div><span className="font-semibold">Prefix searched:</span> {aggregationError.diagnostics.prefix_searched || 'N/A'}</div>
+                      <div><span className="font-semibold">Pattern required:</span> {aggregationError.diagnostics.pattern_required || 'N/A'}</div>
+                      <div><span className="font-semibold">S3 accessible:</span> {aggregationError.diagnostics.s3_accessible ? 'Yes' : 'No'}</div>
+                      <div><span className="font-semibold">Total files in prefix:</span> {aggregationError.diagnostics.total_files_in_prefix || 0}</div>
+                      <div><span className="font-semibold">Files ending .jsonl:</span> {aggregationError.diagnostics.files_ending_jsonl || 0}</div>
+                      <div><span className="font-semibold">Matching files:</span> {aggregationError.diagnostics.matching_files?.length || 0}</div>
+                      {aggregationError.diagnostics.error && (
+                        <div className="text-red-600"><span className="font-semibold">Error:</span> {aggregationError.diagnostics.error}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setAggregationError(null)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+    );
+  };
+  
+  export default DownloadManager;

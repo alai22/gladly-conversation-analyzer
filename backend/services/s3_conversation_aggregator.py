@@ -9,7 +9,7 @@ import json
 import boto3
 import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import logging
 from dotenv import load_dotenv
 
@@ -46,16 +46,51 @@ class S3ConversationAggregator:
         
         logger.info(f"Starting conversation aggregation to s3://{self.bucket_name}/{target_key}")
         
-        # Get all conversation files from S3
-        conversation_files = self._list_conversation_files()
+        # Get all conversation files from S3 with diagnostics
+        conversation_files, diagnostics = self._list_conversation_files(include_diagnostics=True)
         
         if not conversation_files:
             logger.warning("No conversation files found in S3")
+            
+            # Build detailed error message
+            error_parts = ['No conversation files found matching the required pattern.']
+            
+            if diagnostics.get('error'):
+                error_parts.append(f"\nError: {diagnostics['error']}")
+            
+            if not diagnostics.get('s3_accessible'):
+                error_parts.append("\n⚠️ Cannot access S3 bucket - check IAM permissions.")
+            
+            if diagnostics.get('total_files_in_prefix', 0) == 0:
+                error_parts.append(f"\n📁 No files found in S3 prefix: '{diagnostics['prefix_searched']}'")
+                error_parts.append("\n💡 Possible reasons:")
+                error_parts.append("   • No conversations have been downloaded yet")
+                error_parts.append("   • Downloads are still in progress (files upload after download completes)")
+                error_parts.append("   • Files are stored in a different S3 prefix")
+            else:
+                error_parts.append(f"\n📁 Found {diagnostics['total_files_in_prefix']} files in prefix, but none match the pattern:")
+                error_parts.append(f"   Required: {diagnostics['pattern_required']}")
+                
+                if diagnostics.get('files_ending_jsonl', 0) > 0:
+                    error_parts.append(f"\n   Found {diagnostics['files_ending_jsonl']} .jsonl files, but they don't contain 'gladly_conversations' in the filename:")
+                    for non_match in diagnostics.get('non_matching_files', [])[:5]:
+                        if non_match.get('reason') == 'Missing "gladly_conversations" in filename':
+                            error_parts.append(f"     • {non_match['key']}")
+                    if len(diagnostics.get('non_matching_files', [])) > 5:
+                        error_parts.append(f"     ... and {len(diagnostics.get('non_matching_files', [])) - 5} more")
+                else:
+                    error_parts.append("\n   None of the files end with .jsonl")
+                    if diagnostics.get('non_matching_files'):
+                        error_parts.append("   Sample files found:")
+                        for non_match in diagnostics.get('non_matching_files', [])[:3]:
+                            error_parts.append(f"     • {non_match['key']}")
+            
             return {
                 'status': 'warning',
-                'message': 'No conversation files found',
+                'message': '\n'.join(error_parts),
                 'files_processed': 0,
-                'total_conversations': 0
+                'total_conversations': 0,
+                'diagnostics': diagnostics
             }
         
         # Aggregate conversations
@@ -89,30 +124,120 @@ class S3ConversationAggregator:
         logger.info(f"Aggregation completed: {stats}")
         return stats
     
-    def _list_conversation_files(self) -> List[str]:
-        """List all conversation files in S3"""
+    def _list_conversation_files(self, include_diagnostics: bool = False) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        List all conversation files in S3
+        
+        Args:
+            include_diagnostics: If True, return detailed diagnostics
+            
+        Returns:
+            Tuple of (matching_files, diagnostics_dict)
+        """
+        diagnostics = {
+            's3_accessible': False,
+            'prefix_searched': 'gladly-conversations/',
+            'pattern_required': 'files ending with .jsonl and containing "gladly_conversations"',
+            'total_files_in_prefix': 0,
+            'files_ending_jsonl': 0,
+            'matching_files': [],
+            'non_matching_files': [],
+            'error': None,
+            'bucket_name': self.bucket_name
+        }
+        
         try:
+            # Test S3 access
+            try:
+                self.s3_client.head_bucket(Bucket=self.bucket_name)
+                diagnostics['s3_accessible'] = True
+            except Exception as access_error:
+                diagnostics['error'] = f"S3 access error: {str(access_error)}"
+                logger.error(f"Failed to access S3 bucket {self.bucket_name}: {access_error}")
+                return ([], diagnostics)
+            
+            # List objects with prefix
             response = self.s3_client.list_objects_v2(
                 Bucket=self.bucket_name,
                 Prefix='gladly-conversations/'
             )
             
-            files = []
+            matching_files = []
+            all_files = []
+            
             if 'Contents' in response:
+                diagnostics['total_files_in_prefix'] = len(response['Contents'])
+                
                 for obj in response['Contents']:
                     key = obj['Key']
-                    if key.endswith('.jsonl') and 'gladly_conversations' in key:
-                        files.append(key)
+                    last_modified = obj.get('LastModified')
+                    if last_modified:
+                        if hasattr(last_modified, 'isoformat'):
+                            last_modified_str = last_modified.isoformat()
+                        else:
+                            last_modified_str = str(last_modified)
+                    else:
+                        last_modified_str = 'Unknown'
+                    
+                    all_files.append({
+                        'key': key,
+                        'size': obj.get('Size', 0),
+                        'last_modified': last_modified_str
+                    })
+                    
+                    # Check if it ends with .jsonl
+                    if key.endswith('.jsonl'):
+                        diagnostics['files_ending_jsonl'] += 1
+                        # Check if it contains gladly_conversations
+                        if 'gladly_conversations' in key:
+                            matching_files.append(key)
+                            diagnostics['matching_files'].append({
+                                'key': key,
+                                'size': obj.get('Size', 0),
+                                'last_modified': last_modified_str
+                            })
+                        else:
+                            diagnostics['non_matching_files'].append({
+                                'key': key,
+                                'reason': 'Missing "gladly_conversations" in filename',
+                                'size': obj.get('Size', 0)
+                            })
+                    else:
+                        diagnostics['non_matching_files'].append({
+                            'key': key,
+                            'reason': 'Not a .jsonl file',
+                            'size': obj.get('Size', 0)
+                        })
             
             # Sort by modification time (newest first)
-            files.sort(key=lambda x: response['Contents'][files.index(x)]['LastModified'], reverse=True)
+            if matching_files and 'Contents' in response:
+                try:
+                    file_mod_times = {
+                        obj['Key']: obj['LastModified'] 
+                        for obj in response['Contents'] 
+                        if obj['Key'] in matching_files
+                    }
+                    matching_files.sort(key=lambda x: file_mod_times.get(x, datetime(1970, 1, 1)), reverse=True)
+                except Exception as e:
+                    logger.warning(f"Failed to sort files by modification time: {e}")
             
-            logger.info(f"Found {len(files)} conversation files in S3")
-            return files
+            logger.info(f"Found {len(matching_files)} matching conversation files in S3 (out of {diagnostics['total_files_in_prefix']} total files)")
             
-        except Exception as e:
+            return (matching_files, diagnostics)
+            
+        except self.s3_client.exceptions.NoSuchBucket:
+            diagnostics['error'] = f"S3 bucket '{self.bucket_name}' does not exist"
+            logger.error(f"S3 bucket {self.bucket_name} does not exist")
+            return ([], diagnostics)
+        except self.s3_client.exceptions.ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            diagnostics['error'] = f"S3 client error ({error_code}): {str(e)}"
             logger.error(f"Failed to list S3 files: {e}")
-            return []
+            return ([], diagnostics)
+        except Exception as e:
+            diagnostics['error'] = f"Unexpected error: {str(e)}"
+            logger.error(f"Failed to list S3 files: {e}")
+            return ([], diagnostics)
     
     def _load_conversation_file(self, file_key: str) -> List[Dict[str, Any]]:
         """Load conversations from a specific S3 file"""
