@@ -137,31 +137,31 @@ else
     print_status "Generating self-signed certificate..."
     mkdir -p /etc/nginx/ssl
     
-    # Use IP address or a default name for CN
-    CERT_CN="$PUBLIC_IP"
-    if [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        CERT_CN="ec2-instance"
-    else
-        CERT_CN="$DOMAIN_NAME"
-    fi
+    # Always use a simple CN for self-signed certificates
+    CERT_CN="gladly-ec2-instance"
     
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/nginx/ssl/gladly.key \
         -out /etc/nginx/ssl/gladly.crt \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=$CERT_CN"
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=${CERT_CN}"
     
-    cat > /etc/nginx/conf.d/gladly.conf <<EOF
+    # Create nginx config with proper escaping
+    cat > /etc/nginx/conf.d/gladly.conf <<'NGINXEOF'
 server {
     listen 80 default_server;
     server_name _;
     
     # Redirect HTTP to HTTPS
-    return 301 https://\$host\$request_uri;
+    return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2 default_server;
     server_name _;
+NGINXEOF
+    
+    # Add SSL and proxy config (using single quotes to prevent variable expansion)
+    cat >> /etc/nginx/conf.d/gladly.conf <<'NGINXEOF'
 
     # SSL certificate
     ssl_certificate /etc/nginx/ssl/gladly.crt;
@@ -179,13 +179,13 @@ server {
     location / {
         proxy_pass http://localhost:5000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         
         # Timeouts
         proxy_connect_timeout 60s;
@@ -193,7 +193,7 @@ server {
         proxy_read_timeout 60s;
     }
 }
-EOF
+NGINXEOF
 fi
 
 # Test Nginx configuration
