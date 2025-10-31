@@ -932,7 +932,6 @@ const DownloadManager = () => {
               </div>
             )}
           </div>
-          </div>
         </div>
       </div>
 
