@@ -137,8 +137,19 @@ class ClaudeService:
                     "max_tokens": 10,
                     "messages": [{"role": "user", "content": "test"}]
                 },
-                timeout=5
+                timeout=10
             )
-            return response.status_code == 200
-        except:
+            if response.status_code == 200:
+                return True
+            else:
+                logger.warning(f"Claude health check returned status {response.status_code}: {response.text}")
+                return False
+        except requests.exceptions.Timeout:
+            logger.warning("Claude health check timed out")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Claude health check failed: {str(e)}")
+            return False
+        except Exception as e:
+            logger.warning(f"Claude health check error: {str(e)}")
             return False
