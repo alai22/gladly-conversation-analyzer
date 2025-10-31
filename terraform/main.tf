@@ -46,14 +46,26 @@ resource "aws_vpc" "gladly_vpc" {
   }
 }
 
-resource "aws_subnet" "public_subnet" {
+resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.gladly_vpc.id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "${var.environment}-public-subnet"
+    Name        = "${var.environment}-public-subnet-1"
+    Environment = var.environment
+  }
+}
+
+resource "aws_subnet" "public_subnet_2" {
+  vpc_id                  = aws_vpc.gladly_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name        = "${var.environment}-public-subnet-2"
     Environment = var.environment
   }
 }
@@ -81,8 +93,13 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
-resource "aws_route_table_association" "public_rta" {
-  subnet_id      = aws_subnet.public_subnet.id
+resource "aws_route_table_association" "public_rta_1" {
+  subnet_id      = aws_subnet.public_subnet_1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_rta_2" {
+  subnet_id      = aws_subnet.public_subnet_2.id
   route_table_id = aws_route_table.public_rt.id
 }
 
@@ -219,7 +236,7 @@ resource "aws_launch_template" "gladly_template" {
 # Auto Scaling Group
 resource "aws_autoscaling_group" "gladly_asg" {
   name                = "${var.environment}-asg"
-  vpc_zone_identifier = [aws_subnet.public_subnet.id]
+  vpc_zone_identifier = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
   target_group_arns   = [aws_lb_target_group.gladly_tg.arn]
   health_check_type   = "ELB"
   
@@ -255,7 +272,7 @@ resource "aws_lb" "gladly_alb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.gladly_sg.id]
-  subnets            = [aws_subnet.public_subnet.id]
+  subnets            = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
 
   enable_deletion_protection = false
 
