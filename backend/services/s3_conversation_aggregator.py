@@ -156,28 +156,37 @@ class S3ConversationAggregator:
                 logger.error(f"Failed to access S3 bucket {self.bucket_name}: {access_error}")
                 return ([], diagnostics)
             
-            # List objects with prefix
-            response = self.s3_client.list_objects_v2(
+            # List objects with prefix (handle pagination)
+            matching_files = []
+            all_files = []
+            file_mod_times = {}  # Store mod times for sorting
+            
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(
                 Bucket=self.bucket_name,
                 Prefix='gladly-conversations/'
             )
             
-            matching_files = []
-            all_files = []
-            
-            if 'Contents' in response:
-                diagnostics['total_files_in_prefix'] = len(response['Contents'])
-                
-                for obj in response['Contents']:
+            # Process all pages
+            for page in pages:
+                if 'Contents' not in page:
+                    continue
+                    
+                for obj in page['Contents']:
                     key = obj['Key']
                     last_modified = obj.get('LastModified')
+                    
+                    # Store modification time for sorting
                     if last_modified:
+                        file_mod_times[key] = last_modified
                         if hasattr(last_modified, 'isoformat'):
                             last_modified_str = last_modified.isoformat()
                         else:
                             last_modified_str = str(last_modified)
                     else:
                         last_modified_str = 'Unknown'
+                    
+                    diagnostics['total_files_in_prefix'] += 1
                     
                     all_files.append({
                         'key': key,
@@ -210,16 +219,17 @@ class S3ConversationAggregator:
                         })
             
             # Sort by modification time (newest first)
-            if matching_files and 'Contents' in response:
+            if matching_files and file_mod_times:
                 try:
-                    file_mod_times = {
-                        obj['Key']: obj['LastModified'] 
-                        for obj in response['Contents'] 
-                        if obj['Key'] in matching_files
-                    }
-                    matching_files.sort(key=lambda x: file_mod_times.get(x, datetime(1970, 1, 1)), reverse=True)
+                    # Use stored file_mod_times dict for sorting
+                    matching_files.sort(
+                        key=lambda x: file_mod_times.get(x, datetime(1970, 1, 1)), 
+                        reverse=True
+                    )
+                    logger.info(f"Sorted {len(matching_files)} files by modification time")
                 except Exception as e:
-                    logger.warning(f"Failed to sort files by modification time: {e}")
+                    logger.error(f"Failed to sort files by modification time: {e}", exc_info=True)
+                    # Continue without sorting rather than failing completely
             
             logger.info(f"Found {len(matching_files)} matching conversation files in S3 (out of {diagnostics['total_files_in_prefix']} total files)")
             

@@ -29,6 +29,67 @@ function App() {
   });
   const [healthStatus, setHealthStatus] = useState(null);
 
+  // Load conversations and settings from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedConversations = localStorage.getItem('gladly_conversations');
+      if (savedConversations) {
+        const parsed = JSON.parse(savedConversations);
+        setConversations(prev => ({
+          ...prev,
+          ...parsed
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading conversations from localStorage:', error);
+    }
+
+    try {
+      const savedSettings = localStorage.getItem('gladly_settings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        setSettings(prev => ({
+          ...prev,
+          ...parsed
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading settings from localStorage:', error);
+    }
+
+    const savedMode = localStorage.getItem('gladly_current_mode');
+    if (savedMode) {
+      setCurrentMode(savedMode);
+    }
+  }, []);
+
+  // Save conversations to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('gladly_conversations', JSON.stringify(conversations));
+    } catch (error) {
+      console.error('Error saving conversations to localStorage:', error);
+    }
+  }, [conversations]);
+
+  // Save settings to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('gladly_settings', JSON.stringify(settings));
+    } catch (error) {
+      console.error('Error saving settings to localStorage:', error);
+    }
+  }, [settings]);
+
+  // Save current mode to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('gladly_current_mode', currentMode);
+    } catch (error) {
+      console.error('Error saving current mode to localStorage:', error);
+    }
+  }, [currentMode]);
+
   // Check if user is already authenticated (from sessionStorage)
   useEffect(() => {
     const authenticated = sessionStorage.getItem('authenticated');
