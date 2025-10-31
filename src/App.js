@@ -22,7 +22,7 @@ function App() {
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
-    model: 'claude-3-5-sonnet',
+    model: 'claude-3-opus-20240229',
     maxTokens: 1000,
     systemPrompt: '',
     stream: false

@@ -27,9 +27,6 @@ class ClaudeService:
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01"
         }
-        
-        # Update API version header if needed for newer models
-        # Note: Keep 2023-06-01 for compatibility, newer versions may need 2024-10-01
     
     def send_message(self, 
                     message: str, 
