@@ -347,6 +347,13 @@ function App() {
                 currentMode === 'conversations' ? 'Search conversation data...' :
                 'Ask Claude to analyze your conversation data (e.g., "What are the main customer complaints?")'
               }
+              exampleQuestions={
+                currentMode === 'ask' ? [
+                  'What are the main customer complaints or issues mentioned in the conversations?',
+                  'What are the most common topics or themes in the conversation data?',
+                  'Analyze customer sentiment and satisfaction trends in the conversations'
+                ] : []
+              }
             />
           </div>
         )}
