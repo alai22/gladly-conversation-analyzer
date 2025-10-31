@@ -106,17 +106,18 @@ class S3ConversationAggregator:
             except Exception as e:
                 logger.error(f"Failed to load {file_key}: {e}")
         
-        # Remove duplicates based on conversation ID and timestamp
-        unique_conversations = self._deduplicate_conversations(all_conversations)
+        # Remove duplicates based on item ID and timestamp
+        unique_items = self._deduplicate_conversations(all_conversations)
         
         # Upload aggregated file to S3
-        self._upload_aggregated_file(unique_conversations, target_key)
+        self._upload_aggregated_file(unique_items, target_key)
         
         stats = {
             'status': 'success',
             'files_processed': files_processed,
-            'total_conversations': len(unique_conversations),
-            'duplicates_removed': len(all_conversations) - len(unique_conversations),
+            'total_conversations': len(unique_items),  # Keep name for API compatibility, but it's actually items
+            'total_items': len(unique_items),  # Add explicit items count
+            'duplicates_removed': len(all_conversations) - len(unique_items),
             'target_key': target_key,
             'aggregated_at': datetime.now().isoformat()
         }
@@ -250,7 +251,7 @@ class S3ConversationAggregator:
             return ([], diagnostics)
     
     def _load_conversation_file(self, file_key: str) -> List[Dict[str, Any]]:
-        """Load conversations from a specific S3 file"""
+        """Load conversations from a specific S3 file and flatten items"""
         try:
             response = self.s3_client.get_object(
                 Bucket=self.bucket_name,
@@ -258,38 +259,60 @@ class S3ConversationAggregator:
             )
             
             content = response['Body'].read().decode('utf-8')
-            conversations = []
+            all_items = []
             
             for line in content.split('\n'):
                 if line.strip():
                     try:
-                        conversations.append(json.loads(line.strip()))
+                        conversation_data = json.loads(line.strip())
+                        
+                        # Extract metadata if present
+                        metadata = conversation_data.get('_metadata', {})
+                        conversation_id_from_meta = metadata.get('conversation_id', '')
+                        
+                        # Check if this is a nested structure with 'items' array
+                        if 'items' in conversation_data and isinstance(conversation_data['items'], list):
+                            # Flatten: extract each item and add metadata
+                            for item in conversation_data['items']:
+                                # Ensure item has required fields from metadata
+                                if conversation_id_from_meta and not item.get('conversationId'):
+                                    item['conversationId'] = conversation_id_from_meta
+                                # Store the flattened item
+                                all_items.append(item)
+                        else:
+                            # Already flattened format - check if it has required fields
+                            if not conversation_data.get('conversationId') and conversation_id_from_meta:
+                                conversation_data['conversationId'] = conversation_id_from_meta
+                            all_items.append(conversation_data)
+                            
                     except json.JSONDecodeError:
                         logger.warning(f"Failed to parse line in {file_key}: {line[:100]}...")
             
-            return conversations
+            logger.debug(f"Loaded {len(all_items)} items from {file_key} (flattened from nested structure)")
+            return all_items
             
         except Exception as e:
             logger.error(f"Failed to load {file_key}: {e}")
             return []
     
     def _deduplicate_conversations(self, conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove duplicate conversations based on ID and timestamp"""
+        """Remove duplicate conversation items based on item ID"""
         seen = set()
-        unique_conversations = []
+        unique_items = []
         
-        for conv in conversations:
-            # Create a unique key based on conversation ID and timestamp
-            conv_id = conv.get('_metadata', {}).get('conversation_id', '')
-            timestamp = conv.get('_metadata', {}).get('downloaded_at', '')
-            unique_key = f"{conv_id}_{timestamp}"
+        for item in conversations:
+            # Create a unique key based on item ID (not conversation ID, since multiple items can be in same conversation)
+            item_id = item.get('id', '')
+            # Also use timestamp if available for better deduplication
+            timestamp = item.get('timestamp', '')
+            unique_key = f"{item_id}_{timestamp}"
             
-            if unique_key not in seen:
+            if unique_key and unique_key not in seen:
                 seen.add(unique_key)
-                unique_conversations.append(conv)
+                unique_items.append(item)
         
-        logger.info(f"Deduplication: {len(conversations)} -> {len(unique_conversations)} conversations")
-        return unique_conversations
+        logger.info(f"Deduplication: {len(conversations)} -> {len(unique_items)} items")
+        return unique_items
     
     def _upload_aggregated_file(self, conversations: List[Dict[str, Any]], target_key: str):
         """Upload aggregated conversations to S3"""
@@ -305,7 +328,7 @@ class S3ConversationAggregator:
                 ContentType='application/json'
             )
             
-            logger.info(f"Uploaded {len(conversations)} conversations to s3://{self.bucket_name}/{target_key}")
+            logger.info(f"Uploaded {len(conversations)} conversation items to s3://{self.bucket_name}/{target_key}")
             
         except Exception as e:
             logger.error(f"Failed to upload aggregated file: {e}")
