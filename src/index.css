@@ -91,6 +91,20 @@ code {
   color: #dc2626;
 }
 
+/* Clickable conversation IDs */
+.markdown-content code[data-conversation-id] {
+  color: #2563eb !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  text-decoration: underline !important;
+  background-color: #eff6ff !important;
+}
+
+.markdown-content code[data-conversation-id]:hover {
+  color: #1d4ed8 !important;
+  background-color: #dbeafe !important;
+}
+
 .markdown-content pre {
   background-color: #1f2937;
   color: #f9fafb;

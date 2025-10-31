@@ -44,23 +44,55 @@ function ConversationDisplay({ conversations, isLoading, error }) {
   const isConversationId = (text) => {
     const cleanText = String(text).trim();
     // Conversation IDs are typically alphanumeric strings of reasonable length
-    // Gladly conversation IDs are usually 20+ characters
-    return /^[a-zA-Z0-9_-]{15,}$/.test(cleanText);
+    // Gladly conversation IDs are usually 20+ characters (but can be as short as 15)
+    // Allow alphanumeric, underscores, hyphens, and spaces (some IDs have spaces)
+    // Match strings that are 15+ characters and look like conversation IDs
+    const idPattern = /^[a-zA-Z0-9_\-\s]{15,}$/;
+    if (!idPattern.test(cleanText)) return false;
+    
+    // Additional check: should have mostly alphanumeric with few separators
+    const alphaNumericCount = (cleanText.match(/[a-zA-Z0-9]/g) || []).length;
+    return alphaNumericCount >= 12; // At least 12 alphanumeric chars
   };
 
   const handleConversationIdClick = async (conversationId) => {
-    setSelectedConversationId(conversationId);
+    // Trim the conversation ID
+    const cleanId = String(conversationId).trim();
+    
+    setSelectedConversationId(cleanId);
     setLoadingConversation(true);
     setConversationDetails(null);
 
     try {
-      const response = await axios.get(`/api/conversations/${conversationId}`);
+      // Try with the ID as-is first (some IDs might have spaces)
+      let response = await axios.get(`/api/conversations/${encodeURIComponent(cleanId)}`);
+      
+      // If that fails with 404, try without spaces (in case space is just formatting)
+      if (!response.data.success && cleanId.includes(' ')) {
+        const idWithoutSpaces = cleanId.replace(/\s+/g, '');
+        response = await axios.get(`/api/conversations/${encodeURIComponent(idWithoutSpaces)}`);
+      }
+      
       if (response.data.success) {
         setConversationDetails(response.data);
       } else {
         setConversationDetails({ error: response.data.error || 'Conversation not found' });
       }
     } catch (error) {
+      // If error and ID has spaces, try without spaces
+      if (cleanId.includes(' ') && error.response?.status === 404) {
+        try {
+          const idWithoutSpaces = cleanId.replace(/\s+/g, '');
+          const response = await axios.get(`/api/conversations/${encodeURIComponent(idWithoutSpaces)}`);
+          if (response.data.success) {
+            setConversationDetails(response.data);
+            return;
+          }
+        } catch (retryError) {
+          // Fall through to original error
+        }
+      }
+      
       setConversationDetails({
         error: error.response?.data?.error || error.message || 'Failed to load conversation'
       });
@@ -214,9 +246,40 @@ function ConversationDisplay({ conversations, isLoading, error }) {
                         if (inline && isConversationId(codeText)) {
                           return (
                             <code 
-                              className={`${className} cursor-pointer text-blue-600 hover:text-blue-800 hover:underline font-semibold`}
-                              onClick={() => handleConversationIdClick(codeText)}
+                              className={className}
+                              data-conversation-id={codeText}
+                              style={{
+                                color: '#2563eb',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                textDecoration: 'underline',
+                                backgroundColor: '#eff6ff',
+                                padding: '2px 4px',
+                                borderRadius: '4px',
+                                display: 'inline-block',
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleConversationIdClick(codeText);
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#1d4ed8';
+                                e.currentTarget.style.backgroundColor = '#dbeafe';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#2563eb';
+                                e.currentTarget.style.backgroundColor = '#eff6ff';
+                              }}
                               title="Click to view conversation"
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  handleConversationIdClick(codeText);
+                                }
+                              }}
                               {...props}
                             >
                               {children}
