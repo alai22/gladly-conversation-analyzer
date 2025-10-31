@@ -16,7 +16,8 @@ def claude_chat():
     """Send message to Claude API"""
     try:
         # Get service from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({

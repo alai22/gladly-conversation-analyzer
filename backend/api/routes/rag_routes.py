@@ -16,7 +16,8 @@ def conversations_ask():
     """Ask Claude about conversation data with detailed RAG process information"""
     try:
         # Get services from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({'error': 'Service container not initialized'}), 500

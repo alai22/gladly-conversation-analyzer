@@ -17,7 +17,8 @@ def conversations_summary():
     """Get conversation data summary"""
     try:
         # Get service from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({'error': 'Service container not initialized'}), 500
@@ -40,7 +41,8 @@ def conversations_search():
     """Search conversations"""
     try:
         # Get service from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({'error': 'Service container not initialized'}), 500
@@ -81,7 +83,8 @@ def get_conversation(conversation_id):
     """Get all items for a specific conversation ID"""
     try:
         # Get service from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({'error': 'Service container not initialized'}), 500

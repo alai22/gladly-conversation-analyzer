@@ -56,7 +56,12 @@ def create_app():
     @app.before_request
     def before_request():
         """Initialize service container for each request"""
-        g.service_container = get_service_container()
+        try:
+            g.service_container = get_service_container()
+        except Exception as e:
+            app_logger.error(f"Failed to initialize service container in before_request: {str(e)}", exc_info=True)
+            # Set to None so routes can handle gracefully
+            g.service_container = None
     
     # Enable CORS
     CORS(app)

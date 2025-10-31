@@ -16,16 +16,28 @@ def health_check():
     """Health check endpoint"""
     try:
         # Get services from container (injected via Flask's g)
-        service_container = g.get('service_container')
+        # Use getattr with default None to avoid AttributeError
+        service_container = getattr(g, 'service_container', None)
         if not service_container:
             logger.error("Service container not available in request context")
             return jsonify({
                 'status': 'unhealthy',
-                'error': 'Service container not initialized'
+                'error': 'Service container not initialized',
+                'claude_initialized': False,
+                'conversation_analyzer_initialized': False
             }), 500
         
-        claude_service = service_container.get_claude_service()
-        conversation_service = service_container.get_conversation_service()
+        try:
+            claude_service = service_container.get_claude_service()
+            conversation_service = service_container.get_conversation_service()
+        except Exception as e:
+            logger.error(f"Failed to get services from container: {str(e)}", exc_info=True)
+            return jsonify({
+                'status': 'unhealthy',
+                'error': f'Failed to get services: {str(e)}',
+                'claude_initialized': False,
+                'conversation_analyzer_initialized': False
+            }), 500
         
         claude_available = False
         if claude_service is not None:
@@ -37,7 +49,11 @@ def health_check():
         else:
             logger.warning("ClaudeService not initialized - check ANTHROPIC_API_KEY")
         
-        conversation_available = conversation_service.is_available()
+        try:
+            conversation_available = conversation_service.is_available()
+        except Exception as e:
+            logger.error(f"Conversation service availability check failed: {str(e)}")
+            conversation_available = False
         
         status = 'healthy' if claude_available and conversation_available else 'unhealthy'
         
@@ -49,10 +65,12 @@ def health_check():
         })
     
     except Exception as e:
-        logger.error(f"Health check error: {str(e)}")
+        logger.error(f"Health check error: {str(e)}", exc_info=True)
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             'status': 'unhealthy',
-            'error': str(e)
+            'error': str(e),
+            'claude_initialized': False,
+            'conversation_analyzer_initialized': False
         }), 500
