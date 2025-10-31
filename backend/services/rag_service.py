@@ -139,6 +139,14 @@ Respond with valid JSON only."""
             'filtered_out': 0
         }
         
+        # Check if conversations are loaded
+        if not self.conversation_service.is_available():
+            logger.warning("No conversations loaded in conversation service - retrieval will return empty")
+            rag_process.retrieval_stats = retrieval_stats
+            rag_process.update_step(2, 'completed', retrieval_stats, 
+                                   "Warning: No conversation data is currently loaded. Please ensure conversations have been downloaded and aggregated.")
+            return []
+        
         # Search using the planned terms with semantic search
         for term in plan['search_terms']:
             results = self.conversation_service.semantic_search_conversations(
@@ -147,6 +155,8 @@ Respond with valid JSON only."""
             relevant_data.extend(results)
             retrieval_stats['by_search_term'][term] = len(results)
             retrieval_stats['total_searched'] += len(results)
+            
+        logger.info(f"Retrieved {len(relevant_data)} items using search terms: {plan['search_terms']}")
         
         # Filter by content types if specified
         if plan['content_types'] != ["all"]:
@@ -160,11 +170,20 @@ Respond with valid JSON only."""
                 content_type = item.get('content', {}).get('type', 'Unknown')
                 retrieval_stats['by_content_type'][content_type] = retrieval_stats['by_content_type'].get(content_type, 0) + 1
         
-        # Apply time filters if specified
+        # Apply time filters if specified (intersect with existing results, don't replace)
         if plan['time_filters'] == "last_24_hours":
-            relevant_data = self.conversation_service.get_recent_conversations(24)
+            recent_ids = {item.get('id') for item in self.conversation_service.get_recent_conversations(24)}
+            if recent_ids:
+                relevant_data = [item for item in relevant_data if item.get('id') in recent_ids]
+            else:
+                # If no recent conversations, keep what we have but note it in stats
+                logger.warning("Time filter 'last_24_hours' found no recent conversations, keeping all search results")
         elif plan['time_filters'] == "last_7_days":
-            relevant_data = self.conversation_service.get_recent_conversations(24 * 7)
+            recent_ids = {item.get('id') for item in self.conversation_service.get_recent_conversations(24 * 7)}
+            if recent_ids:
+                relevant_data = [item for item in relevant_data if item.get('id') in recent_ids]
+            else:
+                logger.warning("Time filter 'last_7_days' found no recent conversations, keeping all search results")
         
         # Remove duplicates and limit
         seen_ids = set()

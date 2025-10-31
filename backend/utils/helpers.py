@@ -28,7 +28,10 @@ def truncate_text(text: str, max_length: int = 500) -> str:
 
 def format_conversation_for_claude(conversations: list, max_items: int = 50) -> str:
     """Format conversation data for Claude analysis"""
-    conversation_text = "Retrieved Conversation Data:\n\n"
+    if not conversations:
+        return "No conversation data was retrieved from the search. This could mean:\n- The search terms did not match any conversations\n- The conversations have not been loaded yet\n- The content type filters excluded all results\n\nPlease inform the user that no data was found and suggest they try different search terms or check if conversation data has been loaded."
+    
+    conversation_text = f"Retrieved Conversation Data ({len(conversations)} items found):\n\n"
     items_to_process = conversations[:max_items]
     
     for item in items_to_process:
