@@ -55,8 +55,15 @@ class GladlyDownloadService:
         url = f"{self.base_url}/api/v1/conversations/{conversation_id}/items"
         
         try:
-            logger.debug(f"Downloading conversation items for ID: {conversation_id}")
+            logger.info(f"[API CALL] Starting download for conversation ID: {conversation_id}")
+            print(f"[GLADLY API] GET {url} - Starting request for conversation {conversation_id}")
+            
+            start_time = time.time()
             response = self.session.get(url, timeout=30)
+            elapsed = time.time() - start_time
+            
+            logger.info(f"[API CALL] Response for {conversation_id}: HTTP {response.status_code} (took {elapsed:.2f}s)")
+            print(f"[GLADLY API] Response: HTTP {response.status_code} for conversation {conversation_id} (took {elapsed:.2f}s)")
             
             if response.status_code == 200:
                 if not response.text.strip():
@@ -199,7 +206,14 @@ class GladlyDownloadService:
                     logger.info(f"Time limit reached ({max_duration_minutes} minutes). Stopping download.")
                     break
                 
-                logger.info(f"Processing conversation {i}/{len(remaining_ids)}: {conversation_id}")
+                # Update progress to show we're starting this conversation (even before API call completes)
+                # This helps show progress immediately instead of waiting for first API call to complete
+                if progress_callback and i == 1:
+                    # For the first conversation, update immediately to show we've started
+                    progress_callback(0, len(remaining_ids), downloaded_count, failed_count)
+                
+                logger.info(f"[PROGRESS] Processing conversation {i}/{len(remaining_ids)}: {conversation_id}")
+                print(f"[PROGRESS] Starting conversation {i}/{len(remaining_ids)}: {conversation_id}")
                 
                 # Get conversation metadata from CSV
                 conversation_metadata = self.get_conversation_metadata_from_csv(csv_file, conversation_id)

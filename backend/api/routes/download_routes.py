@@ -262,6 +262,10 @@ def _update_progress(current: int, total: int, downloaded: int, failed: int):
     # Calculate progress percentage
     if total > 0:
         download_state['progress_percentage'] = (current / total) * 100
+    
+    # Log progress to console for debugging
+    logger.info(f"[PROGRESS UPDATE] {current}/{total} ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
+    print(f"[PROGRESS] {current}/{total} conversations processed ({download_state['progress_percentage']:.1f}%) - Downloaded: {downloaded}, Failed: {failed}")
 
 def _run_download(batch_size: int, max_duration_minutes: int, start_date: str = None, end_date: str = None):
     """Run the download in background thread"""
