@@ -13,6 +13,7 @@ const DownloadManager = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [csvDateRange, setCsvDateRange] = useState(null);
+  const [csvDateBreakdown, setCsvDateBreakdown] = useState(null);
 
   // Fetch download status
   const fetchDownloadStatus = async () => {
@@ -85,6 +86,19 @@ const DownloadManager = () => {
       }
     } catch (error) {
       console.error('Error fetching CSV date range:', error);
+    }
+  };
+
+  // Fetch CSV date breakdown
+  const fetchCsvDateBreakdown = async () => {
+    try {
+      const response = await fetch('/api/download/csv-date-breakdown');
+      const data = await response.json();
+      if (data.status === 'success') {
+        setCsvDateBreakdown(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching CSV date breakdown:', error);
     }
   };
 
@@ -250,7 +264,15 @@ const DownloadManager = () => {
     fetchDownloadHistory();
     fetchAggregationStatus();
     fetchCsvDateRange();
+    fetchCsvDateBreakdown();
   }, []);
+
+  // Refresh breakdown when stats change
+  useEffect(() => {
+    if (downloadStats) {
+      fetchCsvDateBreakdown();
+    }
+  }, [downloadStats?.total_downloaded]);
 
   const formatTime = (seconds) => {
     if (!seconds) return '0s';
@@ -372,7 +394,103 @@ const DownloadManager = () => {
             </div>
           </div>
 
-          {/* CSV Date Range Info */}
+          {/* CSV Date Breakdown */}
+          {csvDateBreakdown && csvDateBreakdown.breakdown && (
+            <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Conversations by Date
+              </h3>
+              <div className="mb-4 text-sm text-gray-600">
+                <p>
+                  Showing <strong>{csvDateBreakdown.breakdown.length}</strong> dates with{' '}
+                  <strong>{csvDateBreakdown.total_conversations?.toLocaleString()}</strong> total conversations.
+                  Downloaded: <strong className="text-green-600">{csvDateBreakdown.total_downloaded?.toLocaleString()}</strong>,{' '}
+                  Remaining: <strong className="text-yellow-600">{csvDateBreakdown.total_remaining?.toLocaleString()}</strong>
+                </p>
+              </div>
+              <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total in CSV
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Downloaded
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Remaining
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Progress
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {csvDateBreakdown.breakdown.map((dateStat) => {
+                      const isComplete = dateStat.completion_percentage === 100;
+                      const isPartial = dateStat.downloaded > 0 && dateStat.completion_percentage < 100;
+                      
+                      return (
+                        <tr 
+                          key={dateStat.date}
+                          className={isComplete ? 'bg-green-50' : isPartial ? 'bg-yellow-50' : ''}
+                        >
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {new Date(dateStat.date).toLocaleDateString('en-US', { 
+                              weekday: 'short',
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-right">
+                            {dateStat.total_in_csv.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                            <span className={`font-semibold ${
+                              dateStat.downloaded > 0 ? 'text-green-600' : 'text-gray-500'
+                            }`}>
+                              {dateStat.downloaded.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                            <span className={`font-semibold ${
+                              dateStat.remaining > 0 ? 'text-yellow-600' : 'text-gray-500'
+                            }`}>
+                              {dateStat.remaining.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                            <div className="flex items-center justify-end">
+                              <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all ${
+                                    isComplete ? 'bg-green-600' : isPartial ? 'bg-yellow-600' : 'bg-gray-400'
+                                  }`}
+                                  style={{ width: `${Math.min(dateStat.completion_percentage, 100)}%` }}
+                                ></div>
+                              </div>
+                              <span className={`text-xs font-medium ${
+                                isComplete ? 'text-green-600' : isPartial ? 'text-yellow-600' : 'text-gray-500'
+                              }`}>
+                                {dateStat.completion_percentage.toFixed(0)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* CSV Date Range Info (Summary) */}
           {csvDateRange && csvDateRange.earliest_date && csvDateRange.latest_date && (
             <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-blue-900 mb-2">Available Date Range in CSV</h3>

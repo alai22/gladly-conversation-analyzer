@@ -421,3 +421,81 @@ def get_csv_date_range():
     except Exception as e:
         logger.error(f"Error getting CSV date range: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@download_bp.route('/csv-date-breakdown', methods=['GET'])
+def get_csv_date_breakdown():
+    """Get breakdown of conversations by date from CSV with download status"""
+    try:
+        csv_file = "data/conversation_metrics.csv"
+        
+        if not os.path.exists(csv_file):
+            return jsonify({
+                'status': 'error',
+                'message': 'CSV file not found'
+            }), 404
+        
+        import csv
+        from collections import defaultdict
+        
+        # Initialize conversation tracker to get downloaded conversations
+        tracker = ConversationTracker()
+        
+        # Get all downloaded conversation IDs by date
+        downloaded_by_date = defaultdict(set)
+        for conv_id, conv_data in tracker.conversations.items():
+            conv_date = conv_data.get('conversation_date', '').strip()
+            if conv_date:
+                downloaded_by_date[conv_date].add(conv_id)
+        
+        # Read CSV and group by date
+        date_stats = defaultdict(lambda: {'conversation_ids': set(), 'total': 0})
+        
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                conversation_id = row.get('Conversation ID', '').strip()
+                timestamp_str = row.get('Timestamp Created At Date', '').strip()
+                
+                if conversation_id and timestamp_str:
+                    try:
+                        # Parse the date (format: YYYY-MM-DD)
+                        date_obj = datetime.strptime(timestamp_str, '%Y-%m-%d').date()
+                        date_str = date_obj.isoformat()
+                        
+                        date_stats[date_str]['conversation_ids'].add(conversation_id)
+                        date_stats[date_str]['total'] += 1
+                    except ValueError:
+                        continue
+        
+        # Build response with download status
+        breakdown = []
+        for date_str in sorted(date_stats.keys(), reverse=True):
+            stats = date_stats[date_str]
+            total_in_csv = len(stats['conversation_ids'])
+            downloaded_ids = downloaded_by_date.get(date_str, set())
+            downloaded = len(stats['conversation_ids'].intersection(downloaded_ids))
+            remaining = total_in_csv - downloaded
+            completion_pct = (downloaded / total_in_csv * 100) if total_in_csv > 0 else 0
+            
+            breakdown.append({
+                'date': date_str,
+                'total_in_csv': total_in_csv,
+                'downloaded': downloaded,
+                'remaining': remaining,
+                'completion_percentage': round(completion_pct, 1)
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'breakdown': breakdown,
+                'total_dates': len(breakdown),
+                'total_conversations': sum(d['total_in_csv'] for d in breakdown),
+                'total_downloaded': sum(d['downloaded'] for d in breakdown),
+                'total_remaining': sum(d['remaining'] for d in breakdown)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting CSV date breakdown: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
