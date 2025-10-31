@@ -108,7 +108,7 @@ case $ENVIRONMENT in
             -p 80:5000 \
             --restart unless-stopped \
             -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
-            -e CLAUDE_MODEL="${CLAUDE_MODEL:-claude-3-5-sonnet-20240620}" \
+            -e CLAUDE_MODEL="${CLAUDE_MODEL:-claude-3-5-sonnet}" \
             -e GLADLY_API_KEY="${GLADLY_API_KEY}" \
             -e GLADLY_AGENT_EMAIL="${GLADLY_AGENT_EMAIL}" \
             -e S3_BUCKET_NAME="${S3_BUCKET_NAME}" \

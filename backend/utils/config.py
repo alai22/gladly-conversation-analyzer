@@ -15,7 +15,7 @@ class Config:
     
     # API Configuration
     ANTHROPIC_API_KEY: Optional[str] = os.getenv('ANTHROPIC_API_KEY')
-    CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-20240620')
+    CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet')
     
     # Gladly API Configuration
     GLADLY_API_KEY: Optional[str] = os.getenv('GLADLY_API_KEY')
