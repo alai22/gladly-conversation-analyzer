@@ -27,6 +27,10 @@ print_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+print_info() {
+    echo -e "${GREEN}ℹ${NC} $1"
+}
+
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
     print_error "Docker is not running. Please start Docker and try again."
@@ -34,6 +38,12 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 print_status "Docker is running"
+
+# Load .env file early if it exists (for production deployments)
+if [ "$ENVIRONMENT" = "production" ] && [ -f ".env" ]; then
+    print_status "Loading environment variables from .env file..."
+    export $(grep -v '^#' .env | xargs)
+fi
 
 # Build the Docker image
 print_status "Building Docker image..."
@@ -83,14 +93,6 @@ case $ENVIRONMENT in
     
     "production")
         print_status "Deploying for production..."
-        
-        # Check if .env file exists and load it
-        if [ -f ".env" ]; then
-            print_status "Loading environment variables from .env file..."
-            export $(grep -v '^#' .env | xargs)
-        else
-            print_warning ".env file not found. Using environment variables from system."
-        fi
         
         print_warning "Make sure all required environment variables are set!"
         print_status "Starting container as daemon..."
