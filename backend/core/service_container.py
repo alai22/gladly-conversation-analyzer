@@ -84,10 +84,21 @@ class ServiceContainer:
         
         if self._claude_service is None:
             try:
+                # Check API key status before attempting initialization
+                from ..utils.config import Config
+                api_key_status = Config.get_api_key_status()
+                logger.debug(f"Attempting ClaudeService initialization - API key status: {api_key_status}")
+                
                 logger.debug("Creating ClaudeService instance")
                 self._claude_service = ClaudeService()
+                logger.info("ClaudeService initialized successfully")
+            except ValueError as e:
+                # ValueError means API key is missing - this is expected in some environments
+                logger.warning(f"ClaudeService not initialized - API key not configured: {str(e)}")
+                self._claude_service = None
             except Exception as e:
-                logger.error(f"Failed to initialize ClaudeService: {str(e)}")
+                # Other exceptions are unexpected
+                logger.error(f"Failed to initialize ClaudeService: {str(e)}", exc_info=True)
                 self._claude_service = None
         
         return self._claude_service

@@ -43,16 +43,9 @@ def conversations_ask():
                 'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
             }), 503
         
-        # Check if Claude service is available before processing
-        try:
-            if not claude_service.is_available():
-                error_msg = "Claude API is not available. Please check ANTHROPIC_API_KEY configuration."
-                logger.error(error_msg)
-                return jsonify({'error': error_msg, 'details': 'Claude API health check failed. Verify API key is set correctly and has proper permissions.'}), 503
-        except Exception as e:
-            error_msg = f"Claude API availability check failed: {str(e)}"
-            logger.error(error_msg)
-            return jsonify({'error': error_msg, 'details': 'Unable to verify Claude API connection. Check API key and network connectivity.'}), 503
+        # Skip aggressive availability check - let the actual API call handle errors
+        # The is_available() check makes an HTTP request which can fail due to network issues
+        # and is not a reliable indicator. We'll let the actual API call fail gracefully if needed.
         
         result = rag_service.process_query(question, model, max_tokens)
         

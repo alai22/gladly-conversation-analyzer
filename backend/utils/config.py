@@ -19,6 +19,18 @@ class Config:
     CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-sonnet-4')
     CLAUDE_API_TIMEOUT: int = int(os.getenv('CLAUDE_API_TIMEOUT', '120'))  # Default 120 seconds for complex queries
     
+    @classmethod
+    def get_api_key_status(cls) -> dict:
+        """Get status of API key for debugging"""
+        key_present = cls.ANTHROPIC_API_KEY is not None
+        key_length = len(cls.ANTHROPIC_API_KEY) if cls.ANTHROPIC_API_KEY else 0
+        key_prefix = cls.ANTHROPIC_API_KEY[:12] + "..." if key_present and key_length > 12 else "N/A"
+        return {
+            'present': key_present,
+            'length': key_length,
+            'prefix': key_prefix
+        }
+    
     # Model aliases and fallbacks
     # Maps requested models to available working models
     # Non-dated aliases route to latest version, dated ones are specific snapshots
