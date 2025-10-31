@@ -68,6 +68,17 @@ def conversations_ask():
         
         return jsonify(result)
     
+    except TimeoutError as e:
+        # Handle timeout errors specifically
+        error_msg = str(e) if str(e) else "Request to Claude API timed out. The query may be too complex."
+        logger.error(f"RAG query timeout: {error_msg}")
+        return jsonify({
+            'error': 'Request timeout',
+            'details': error_msg,
+            'type': 'TimeoutError',
+            'suggestion': 'Try simplifying your query or increasing CLAUDE_API_TIMEOUT if needed.'
+        }), 504  # 504 Gateway Timeout
+    
     except ValueError as e:
         # Handle configuration errors (e.g., missing API key)
         error_msg = f"Configuration error: {str(e)}"

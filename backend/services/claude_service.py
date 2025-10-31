@@ -53,12 +53,13 @@ class ClaudeService:
             payload["system"] = system_prompt
         
         try:
-            logger.info(f"Sending message to Claude: model={model}, max_tokens={max_tokens}")
+            timeout = Config.CLAUDE_API_TIMEOUT
+            logger.info(f"Sending message to Claude: model={model}, max_tokens={max_tokens}, timeout={timeout}s")
             response = requests.post(
                 f"{self.base_url}/messages",
                 headers=self.headers,
                 json=payload,
-                timeout=30
+                timeout=timeout
             )
             response.raise_for_status()
             
@@ -66,6 +67,10 @@ class ClaudeService:
             logger.info(f"Claude response received: tokens_used={response_data.get('usage', {}).get('output_tokens', 0)}")
             
             return ClaudeResponse.from_api_response(response_data, model)
+        
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Claude API request timed out after {Config.CLAUDE_API_TIMEOUT} seconds. The request may be too complex or the API is slow.")
+            raise TimeoutError(f"Request to Claude API timed out after {Config.CLAUDE_API_TIMEOUT} seconds. The query may be too complex or there may be network issues. Please try again or simplify your query.") from e
         
         except requests.exceptions.RequestException as e:
             # If model not found error and we haven't tried fallback yet
@@ -81,7 +86,7 @@ class ClaudeService:
                         f"{self.base_url}/messages",
                         headers=self.headers,
                         json=payload,
-                        timeout=30
+                        timeout=Config.CLAUDE_API_TIMEOUT
                     )
                     response.raise_for_status()
                     response_data = response.json()
@@ -119,13 +124,14 @@ class ClaudeService:
             payload["system"] = system_prompt
         
         try:
-            logger.info(f"Streaming message to Claude: model={model}, max_tokens={max_tokens}")
+            timeout = Config.CLAUDE_API_TIMEOUT
+            logger.info(f"Streaming message to Claude: model={model}, max_tokens={max_tokens}, timeout={timeout}s")
             response = requests.post(
                 f"{self.base_url}/messages",
                 headers=self.headers,
                 json=payload,
                 stream=True,
-                timeout=30
+                timeout=timeout
             )
             response.raise_for_status()
             
@@ -141,6 +147,10 @@ class ClaudeService:
                             yield chunk
                         except json.JSONDecodeError:
                             continue
+        
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Claude API streaming request timed out after {Config.CLAUDE_API_TIMEOUT} seconds.")
+            raise TimeoutError(f"Streaming request to Claude API timed out after {Config.CLAUDE_API_TIMEOUT} seconds. The query may be too complex or there may be network issues.") from e
         
         except requests.exceptions.RequestException as e:
             logger.error(f"Claude streaming request failed: {str(e)}")
@@ -164,6 +174,9 @@ class ClaudeService:
                 models_to_try.append(verified_model)
                 break  # Only need one fallback
         
+        # Use shorter timeout for health check
+        health_check_timeout = min(30, Config.CLAUDE_API_TIMEOUT // 4)
+        
         for test_model in models_to_try:
             try:
                 response = requests.post(
@@ -174,7 +187,7 @@ class ClaudeService:
                         "max_tokens": 10,
                         "messages": [{"role": "user", "content": "test"}]
                     },
-                    timeout=10
+                    timeout=health_check_timeout
                 )
                 if response.status_code == 200:
                     if test_model != model:
