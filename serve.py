@@ -3,10 +3,10 @@
 import werkzeug.serving
 werkzeug.serving.WSGIRequestHandler.max_header_size = 32768  # 32KB (default is 8KB)
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, g
 from flask_cors import CORS
 import os
-from app import app as api_app
+from app import app as api_app, get_service_container
 
 # Initialize services (they initialize themselves when imported)
 print("Initializing services...")
@@ -22,6 +22,17 @@ app = Flask(__name__, static_folder="build")
 
 # Enable CORS for all origins in production
 CORS(app)
+
+# Set up service container for each request (critical for dependency injection)
+@app.before_request
+def before_request():
+    """Initialize service container for each request"""
+    try:
+        g.service_container = get_service_container()
+    except Exception as e:
+        # Log error but don't crash - routes will handle None gracefully
+        print(f"Warning: Failed to initialize service container: {str(e)}")
+        g.service_container = None
 
 # Copy only the API routes from api_app, excluding built-in Flask routes and root route
 for rule in api_app.url_map.iter_rules():
