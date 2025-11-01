@@ -73,25 +73,36 @@ class ClaudeService:
             raise TimeoutError(f"Request to Claude API timed out after {Config.CLAUDE_API_TIMEOUT} seconds. The query may be too complex or there may be network issues. Please try again or simplify your query.") from e
         
         except requests.exceptions.RequestException as e:
-            # If model not found error and we haven't tried fallback yet
+            # If model not found error, try fallback models
             if hasattr(e, 'response') and e.response is not None:
                 error_data = e.response.json() if e.response.headers.get('content-type', '').startswith('application/json') else {}
                 error_type = error_data.get('error', {}).get('type', '')
                 
-                if error_type == 'not_found_error' and model != Config.FALLBACK_MODEL and requested_model != Config.FALLBACK_MODEL:
-                    logger.warning(f"Model '{model}' not found, falling back to '{Config.FALLBACK_MODEL}'")
-                    # Retry with fallback model
-                    payload['model'] = Config.FALLBACK_MODEL
-                    response = requests.post(
-                        f"{self.base_url}/messages",
-                        headers=self.headers,
-                        json=payload,
-                        timeout=Config.CLAUDE_API_TIMEOUT
-                    )
-                    response.raise_for_status()
-                    response_data = response.json()
-                    logger.info(f"Claude response received with fallback model: tokens_used={response_data.get('usage', {}).get('output_tokens', 0)}")
-                    return ClaudeResponse.from_api_response(response_data, Config.FALLBACK_MODEL)
+                if error_type == 'not_found_error':
+                    # Try fallback models from VERIFIED_MODELS (skip the one we just tried)
+                    models_to_try = [m for m in Config.VERIFIED_MODELS if m != model]
+                    
+                    for fallback_model in models_to_try:
+                        try:
+                            logger.warning(f"Model '{model}' not found, trying fallback '{fallback_model}'")
+                            payload['model'] = fallback_model
+                            response = requests.post(
+                                f"{self.base_url}/messages",
+                                headers=self.headers,
+                                json=payload,
+                                timeout=Config.CLAUDE_API_TIMEOUT
+                            )
+                            response.raise_for_status()
+                            response_data = response.json()
+                            logger.info(f"Claude response received with fallback model '{fallback_model}': tokens_used={response_data.get('usage', {}).get('output_tokens', 0)}")
+                            return ClaudeResponse.from_api_response(response_data, fallback_model)
+                        except requests.exceptions.RequestException as fallback_error:
+                            # Try next fallback model
+                            logger.warning(f"Fallback model '{fallback_model}' also failed: {str(fallback_error)}")
+                            continue
+                    
+                    # If all fallbacks failed, raise the original error
+                    logger.error(f"All model fallbacks failed. Original model: '{model}', tried: {models_to_try}")
             
             logger.error(f"Claude API request failed: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:

@@ -40,27 +40,27 @@ class Config:
         'claude-opus-4': 'claude-opus-4',
         'sonnet-4': 'claude-sonnet-4',
         'opus-4': 'claude-opus-4',
-        # Legacy Claude 3.5 models fallback to Sonnet 3
-        'claude-3-5-sonnet': 'claude-3-sonnet-20240229',
-        'claude-3-5-sonnet-20241022': 'claude-3-sonnet-20240229',
-        'claude-3-5-sonnet-20240620': 'claude-3-sonnet-20240229',
+        # Legacy Claude 3.5 models fallback to Sonnet 4
+        'claude-3-5-sonnet': 'claude-sonnet-4',
+        'claude-3-5-sonnet-20241022': 'claude-sonnet-4',
+        'claude-3-5-sonnet-20240620': 'claude-sonnet-4',
         'claude-3-5-haiku-20241022': 'claude-3-haiku-20240307',
-        # Legacy Opus 3 fallback to Sonnet 3
-        'claude-3-opus-20240229': 'claude-3-sonnet-20240229',
+        # Legacy Claude 3 models fallback to Sonnet 4 (claude-3-sonnet-20240229 is deprecated)
+        'claude-3-opus-20240229': 'claude-sonnet-4',
+        'claude-3-sonnet-20240229': 'claude-sonnet-4',
     }
     
     # List of verified working models (tested with current API key)
     # Ordered by preference for fallback
     VERIFIED_MODELS = [
         'claude-sonnet-4',  # Primary - non-dated, routes to latest
-        'claude-3-sonnet-20240229',  # Fallback if Sonnet 4 unavailable
+        'claude-opus-4',  # Alternative Claude 4 model
         'claude-3-haiku-20240307',  # Cost-effective fallback
-        'claude-3-opus-20240229'  # Last resort (deprecated)
     ]
     
     # Fallback model if configured model doesn't work
-    # Using Sonnet 3 as fallback (better for RAG than Opus 3)
-    FALLBACK_MODEL = 'claude-3-sonnet-20240229'
+    # Using Sonnet 4 as fallback (non-dated alias, most reliable)
+    FALLBACK_MODEL = 'claude-sonnet-4'
     
     @classmethod
     def resolve_model(cls, requested_model: Optional[str] = None) -> str:
