@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Database, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 
-const Sidebar = ({ healthStatus, onRefreshHealth }) => {
+const Sidebar = ({ healthStatus, onRefreshHealth, currentMode }) => {
   const [downloadStats, setDownloadStats] = useState(null);
+  const [surveyStats, setSurveyStats] = useState(null);
 
   // Fetch download stats
   useEffect(() => {
@@ -23,6 +24,28 @@ const Sidebar = ({ healthStatus, onRefreshHealth }) => {
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch survey stats when in survicate mode (no auto-refresh since file is static)
+  useEffect(() => {
+    const fetchSurveyStats = async () => {
+      if (currentMode === 'survicate') {
+        try {
+          const response = await fetch('/api/survicate/summary');
+          const data = await response.json();
+          if (data.success) {
+            setSurveyStats(data.summary);
+          }
+        } catch (error) {
+          console.error('Error fetching survey stats:', error);
+          setSurveyStats(null);
+        }
+      } else {
+        setSurveyStats(null);
+      }
+    };
+
+    fetchSurveyStats();
+  }, [currentMode]);
 
   const getHealthStatusIcon = () => {
     if (!healthStatus) return <RefreshCw className="h-4 w-4 animate-spin" />;
@@ -73,7 +96,7 @@ const Sidebar = ({ healthStatus, onRefreshHealth }) => {
       </div>
 
       {/* Conversation Stats */}
-      {downloadStats && (
+      {downloadStats && currentMode !== 'survicate' && (
         <div className="p-6 border-t border-gray-200">
           <div className="text-xs text-gray-500">
             <div className="mb-2">
@@ -106,6 +129,38 @@ const Sidebar = ({ healthStatus, onRefreshHealth }) => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Survey Stats */}
+      {surveyStats && currentMode === 'survicate' && (
+        <div className="p-6 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            <div className="mb-2">
+              <strong>Survey Responses:</strong>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Available in RAG</span>
+                <span className="font-semibold text-blue-600">{surveyStats.total_responses?.toLocaleString() || 0}</span>
+              </div>
+              {surveyStats.date_range && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Date Range</span>
+                  <span className="font-semibold text-gray-700 text-xs">
+                    {surveyStats.date_range.start !== 'Unknown' && surveyStats.date_range.end !== 'Unknown' ? (
+                      <>{new Date(surveyStats.date_range.start).toLocaleDateString()} - {new Date(surveyStats.date_range.end).toLocaleDateString()}</>
+                    ) : 'N/A'}
+                  </span>
+                </div>
+              )}
+            </div>
+            {surveyStats.total_responses === 0 && (
+              <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                No survey data loaded. Ensure the CSV file is in the data directory.
+              </div>
+            )}
           </div>
         </div>
       )}

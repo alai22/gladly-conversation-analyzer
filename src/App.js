@@ -379,6 +379,7 @@ function App() {
       <Sidebar 
         healthStatus={healthStatus}
         onRefreshHealth={checkHealth}
+        currentMode={currentMode}
       />
 
       {/* Main Content */}
@@ -455,6 +456,7 @@ function App() {
               placeholder={
                 currentMode === 'claude' ? 'Ask Claude anything...' :
                 currentMode === 'conversations' ? 'Search conversation data...' :
+                currentMode === 'survicate' ? 'Ask about cancellation survey data (e.g., "What are the main cancellation reasons?")' :
                 'Ask Claude to analyze your conversation data (e.g., "What are the main customer complaints?")'
               }
               exampleQuestions={
@@ -462,6 +464,10 @@ function App() {
                   'What are the main customer complaints or issues mentioned in the conversations?',
                   'What are the most common topics or themes in the conversation data?',
                   'Analyze customer sentiment and satisfaction trends in the conversations'
+                ] : currentMode === 'survicate' ? [
+                  'What are the main reasons customers canceled their Halo Pack Membership?',
+                  'How have GPS and location accuracy complaints changed over time?',
+                  'What are the most common themes in customer feedback about battery life and charging issues?'
                 ] : []
               }
             />
