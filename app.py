@@ -2,6 +2,14 @@
 Modular Flask application for Gladly Conversation Analyzer
 """
 
+# IMPORTANT: Set Werkzeug max header size BEFORE importing Flask
+# This must be done before Flask/Werkzeug initializes the request handler
+import werkzeug.serving
+werkzeug.serving.WSGIRequestHandler.max_header_size = 32768  # 32KB (default is 8KB)
+
+# Verify and print the setting
+print(f"[FLASK CONFIG] Max header size configured: {werkzeug.serving.WSGIRequestHandler.max_header_size} bytes")
+
 from flask import Flask, render_template_string
 from flask_cors import CORS
 import os
@@ -19,6 +27,7 @@ from backend.api.routes.download_routes import download_bp
 
 # Import middleware
 from backend.api.middleware.error_handlers import register_error_handlers
+from backend.api.middleware.request_logging import register_request_logging
 
 # Import utilities
 from backend.utils.config import Config
@@ -50,6 +59,12 @@ def create_app():
     # Create Flask app
     app = Flask(__name__)
     
+    # Enable CORS
+    CORS(app)
+    
+    # Register request logging FIRST (so it logs all requests)
+    register_request_logging(app)
+    
     # Initialize service container and make it available via Flask's g
     from flask import g
     
@@ -62,9 +77,6 @@ def create_app():
             app_logger.error(f"Failed to initialize service container in before_request: {str(e)}", exc_info=True)
             # Set to None so routes can handle gracefully
             g.service_container = None
-    
-    # Enable CORS
-    CORS(app)
     
     # Register blueprints
     app.register_blueprint(health_bp)
@@ -106,5 +118,6 @@ app = create_app()
 
 if __name__ == '__main__':
     app_logger.info("Starting Gladly Web Interface...")
-    app_logger.info(f"🚀 Starting Flask server on http://{Config.HOST}:{Config.PORT}")
+    app_logger.info(f"Starting Flask server on http://{Config.HOST}:{Config.PORT}")
+    app_logger.info(f"[OK] Max header size: {werkzeug.serving.WSGIRequestHandler.max_header_size} bytes (was 8192)")
     app.run(debug=Config.FLASK_DEBUG, host=Config.HOST, port=Config.PORT)

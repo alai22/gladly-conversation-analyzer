@@ -1,3 +1,8 @@
+# IMPORTANT: Set Werkzeug max header size BEFORE importing Flask
+# This must be done before Flask/Werkzeug initializes the request handler
+import werkzeug.serving
+werkzeug.serving.WSGIRequestHandler.max_header_size = 32768  # 32KB (default is 8KB)
+
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 import os
@@ -42,4 +47,5 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     
     print(f"Starting Gladly Conversation Analyzer on {host}:{port}")
+    print(f"Max header size: {werkzeug.serving.WSGIRequestHandler.max_header_size} bytes")
     app.run(host=host, port=port, debug=False)

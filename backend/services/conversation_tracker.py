@@ -26,7 +26,8 @@ class ConversationTracker:
     
     def __init__(self, tracking_file: str = "data/downloaded_conversations.json"):
         self.tracking_file = tracking_file
-        self.s3_client = boto3.client('s3')
+        # Use region from config for S3 client
+        self.s3_client = boto3.client('s3', region_name=Config.S3_REGION)
         self.bucket_name = Config.S3_BUCKET_NAME
         self.s3_tracking_key = "conversation-tracking/downloaded_conversations.json"
         self.conversations = self._load_tracking_data()

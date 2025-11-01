@@ -29,13 +29,28 @@ class StorageService:
     
     def _init_s3(self):
         """Initialize S3 storage"""
-        self.s3_client = boto3.client('s3')
+        # boto3 will automatically pick up credentials from:
+        # 1. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+        # 2. AWS credentials file (~/.aws/credentials)
+        # 3. IAM role (on EC2)
+        
+        # Check if credentials are available
+        import os
+        has_env_creds = os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY')
+        has_profile = os.path.exists(os.path.expanduser('~/.aws/credentials'))
+        
+        if not has_env_creds and not has_profile:
+            logger.warning("No AWS credentials found in environment or ~/.aws/credentials. "
+                          "S3 access may fail. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
+                          "environment variables or configure AWS CLI with 'aws configure'")
+        
+        self.s3_client = boto3.client('s3', region_name=Config.S3_REGION)
         self.bucket_name = Config.S3_BUCKET_NAME
         self.file_key = Config.S3_FILE_KEY
         self.region = Config.S3_REGION
         
-        if not self.bucket_name:
-            raise ValueError("S3_BUCKET_NAME not configured")
+        if not self.bucket_name or self.bucket_name == "your-gladly-conversations-bucket":
+            raise ValueError(f"S3_BUCKET_NAME not configured (current value: {self.bucket_name}). Please set S3_BUCKET_NAME environment variable.")
     
     def _init_azure(self):
         """Initialize Azure Blob Storage"""
@@ -62,8 +77,7 @@ class StorageService:
             else:
                 return self._load_from_local()
         except Exception as e:
-            logger.error("Failed to load conversations from storage", 
-                        storage_type=self.storage_type, error=str(e))
+            logger.error(f"Failed to load conversations from storage (type={self.storage_type}): {str(e)}")
             return []
     
     def _load_from_s3(self) -> List[Dict[str, Any]]:
