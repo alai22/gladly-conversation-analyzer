@@ -4,6 +4,7 @@ API routes for RAG-powered analysis
 
 from flask import Blueprint, request, jsonify, g
 from ...utils.logging import get_logger
+from ...utils.config import Config
 
 logger = get_logger('rag_routes')
 
@@ -27,7 +28,8 @@ def conversations_ask():
         
         data = request.get_json()
         question = data.get('question')
-        model = data.get('model', 'claude-sonnet-4')  # Default to Sonnet 4 (non-dated alias)
+        # Default to configured model (falls back to working model via fallback system if needed)
+        model = data.get('model', Config.CLAUDE_MODEL)
         max_tokens = data.get('max_tokens', 2000)
         
         if not question:

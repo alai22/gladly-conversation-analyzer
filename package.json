@@ -1,7 +1,7 @@
 {
   "name": "gladly-web-interface",
   "version": "1.0.0",
-  "description": "Web interface for Gladly conversation testing with Claude API",
+  "description": "Web interface for Gladly conversation analysis with Claude AI",
   "main": "index.js",
   "scripts": {
     "start": "cross-env PORT=3000 HOST= react-scripts start",

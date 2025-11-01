@@ -15,8 +15,9 @@ class Config:
     
     # API Configuration
     ANTHROPIC_API_KEY: Optional[str] = os.getenv('ANTHROPIC_API_KEY')
-    # Using non-dated alias 'claude-sonnet-4' for robustness (routes to latest Sonnet 4)
-    CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-sonnet-4')
+    # Default to claude-3-haiku-20240307 (verified working model)
+    # Claude 4 models (claude-sonnet-4, claude-opus-4) may not be available with all API keys
+    CLAUDE_MODEL: str = os.getenv('CLAUDE_MODEL', 'claude-3-haiku-20240307')
     CLAUDE_API_TIMEOUT: int = int(os.getenv('CLAUDE_API_TIMEOUT', '120'))  # Default 120 seconds for complex queries
     
     @classmethod
@@ -32,35 +33,31 @@ class Config:
         }
     
     # Model aliases and fallbacks
-    # Maps requested models to available working models
-    # Non-dated aliases route to latest version, dated ones are specific snapshots
+    # Maps deprecated/unavailable models to working alternatives
+    # Note: We don't alias Claude 4 models here - let them be tried first, fallback system handles failures
     MODEL_ALIASES = {
-        # Claude 4 models (non-dated aliases - more robust)
-        'claude-sonnet-4': 'claude-sonnet-4',  # Primary default - routes to latest
-        'claude-opus-4': 'claude-opus-4',
-        'sonnet-4': 'claude-sonnet-4',
-        'opus-4': 'claude-opus-4',
-        # Legacy Claude 3.5 models fallback to Sonnet 4
-        'claude-3-5-sonnet': 'claude-sonnet-4',
-        'claude-3-5-sonnet-20241022': 'claude-sonnet-4',
-        'claude-3-5-sonnet-20240620': 'claude-sonnet-4',
+        # Legacy Claude 3.5 models (not available) -> map to working Claude 3
+        'claude-3-5-sonnet': 'claude-3-haiku-20240307',
+        'claude-3-5-sonnet-20241022': 'claude-3-haiku-20240307',
+        'claude-3-5-sonnet-20240620': 'claude-3-haiku-20240307',
         'claude-3-5-haiku-20241022': 'claude-3-haiku-20240307',
-        # Legacy Claude 3 models fallback to Sonnet 4 (claude-3-sonnet-20240229 is deprecated)
-        'claude-3-opus-20240229': 'claude-sonnet-4',
-        'claude-3-sonnet-20240229': 'claude-sonnet-4',
+        # Legacy Claude 3 models (deprecated/unavailable) -> map to working model
+        'claude-3-opus-20240229': 'claude-3-haiku-20240307',
+        'claude-3-sonnet-20240229': 'claude-3-haiku-20240307',  # Deprecated, use haiku
     }
     
     # List of verified working models (tested with current API key)
-    # Ordered by preference for fallback
+    # Ordered by preference for fallback - put verified working models first
     VERIFIED_MODELS = [
-        'claude-sonnet-4',  # Primary - non-dated, routes to latest
-        'claude-opus-4',  # Alternative Claude 4 model
-        'claude-3-haiku-20240307',  # Cost-effective fallback
+        'claude-3-haiku-20240307',  # Primary - verified working model
+        'claude-3-sonnet-20240229',  # May work with some API keys
+        'claude-sonnet-4',  # Try Claude 4 models last (may not be available)
+        'claude-opus-4',   # Try Claude 4 models last (may not be available)
     ]
     
     # Fallback model if configured model doesn't work
-    # Using Sonnet 4 as fallback (non-dated alias, most reliable)
-    FALLBACK_MODEL = 'claude-sonnet-4'
+    # Using Haiku as fallback (verified working, cost-effective)
+    FALLBACK_MODEL = 'claude-3-haiku-20240307'
     
     @classmethod
     def resolve_model(cls, requested_model: Optional[str] = None) -> str:
