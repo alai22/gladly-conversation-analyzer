@@ -104,6 +104,9 @@ class Config:
     # Local file fallback
     LOCAL_FILE_PATH: str = os.getenv('LOCAL_FILE_PATH', 'conversation_items.jsonl')
     
+    # Survicate Survey Configuration
+    SURVICATE_CSV_PATH: str = os.getenv('SURVICATE_CSV_PATH', 'data/survicate_cancelled_subscriptions.csv')
+    
     @classmethod
     def validate(cls) -> bool:
         """Validate required configuration"""

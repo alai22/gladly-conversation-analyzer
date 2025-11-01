@@ -24,6 +24,7 @@ from backend.api.routes.conversation_routes import conversation_bp
 from backend.api.routes.rag_routes import rag_bp
 from backend.api.routes.health_routes import health_bp
 from backend.api.routes.download_routes import download_bp
+from backend.api.routes.survicate_routes import survicate_bp
 
 # Import middleware
 from backend.api.middleware.error_handlers import register_error_handlers
@@ -84,6 +85,7 @@ def create_app():
     app.register_blueprint(conversation_bp)
     app.register_blueprint(rag_bp)
     app.register_blueprint(download_bp)
+    app.register_blueprint(survicate_bp)
     
     # Register error handlers
     register_error_handlers(app)

@@ -15,9 +15,10 @@ function App() {
     claude: [],
     conversations: [],
     ask: [],
-    download: []
+    download: [],
+    survicate: []
   });
-  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download'
+  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download', 'survicate'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -273,6 +274,48 @@ function App() {
     }
   };
 
+  const handleSurvicateAsk = async (question) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.post('/api/survicate/ask', {
+        question,
+        model: settings.model,
+        max_tokens: settings.maxTokens
+      }, {
+        timeout: 120000 // 2 minutes timeout for RAG requests
+      });
+
+      if (response.data.success) {
+        let responseText = '';
+        if (response.data.response.content && response.data.response.content.length > 0) {
+          for (const contentBlock of response.data.response.content) {
+            if (contentBlock.type === 'text') {
+              responseText += contentBlock.text;
+            }
+          }
+        }
+
+        addConversation('survicate', question, responseText, {
+          dataRetrieved: response.data.data_retrieved,
+          plan: response.data.plan,
+          ragProcess: response.data.rag_process,
+          tokensUsed: response.data.response.usage?.output_tokens || 0,
+          model: settings.model
+        });
+      } else {
+        throw new Error(response.data.error || 'Unknown error');
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || error.message;
+      const errorDetails = error.response?.data?.details;
+      setError(errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = (message) => {
     if (!message.trim()) return;
 
@@ -285,6 +328,9 @@ function App() {
         break;
       case 'ask':
         handleConversationAsk(message);
+        break;
+      case 'survicate':
+        handleSurvicateAsk(message);
         break;
       default:
         handleClaudeMessage(message);
@@ -305,7 +351,9 @@ function App() {
     setConversations({
       claude: [],
       conversations: [],
-      ask: []
+      ask: [],
+      download: [],
+      survicate: []
     });
     setError(null);
   };
@@ -319,7 +367,8 @@ function App() {
       'claude': 'Claude Chat',
       'conversations': 'Search Data', 
       'ask': 'Ask Claude (RAG)',
-      'download': 'Download Manager'
+      'download': 'Download Manager',
+      'survicate': 'Survicate Surveys'
     };
     return modeTitles[currentMode] || 'Unknown Mode';
   };

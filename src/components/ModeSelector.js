@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Database, Search, MessageSquare, ChevronDown, Download } from 'lucide-react';
+import { Bot, Database, Search, MessageSquare, ChevronDown, Download, FileText } from 'lucide-react';
 
 const ModeSelector = ({ currentMode, setCurrentMode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -33,6 +33,13 @@ const ModeSelector = ({ currentMode, setCurrentMode }) => {
       description: 'Download conversation data from Gladly',
       icon: Download,
       color: 'text-orange-600'
+    },
+    {
+      id: 'survicate',
+      name: 'Survicate Surveys',
+      description: 'RAG-powered analysis of cancellation surveys',
+      icon: FileText,
+      color: 'text-teal-600'
     }
   ];
 

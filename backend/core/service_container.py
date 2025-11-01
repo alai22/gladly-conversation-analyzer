@@ -11,6 +11,8 @@ from ..services.storage_service import StorageService
 from ..services.conversation_service import ConversationService
 from ..services.rag_service import RAGService
 from ..services.gladly_download_service import GladlyDownloadService
+from ..services.survey_service import SurveyService
+from ..services.survicate_rag_service import SurvicateRAGService
 from ..utils.logging import get_logger
 
 logger = get_logger('service_container')
@@ -32,6 +34,8 @@ class ServiceContainer:
         self._conversation_service: Optional[ConversationService] = None
         self._rag_service: Optional[RAGService] = None
         self._gladly_download_service: Optional[GladlyDownloadService] = None
+        self._survey_service: Optional[SurveyService] = None
+        self._survicate_rag_service: Optional[SurvicateRAGService] = None
         
         # Track if services are overridden (for testing)
         self._overrides: dict = {}
@@ -191,6 +195,64 @@ class ServiceContainer:
         
         return self._gladly_download_service
     
+    # Survey Service
+    def get_survey_service(self, override: Optional[SurveyService] = None) -> SurveyService:
+        """
+        Get or create the SurveyService instance.
+        
+        Args:
+            override: Optional service instance to use instead (for testing)
+            
+        Returns:
+            SurveyService instance
+        """
+        if override is not None:
+            self._overrides['survey_service'] = override
+            self._survey_service = override
+            return override
+        
+        if 'survey_service' in self._overrides:
+            return self._overrides['survey_service']
+        
+        if self._survey_service is None:
+            logger.debug("Creating SurveyService instance")
+            self._survey_service = SurveyService()
+        
+        return self._survey_service
+    
+    # Survicate RAG Service
+    def get_survicate_rag_service(self, override: Optional[SurvicateRAGService] = None) -> Optional[SurvicateRAGService]:
+        """
+        Get or create the SurvicateRAGService instance.
+        
+        Requires ClaudeService and SurveyService to be available.
+        
+        Args:
+            override: Optional service instance to use instead (for testing)
+            
+        Returns:
+            SurvicateRAGService instance or None if dependencies are unavailable
+        """
+        if override is not None:
+            self._overrides['survicate_rag_service'] = override
+            self._survicate_rag_service = override
+            return override
+        
+        if 'survicate_rag_service' in self._overrides:
+            return self._overrides.get('survicate_rag_service')
+        
+        if self._survicate_rag_service is None:
+            claude_service = self.get_claude_service()
+            if claude_service is None:
+                logger.warning("SurvicateRAGService not initialized - ClaudeService unavailable")
+                return None
+            
+            survey_service = self.get_survey_service()
+            logger.debug("Creating SurvicateRAGService instance")
+            self._survicate_rag_service = SurvicateRAGService(claude_service, survey_service)
+        
+        return self._survicate_rag_service
+    
     def clear_overrides(self):
         """Clear all service overrides (useful for testing cleanup)"""
         self._overrides.clear()
@@ -203,6 +265,8 @@ class ServiceContainer:
         self._conversation_service = None
         self._rag_service = None
         self._gladly_download_service = None
+        self._survey_service = None
+        self._survicate_rag_service = None
         self._overrides.clear()
         logger.debug("Service container reset")
 

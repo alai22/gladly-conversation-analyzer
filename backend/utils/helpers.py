@@ -123,3 +123,127 @@ IMPORTANT: Format your response using proper Markdown formatting:
 - Use `code formatting` for conversation IDs and specific terms when needed
 
 Make your response well-structured and easy to read with clear visual hierarchy."""
+
+
+def format_survey_for_claude(surveys: list, max_items: int = 50) -> str:
+    """Format survey data for Claude analysis"""
+    if not surveys:
+        return "No survey data was retrieved from the search. This could mean:\n- The search terms did not match any survey responses\n- The surveys have not been loaded yet\n\nPlease inform the user that no data was found and suggest they try different search terms or check if survey data has been loaded."
+    
+    survey_text = f"Retrieved Survey Data: {len(surveys)} survey responses found\n\n"
+    survey_text += "Each response below represents a customer's cancellation survey response:\n\n"
+    
+    items_to_process = surveys[:max_items]
+    
+    for item in items_to_process:
+        response_uuid = item.get('response_uuid', 'Unknown')
+        date_time = item.get('date_time', 'No timestamp')
+        email = item.get('email', 'No email')
+        user_id = item.get('user_id', 'No user ID')
+        answers = item.get('answers', {})
+        
+        survey_text += f"\n{'='*60}\n"
+        survey_text += f"SURVEY RESPONSE: {response_uuid}\n"
+        survey_text += f"{'='*60}\n"
+        survey_text += f"Date & Time: {date_time}\n"
+        survey_text += f"Email: {email}\n"
+        if user_id:
+            survey_text += f"User ID: {user_id}\n"
+        survey_text += "\nAnswers:\n"
+        
+        # Format each answer
+        for question_key, answer_data in sorted(answers.items()):
+            if isinstance(answer_data, dict):
+                answer_value = answer_data.get('Answer') or answer_data.get('answer') or ''
+                comment_value = answer_data.get('Comment') or answer_data.get('comment') or ''
+                
+                if answer_value or comment_value:
+                    survey_text += f"  {question_key}:\n"
+                    if answer_value:
+                        answer_text = truncate_text(str(answer_value), max_length=300)
+                        survey_text += f"    Answer: {answer_text}\n"
+                    if comment_value:
+                        comment_text = truncate_text(str(comment_value), max_length=300)
+                        survey_text += f"    Comment: {comment_text}\n"
+            else:
+                answer_value = str(answer_data) if answer_data else ''
+                if answer_value:
+                    answer_text = truncate_text(str(answer_value), max_length=300)
+                    survey_text += f"  {question_key}: {answer_text}\n"
+        
+        survey_text += "\n"
+    
+    if len(surveys) > max_items:
+        survey_text += f"\n[Note: Showing first {max_items} survey responses of {len(surveys)} total for performance]\n"
+    
+    return survey_text
+
+
+def create_survicate_rag_system_prompt(summary: str, survey_text: str, plan: Dict[str, Any], question: str) -> str:
+    """Create system prompt for Survicate survey RAG analysis"""
+    
+    trend_instruction = ""
+    if plan.get('trend_analysis', False):
+        trend_instruction = """
+
+TREND ANALYSIS:
+This query requires trend analysis over time. Pay special attention to:
+- How themes and issues change over the date range
+- Comparing early vs. late responses
+- Identifying patterns that emerge or fade over time
+- Provide specific time-based insights and data points
+"""
+    
+    return f"""You are analyzing customer cancellation survey data from Survicate. 
+
+DATA STRUCTURE:
+Each survey response represents a customer's feedback when cancelling their Halo Collar subscription. The surveys contain:
+- Structured answers to questions (Q1-Q19) about cancellation reasons
+- Open-ended comments providing additional context
+- Timestamps showing when each response was submitted
+- User identifiers (email, user_id) for tracking
+
+Questions typically cover:
+- Main cancellation reason (Q1)
+- GPS/location accuracy issues (Q2, Q3)
+- Feedback/correction issues (Q4, Q5)
+- Battery and charging problems (Q6)
+- Training curriculum engagement (Q8, Q9)
+- Customer service experiences (Q10, Q11)
+- Additional feedback (Q12)
+- Dog characteristics (Q14-Q17)
+- Purchase information (Q18)
+
+Here's a summary of the entire dataset:
+
+{summary}
+{trend_instruction}
+Below are the retrieved survey responses that are relevant to the question:
+
+{survey_text}
+
+Analysis Focus: {plan.get('analysis_focus', 'general analysis')}
+
+Please analyze the survey data and answer the question: "{question}"
+
+Be specific and reference actual survey responses when possible. Look for:
+- Common themes and patterns across responses
+- Frequency of specific issues or reasons
+- Trends over time (if date information is available)
+- Relationships between different questions
+- Direct quotes from customer feedback
+
+IMPORTANT: When referencing specific survey responses, use the Response UUID (e.g., `abc123xyz`) for identification. Format response UUIDs using backticks like this: `response-uuid-here`.
+
+IMPORTANT: For trend analysis, clearly state the time periods being compared and provide specific counts or percentages.
+
+IMPORTANT: Format your response using proper Markdown formatting:
+- Use **bold** for headings and important terms
+- Use bullet points (- or *) for lists
+- Use proper indentation for sub-items
+- Use numbered lists (1., 2., 3.) for sequential items
+- Use ## for main headings and ### for sub-headings
+- Use `code formatting` for response UUIDs and specific terms when needed
+- Use tables when comparing data across time periods or categories
+
+Make your response well-structured and easy to read with clear visual hierarchy."""
