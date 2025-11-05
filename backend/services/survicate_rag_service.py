@@ -187,15 +187,21 @@ Respond with valid JSON only."""
         
         logger.info(f"Retrieved {len(relevant_data)} survey responses using search terms: {search_terms}")
         
-        # If no results from semantic search, use fallback: return sample of surveys
-        if len(relevant_data) == 0 and total_available > 0:
-            logger.warning(f"Semantic search returned 0 results for terms {search_terms}. Using fallback: returning sample of surveys.")
+        # Add minimum threshold check - if we got very few results, use fallback to get diverse sample
+        # This handles broad queries like "what do people say in the surveys" that might not match well semantically
+        MIN_RESULTS_THRESHOLD = 20  # If we get fewer than this, use fallback for better coverage
+        if len(relevant_data) < MIN_RESULTS_THRESHOLD and total_available > 0:
+            logger.warning(f"Semantic search returned only {len(relevant_data)} results (below threshold of {MIN_RESULTS_THRESHOLD}). Using fallback to get diverse sample for better analysis coverage.")
             retrieval_stats['diagnostics']['fallback_used'] = True
-            retrieval_stats['diagnostics']['fallback_reason'] = 'Semantic search returned no results'
+            retrieval_stats['diagnostics']['fallback_reason'] = f'Semantic search returned only {len(relevant_data)} results, below minimum threshold'
+            retrieval_stats['diagnostics']['min_threshold'] = MIN_RESULTS_THRESHOLD
             
+            # Clear the sparse results and use fallback instead
+            relevant_data = []
             fallback_limit = min(plan.get('max_items', 100), total_available)
             seen_uuids = set()
             
+            # Get a diverse sample across all surveys
             for survey in self.survey_service.surveys:
                 if len(relevant_data) >= fallback_limit:
                     break
@@ -207,9 +213,9 @@ Respond with valid JSON only."""
                 seen_uuids.add(response_uuid)
                 relevant_data.append(survey_dict)
             
-            retrieval_stats['by_search_term']['_fallback'] = {'count': len(relevant_data), 'reason': 'No semantic matches found'}
+            retrieval_stats['by_search_term']['_fallback'] = {'count': len(relevant_data), 'reason': f'Below threshold ({len(relevant_data)} < {MIN_RESULTS_THRESHOLD})'}
             retrieval_stats['total_searched'] = len(relevant_data)
-            logger.info(f"Fallback: Returning {len(relevant_data)} sample surveys")
+            logger.info(f"Fallback: Returning {len(relevant_data)} diverse sample surveys for comprehensive analysis")
         
         # Apply time filters if specified
         time_filters = plan.get('time_filters', 'all')
@@ -268,7 +274,11 @@ Respond with valid JSON only."""
         rag_process.retrieval_stats = retrieval_stats
         status_message = f"Retrieved {len(unique_data)} survey responses"
         if retrieval_stats.get('diagnostics', {}).get('fallback_used'):
-            status_message += " (using fallback: semantic search returned no results)"
+            fallback_reason = retrieval_stats.get('diagnostics', {}).get('fallback_reason', 'insufficient results')
+            if '0 results' in fallback_reason:
+                status_message += " (using fallback: semantic search returned no results)"
+            else:
+                status_message += f" (using fallback: {fallback_reason})"
         rag_process.update_step(2, 'completed', retrieval_stats, status_message if len(unique_data) > 0 else None)
         
         return unique_data
