@@ -105,7 +105,8 @@ class Config:
     LOCAL_FILE_PATH: str = os.getenv('LOCAL_FILE_PATH', 'conversation_items.jsonl')
     
     # Survicate Survey Configuration
-    SURVICATE_CSV_PATH: str = os.getenv('SURVICATE_CSV_PATH', 'data/survicate_cancelled_subscriptions.csv')
+    # Use cleaned CSV with proper headers (single header row with Answer/Comment labels)
+    SURVICATE_CSV_PATH: str = os.getenv('SURVICATE_CSV_PATH', 'data/survicate_cancelled_subscriptions_cleaned.csv')
     
     @classmethod
     def validate(cls) -> bool:

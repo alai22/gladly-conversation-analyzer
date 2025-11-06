@@ -78,29 +78,52 @@ class SurveyParserService:
         }
         
         # Extract all question answers (Q#1 through Q#19)
+        # Cleaned CSV has headers like "Q#1: ... (Answer)" and "Q#1: ... (Comment)"
         answers = {}
+        processed_questions = set()  # Track which questions we've processed
         
         for col_name, col_value in row.items():
             # Skip non-question columns
             if not col_name.startswith('Q#') and 'Q#' not in col_name:
                 continue
             
-            # Clean column name to get question key
-            question_key = self._normalize_question_key(col_name)
+            # Check if this is an Answer or Comment column
+            is_answer = '(Answer)' in col_name
+            is_comment = '(Comment)' in col_name
             
-            if question_key:
-                # Check if there's a corresponding Comment column
-                comment_col = self._find_comment_column(col_name, row.keys())
-                
-                answer_value = col_value.strip() if col_value else ''
-                comment_value = row.get(comment_col, '').strip() if comment_col else ''
-                
-                if answer_value or comment_value:
-                    # Store as dict with Answer/Comment structure
-                    answers[question_key] = {
-                        'Answer': answer_value if answer_value else None,
-                        'Comment': comment_value if comment_value else None
-                    }
+            if not (is_answer or is_comment):
+                # Old format or question without Answer/Comment structure
+                question_key = self._normalize_question_key(col_name)
+                if question_key and question_key not in processed_questions:
+                    answer_value = col_value.strip() if col_value else ''
+                    if answer_value:
+                        answers[question_key] = {
+                            'Answer': answer_value,
+                            'Comment': None
+                        }
+                        processed_questions.add(question_key)
+                continue
+            
+            # Extract question key from cleaned header format
+            question_key = self._normalize_question_key(col_name)
+            if not question_key:
+                continue
+            
+            # Initialize answer dict if not already present
+            if question_key not in answers:
+                answers[question_key] = {'Answer': None, 'Comment': None}
+            
+            # Set Answer or Comment value
+            value = col_value.strip() if col_value else ''
+            if is_answer:
+                answers[question_key]['Answer'] = value if value else None
+            elif is_comment:
+                answers[question_key]['Comment'] = value if value else None
+            
+            processed_questions.add(question_key)
+        
+        # Remove entries with no Answer or Comment
+        answers = {k: v for k, v in answers.items() if v.get('Answer') or v.get('Comment')}
         
         return SurveyResponse(
             response_uuid=response_uuid,
