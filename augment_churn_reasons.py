@@ -400,6 +400,7 @@ def augment_csv(input_path: str, output_path: str, use_claude: bool = True):
     # Less frequent logging for Phase 1 since keyword matching is fast
     # Log at 0%, 25%, 50%, 75%, and 100% only
     log_points = [0, 0.25, 0.5, 0.75, 1.0]
+    logged_milestones = set()  # Track which milestones we've already logged
     
     print("Phase 1: Keyword matching...")
     for i, row in enumerate(rows):
@@ -438,16 +439,18 @@ def augment_csv(input_path: str, output_path: str, use_claude: bool = True):
 
         # Progress logging - only at key milestones (25%, 50%, 75%, 100%)
         progress_pct = (i + 1) / len(rows)
-        should_log = any(abs(progress_pct - point) < 0.01 or (i + 1 == len(rows) and point == 1.0) for point in log_points)
-        
-        if should_log:
-            elapsed = time.time() - start_time
-            if i > 0:
-                print(f"Progress: {i+1:,}/{len(rows):,} ({progress_pct*100:.1f}%) | "
-                      f"Other: {other_count:,} | Keyword matched: {keyword_matched:,} | "
-                      f"Queued for Claude: {len(claude_queue):,}")
-            else:
-                print(f"Starting processing...")
+        # Check if we've crossed a milestone we haven't logged yet
+        for point in log_points:
+            if point not in logged_milestones and progress_pct >= point:
+                logged_milestones.add(point)
+                elapsed = time.time() - start_time
+                if point == 0:
+                    print(f"Starting processing...")
+                else:
+                    print(f"Progress: {i+1:,}/{len(rows):,} ({progress_pct*100:.1f}%) | "
+                          f"Other: {other_count:,} | Keyword matched: {keyword_matched:,} | "
+                          f"Queued for Claude: {len(claude_queue):,}")
+                break  # Only log once per milestone
         
         # Debug: log first few "Other" comments to verify reading
         if q1_answer.lower() == 'other (please specify)' and i < 5:
