@@ -219,14 +219,22 @@ def get_churn_trends():
         months = sorted(grouped['year_month'].unique())
         reasons = sorted(grouped['augmented_churn_reason'].unique())
         
-        # Format data for frontend - create array of objects with month and all reason percentages
+        # Format data for frontend - create array of objects with month and all reason percentages and counts
         data = []
         for month in months:
             month_data = {'month': month}
+            month_total = int(monthly_totals[month])
+            month_data['_total'] = month_total  # Store total for the month
             month_df = grouped[grouped['year_month'] == month]
             for reason in reasons:
                 reason_data = month_df[month_df['augmented_churn_reason'] == reason]
-                month_data[reason] = round(reason_data['percentage'].values[0], 2) if len(reason_data) > 0 else 0
+                count_key = f'{reason}_count'
+                if len(reason_data) > 0:
+                    month_data[reason] = round(reason_data['percentage'].values[0], 2)
+                    month_data[count_key] = int(reason_data['count'].values[0])
+                else:
+                    month_data[reason] = 0
+                    month_data[count_key] = 0
             data.append(month_data)
         
         # Calculate total counts for each reason (for sorting/legend)

@@ -11,29 +11,29 @@ const ChurnTrendsChart = () => {
   const [error, setError] = useState(null);
   const [totalResponses, setTotalResponses] = useState(0);
 
-  // Modern, professional color palette - muted and aesthetically pleasing
-  // These colors are colorblind-friendly and work well in both digital and print
+  // Google Sheets-style color palette - light, vibrant, and easy to distinguish
+  // These colors are bright, have good contrast, and are colorblind-friendly
   const colors = [
-    '#2E86AB',  // Modern Blue
-    '#A23B72',  // Muted Purple
-    '#F18F01',  // Warm Orange
-    '#C73E1D',  // Muted Red
-    '#6A994E',  // Forest Green
-    '#BC4749',  // Soft Red
-    '#F77F00',  // Burnt Orange
-    '#FCBF49',  // Golden Yellow
-    '#06A77D',  // Teal
-    '#118AB2',  // Ocean Blue
-    '#073B4C',  // Dark Navy
-    '#EF476F',  // Coral Pink
-    '#06FFA5',  // Mint Green
-    '#7209B7',  // Deep Purple
-    '#F72585',  // Magenta
-    '#4CC9F0',  // Sky Blue
-    '#560BAD',  // Purple
-    '#B5179E',  // Pink
-    '#3A0CA3',  // Indigo
-    '#7209B7',  // Violet
+    '#4285F4',  // Google Blue
+    '#EA4335',  // Google Red
+    '#FBBC04',  // Google Yellow
+    '#34A853',  // Google Green
+    '#FF6D01',  // Bright Orange
+    '#9334E6',  // Bright Purple
+    '#00ACC1',  // Cyan
+    '#FF5252',  // Light Red
+    '#66BB6A',  // Light Green
+    '#42A5F5',  // Light Blue
+    '#AB47BC',  // Light Purple
+    '#FFA726',  // Light Orange
+    '#26A69A',  // Teal
+    '#EF5350',  // Coral
+    '#5C6BC0',  // Indigo
+    '#FFCA28',  // Amber
+    '#26C6DA',  // Light Cyan
+    '#EC407A',  // Pink
+    '#7E57C2',  // Deep Purple
+    '#78909C',  // Blue Grey
   ];
 
   const fetchChurnTrends = async () => {
@@ -123,10 +123,12 @@ const ChurnTrendsChart = () => {
   }
 
   // Prepare data for Recharts (stacked bar chart)
+  // Also store counts for tooltip display
   const chartData = data.map(item => {
-    const chartItem = { month: item.month };
+    const chartItem = { month: item.month, _total: item._total || 0 };
     reasons.forEach(reason => {
       chartItem[reason] = item[reason] || 0;
+      chartItem[`${reason}_count`] = item[`${reason}_count`] || 0;
     });
     return chartItem;
   });
@@ -177,17 +179,84 @@ const ChurnTrendsChart = () => {
             <YAxis 
               label={{ value: 'Percentage of Churn (%)', angle: -90, position: 'insideLeft' }}
               domain={[0, 100]}
+              ticks={[0, 20, 40, 60, 80, 100]}
+              tickFormatter={(value) => `${value}%`}
               tick={{ fontSize: 12 }}
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                backgroundColor: 'rgba(255, 255, 255, 0.98)',
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
-                padding: '8px'
+                padding: '0',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
               }}
-              formatter={(value, name) => [`${value.toFixed(2)}%`, name]}
-              labelFormatter={(label) => `Month: ${label}`}
+              cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || payload.length === 0) {
+                  return null;
+                }
+                
+                // Filter to only show segments with non-zero values
+                // In a stacked bar, we want to show only the segment being hovered
+                // Recharts provides all segments, but we'll show the one that's most relevant
+                // (typically the one with the highest value in the hover area)
+                const nonZeroSegments = payload.filter(item => item.value > 0);
+                
+                if (nonZeroSegments.length === 0) {
+                  return null;
+                }
+                
+                // For stacked bars, show the segment that's likely being hovered
+                // We'll show the segment with the highest value (top of stack) or use the first non-zero
+                const activeSegment = nonZeroSegments[0]; // Recharts orders by stack position
+                
+                const reasonName = activeSegment.dataKey;
+                const percentage = activeSegment.value;
+                const count = activeSegment.payload[`${reasonName}_count`] || 0;
+                const total = activeSegment.payload._total || 0;
+                const color = activeSegment.color;
+                
+                return (
+                  <div style={{ padding: '12px' }}>
+                    <div style={{ 
+                      fontWeight: '600', 
+                      fontSize: '14px', 
+                      color: '#1f2937', 
+                      marginBottom: '8px', 
+                      borderBottom: '1px solid #e5e7eb', 
+                      paddingBottom: '8px' 
+                    }}>
+                      Month: {label}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                      <div 
+                        style={{ 
+                          width: '12px', 
+                          height: '12px', 
+                          backgroundColor: color,
+                          borderRadius: '2px',
+                          flexShrink: 0,
+                          marginTop: '2px'
+                        }} 
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px', marginBottom: '6px' }}>
+                          {reasonName}
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
+                          {percentage.toFixed(2)}%
+                        </div>
+                        {count > 0 && (
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                            {count.toLocaleString()} of {total.toLocaleString()} responses
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }}
             />
             <Legend 
               wrapperStyle={{ paddingTop: '20px' }}

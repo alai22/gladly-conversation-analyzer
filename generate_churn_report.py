@@ -64,51 +64,51 @@ def generate_churn_report(csv_path='data/survicate_cancelled_subscriptions_augme
     
     print(f"Found {len(pivot_data)} unique churn reasons across {len(months)} months")
     
-    # Modern, professional color palette - muted and aesthetically pleasing
-    # Using a combination of modern business colors with good contrast
-    # These colors are colorblind-friendly and work well in print
+    # Google Sheets-style color palette - light, vibrant, and easy to distinguish
+    # These colors are bright, have good contrast, and are colorblind-friendly
     colors = [
-        '#2E86AB',  # Modern Blue
-        '#A23B72',  # Muted Purple
-        '#F18F01',  # Warm Orange
-        '#C73E1D',  # Muted Red
-        '#6A994E',  # Forest Green
-        '#BC4749',  # Soft Red
-        '#F77F00',  # Burnt Orange
-        '#FCBF49',  # Golden Yellow
-        '#06A77D',  # Teal
-        '#118AB2',  # Ocean Blue
-        '#073B4C',  # Dark Navy
-        '#EF476F',  # Coral Pink
-        '#06FFA5',  # Mint Green
-        '#7209B7',  # Deep Purple
-        '#F72585',  # Magenta
-        '#4CC9F0',  # Sky Blue
-        '#560BAD',  # Purple
-        '#B5179E',  # Pink
+        '#4285F4',  # Google Blue
+        '#EA4335',  # Google Red
+        '#FBBC04',  # Google Yellow
+        '#34A853',  # Google Green
+        '#FF6D01',  # Bright Orange
+        '#9334E6',  # Bright Purple
+        '#00ACC1',  # Cyan
+        '#FF5252',  # Light Red
+        '#66BB6A',  # Light Green
+        '#42A5F5',  # Light Blue
+        '#AB47BC',  # Light Purple
+        '#FFA726',  # Light Orange
+        '#26A69A',  # Teal
+        '#EF5350',  # Coral
+        '#5C6BC0',  # Indigo
+        '#FFCA28',  # Amber
+        '#26C6DA',  # Light Cyan
+        '#EC407A',  # Pink
+        '#7E57C2',  # Deep Purple
+        '#78909C',  # Blue Grey
     ]
     
-    # If we need more colors, use a modern colormap
+    # If we need more colors, use a light, vibrant colormap
     import matplotlib.colors as mcolors
     import numpy as np
     
     if len(pivot_data) > len(colors):
-        # Use a modern colormap and sample colors evenly
-        # 'Set3' is a modern, muted palette that's colorblind-friendly
-        cmap = plt.cm.get_cmap('Set3')
+        # Use 'Pastel1' or 'Set3' for additional light, vibrant colors
+        cmap = plt.cm.get_cmap('Pastel1')
         additional_colors = [mcolors.to_hex(cmap(i)) for i in np.linspace(0, 1, len(pivot_data) - len(colors))]
         colors.extend(additional_colors)
     
     # Create the figure
     fig, ax = plt.subplots(figsize=(16, 10))
     
-    # Create stacked bar chart with modern styling
+    # Create stacked bar chart with vibrant, light styling
     bottom = None
     bars = []
     for i, (reason, row) in enumerate(pivot_data.iterrows()):
         bar = ax.bar(months, row.values, bottom=bottom, 
-                    label=reason, color=colors[i % len(colors)], alpha=0.85, 
-                    edgecolor='white', linewidth=0.8)
+                    label=reason, color=colors[i % len(colors)], alpha=0.9, 
+                    edgecolor='white', linewidth=1.0)
         bars.append(bar)
         if bottom is None:
             bottom = row.values
@@ -119,7 +119,12 @@ def generate_churn_report(csv_path='data/survicate_cancelled_subscriptions_augme
     ax.set_xlabel('Year Month', fontsize=13, fontweight='600', color='#333333')
     ax.set_ylabel('Percentage of Churn (%)', fontsize=13, fontweight='600', color='#333333')
     ax.set_title('Churn Reasons Over Time', fontsize=17, fontweight='600', pad=20, color='#1a1a1a')
+    
+    # Set y-axis limits and ticks properly
     ax.set_ylim(0, 100)
+    ax.set_yticks([0, 20, 40, 60, 80, 100])
+    ax.set_yticklabels(['0%', '20%', '40%', '60%', '80%', '100%'])
+    
     ax.grid(axis='y', alpha=0.2, linestyle='--', color='#cccccc')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
