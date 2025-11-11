@@ -259,11 +259,82 @@ const ChurnTrendsChart = () => {
               }}
             />
             <Legend 
-              wrapperStyle={{ paddingTop: '20px' }}
+              wrapperStyle={{ 
+                paddingTop: '20px',
+                paddingBottom: '10px'
+              }}
               iconType="rect"
+              iconSize={14}
               formatter={(value) => {
-                // Truncate long labels
-                return value.length > 40 ? value.substring(0, 37) + '...' : value;
+                // Truncate long labels but keep them readable
+                return value.length > 35 ? value.substring(0, 32) + '...' : value;
+              }}
+              content={({ payload }) => {
+                if (!payload || payload.length === 0) return null;
+                
+                // Organize legend into columns for better readability
+                // Use 3 columns for better space utilization
+                const itemsPerColumn = Math.ceil(payload.length / 3);
+                const columns = [];
+                for (let i = 0; i < payload.length; i += itemsPerColumn) {
+                  columns.push(payload.slice(i, i + itemsPerColumn));
+                }
+                
+                return (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    gap: '40px',
+                    padding: '24px 20px 16px 20px',
+                    flexWrap: 'wrap',
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '8px',
+                    marginTop: '20px'
+                  }}>
+                    {columns.map((column, colIndex) => (
+                      <div key={colIndex} style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '10px', 
+                        minWidth: '220px',
+                        maxWidth: '280px'
+                      }}>
+                        {column.map((entry, index) => (
+                          <div 
+                            key={`legend-item-${index}`}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'flex-start', 
+                              gap: '10px',
+                              fontSize: '13px',
+                              lineHeight: '1.6',
+                              padding: '4px 0'
+                            }}
+                          >
+                            <div 
+                              style={{ 
+                                width: '16px', 
+                                height: '16px', 
+                                backgroundColor: entry.color,
+                                borderRadius: '3px',
+                                flexShrink: 0,
+                                marginTop: '2px',
+                                border: '1px solid rgba(0, 0, 0, 0.1)'
+                              }} 
+                            />
+                            <span style={{ 
+                              color: '#1f2937',
+                              fontWeight: '500',
+                              wordBreak: 'break-word'
+                            }}>
+                              {entry.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
               }}
             />
             {reasons.map((reason, index) => (
