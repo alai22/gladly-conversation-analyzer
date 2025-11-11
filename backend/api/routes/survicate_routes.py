@@ -173,3 +173,146 @@ def search_surveys():
             'details': 'Failed to search survey data'
         }), 500
 
+
+@survicate_bp.route('/churn-trends', methods=['GET'])
+def get_churn_trends():
+    """Get churn reason trends by month for visualization"""
+    try:
+        import pandas as pd
+        import os
+        
+        # Get the path to the CSV file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.join(current_dir, '..', '..', '..', 'data', 
+                                'survicate_cancelled_subscriptions_augmented.csv')
+        
+        if not os.path.exists(csv_path):
+            logger.error(f"CSV file not found at {csv_path}")
+            return jsonify({
+                'error': 'Data file not found',
+                'details': f'Expected file at: {csv_path}'
+            }), 404
+        
+        # Read the CSV
+        df = pd.read_csv(csv_path)
+        
+        # Filter out rows with missing data
+        df = df[df['augmented_churn_reason'].notna() & df['year_month'].notna()]
+        
+        if len(df) == 0:
+            return jsonify({
+                'error': 'No valid data found',
+                'details': 'No rows with valid augmented_churn_reason and year_month'
+            }), 400
+        
+        # Group by year_month and augmented_churn_reason
+        grouped = df.groupby(['year_month', 'augmented_churn_reason']).size().reset_index(name='count')
+        
+        # Calculate percentages for each month
+        monthly_totals = df.groupby('year_month').size()
+        grouped['percentage'] = grouped.apply(
+            lambda row: (row['count'] / monthly_totals[row['year_month']]) * 100, 
+            axis=1
+        )
+        
+        # Get unique months and reasons
+        months = sorted(grouped['year_month'].unique())
+        reasons = sorted(grouped['augmented_churn_reason'].unique())
+        
+        # Format data for frontend - create array of objects with month and all reason percentages
+        data = []
+        for month in months:
+            month_data = {'month': month}
+            month_df = grouped[grouped['year_month'] == month]
+            for reason in reasons:
+                reason_data = month_df[month_df['augmented_churn_reason'] == reason]
+                month_data[reason] = round(reason_data['percentage'].values[0], 2) if len(reason_data) > 0 else 0
+            data.append(month_data)
+        
+        # Calculate total counts for each reason (for sorting/legend)
+        reason_totals = {}
+        for reason in reasons:
+            reason_totals[reason] = int(grouped[grouped['augmented_churn_reason'] == reason]['count'].sum())
+        
+        # Sort reasons by total count (descending) for consistent ordering
+        sorted_reasons = sorted(reasons, key=lambda x: reason_totals[x], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'data': data,
+            'reasons': sorted_reasons,
+            'months': months,
+            'reason_totals': reason_totals,
+            'total_responses': int(len(df))
+        })
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to get churn trends: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'error': str(e),
+            'details': 'Failed to process churn trends data'
+        }), 500
+
+
+@survicate_bp.route('/generate-pdf-report', methods=['POST'])
+def generate_pdf_report():
+    """Generate and return a PDF report of churn trends"""
+    try:
+        import sys
+        import os
+        
+        # Get the path to the script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(current_dir, '..', '..', '..', 'generate_churn_report.py')
+        
+        if not os.path.exists(script_path):
+            return jsonify({
+                'error': 'PDF generation script not found',
+                'details': f'Expected script at: {script_path}'
+            }), 404
+        
+        # Import and run the PDF generation
+        sys.path.insert(0, os.path.dirname(script_path))
+        from generate_churn_report import generate_churn_report
+        
+        # Get CSV path
+        csv_path = os.path.join(current_dir, '..', '..', '..', 'data', 
+                                'survicate_cancelled_subscriptions_augmented.csv')
+        
+        # Generate PDF in a temporary location
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        output_path = os.path.join(temp_dir, 'churn_reasons_report.pdf')
+        
+        result = generate_churn_report(csv_path=csv_path, output_path=output_path)
+        
+        if result and os.path.exists(result):
+            from flask import send_file
+            return send_file(
+                result,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name='churn_reasons_report.pdf'
+            )
+        else:
+            return jsonify({
+                'error': 'Failed to generate PDF',
+                'details': 'PDF generation completed but file not found'
+            }), 500
+    
+    except ImportError as e:
+        logger.error(f"Failed to import PDF generation script: {str(e)}")
+        return jsonify({
+            'error': 'PDF generation dependencies not available',
+            'details': 'Please ensure matplotlib and pandas are installed. You can also run generate_churn_report.py directly.'
+        }), 500
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to generate PDF: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'error': str(e),
+            'details': 'Failed to generate PDF report'
+        }), 500

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Bot, User, Settings, Database, MessageSquare, Search, Download } from 'lucide-react';
+import { Send, Bot, User, Settings, Database, MessageSquare, Search, Download, BarChart3 } from 'lucide-react';
 import PromptInput from './components/PromptInput';
 import ConversationDisplay from './components/ConversationDisplay';
 import Sidebar from './components/Sidebar';
@@ -7,6 +7,7 @@ import SettingsPanel from './components/SettingsPanel';
 import Login from './components/Login';
 import ModeSelector from './components/ModeSelector';
 import DownloadManager from './components/DownloadManager';
+import ChurnTrendsChart from './components/ChurnTrendsChart';
 import axios from 'axios';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
     stream: false
   });
   const [healthStatus, setHealthStatus] = useState(null);
+  const [survicateView, setSurvicateView] = useState('chat'); // 'chat' or 'chart'
 
   // Load conversations and settings from localStorage on mount
   useEffect(() => {
@@ -438,6 +440,8 @@ function App() {
         <div className="flex-1 overflow-hidden">
           {currentMode === 'download' ? (
             <DownloadManager />
+          ) : currentMode === 'survicate' && survicateView === 'chart' ? (
+            <ChurnTrendsChart />
           ) : (
             <ConversationDisplay
               conversations={getCurrentConversations()}
@@ -447,8 +451,38 @@ function App() {
           )}
         </div>
 
+        {/* Survicate View Toggle */}
+        {currentMode === 'survicate' && (
+          <div className="bg-white border-t border-gray-200 px-6 py-3">
+            <div className="flex items-center justify-center space-x-2">
+              <button
+                onClick={() => setSurvicateView('chat')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center space-x-2 ${
+                  survicateView === 'chat'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>Chat</span>
+              </button>
+              <button
+                onClick={() => setSurvicateView('chart')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center space-x-2 ${
+                  survicateView === 'chart'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>Churn Trends</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Prompt Input */}
-        {currentMode !== 'download' && (
+        {currentMode !== 'download' && !(currentMode === 'survicate' && survicateView === 'chart') && (
           <div className="bg-white border-t border-gray-200 p-6">
             <PromptInput
               onSendMessage={handleSendMessage}
