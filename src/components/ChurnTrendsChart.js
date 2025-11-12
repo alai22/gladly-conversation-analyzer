@@ -436,49 +436,135 @@ const ChurnTrendsChart = () => {
 
       {/* Additional Question Trends */}
       <div className="mt-8 pt-8 border-t border-gray-200 flex-shrink-0">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Survey Question Trends</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <QuestionTrendsChart 
-            question="Q2"
-            questionText="Q#2: Where does the location pin not match your dog's location?"
-          />
-          <QuestionTrendsChart 
-            question="Q3"
-            questionText="Q#3: Was the pet location pin grayed out when the location was inaccurate?"
-          />
-          <QuestionTrendsChart 
-            question="Q4"
-            questionText="Q#4: Is the collar not sending feedback or is your dog not responding to the feedback sent?"
-          />
-          <QuestionTrendsChart 
-            question="Q5"
-            questionText="Q#5: Did you screw in the contact tips required for static feedback to work properly?"
-          />
-          <QuestionTrendsChart 
-            question="Q6"
-            questionText="Q#6: What battery life, charging or power issues did you encounter?"
-          />
-          <QuestionTrendsChart 
-            question="Q7"
-            questionText="Q#7: Which containment solution did you purchase?"
-          />
-          <QuestionTrendsChart 
-            question="Q8"
-            questionText="Q#8: Did you engage with the Learn training curriculum?"
-          />
-          <QuestionTrendsChart 
-            question="Q9"
-            questionText="Q#9: What was the main reason you didn't complete the Learn curriculum?"
-          />
-          <QuestionTrendsChart 
-            question="Q10"
-            questionText="Q#10: Did you contact our Customer Service team via Dog Park?"
-          />
-          <QuestionTrendsChart 
-            question="Q11"
-            questionText="Q#11: Would a free session with a trainer to help your dog use the collar effectively have helped you continue to use it?"
-          />
-        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">Follow-up Survey Question Trends</h3>
+        
+        {/* Helper function to get color for a parent reason */}
+        {(() => {
+          const getColorForReason = (reasonName) => {
+            const reasonIndex = reasons.findIndex(r => r === reasonName);
+            return reasonIndex >= 0 ? colors[reasonIndex % colors.length] : '#6b7280';
+          };
+
+          // Helper to convert hex to rgba with opacity
+          const hexToRgba = (hex, opacity) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+          };
+
+          // Map questions to their parent churn reasons
+          const questionGroups = [
+            {
+              parentReason: 'GPS and Location Accuracy Issues',
+              questions: [
+                { id: 'Q2', text: 'Q#2: Where does the location pin not match your dog\'s location?' },
+                { id: 'Q3', text: 'Q#3: Was the pet location pin grayed out when the location was inaccurate?' }
+              ]
+            },
+            {
+              parentReason: 'GPS doesn\'t respond to collar',
+              questions: [
+                { id: 'Q4', text: 'Q#4: Is the collar not sending feedback or is your dog not responding to the feedback sent?' },
+                { id: 'Q5', text: 'Q#5: Did you screw in the contact tips required for static feedback to work properly?' }
+              ]
+            },
+            {
+              parentReason: 'Battery life, charging or power issues',
+              questions: [
+                { id: 'Q6', text: 'Q#6: What battery life, charging or power issues did you encounter?' }
+              ]
+            },
+            {
+              parentReason: 'Found Alternative Solution',
+              questions: [
+                { id: 'Q7', text: 'Q#7: Which containment solution did you purchase?' }
+              ]
+            }
+          ];
+
+          // Other questions without parent reasons
+          const otherQuestions = [
+            { id: 'Q8', text: 'Q#8: Did you engage with the Learn training curriculum?' },
+            { id: 'Q9', text: 'Q#9: What was the main reason you didn\'t complete the Learn curriculum?' },
+            { id: 'Q10', text: 'Q#10: Did you contact our Customer Service team via Dog Park?' },
+            { id: 'Q11', text: 'Q#11: Would a free session with a trainer to help your dog use the collar effectively have helped you continue to use it?' }
+          ];
+
+          return (
+            <>
+              {/* Grouped questions by parent reason */}
+              {questionGroups.map((group, groupIndex) => {
+                const parentColor = getColorForReason(group.parentReason);
+                return (
+                  <div key={groupIndex} className="mb-8">
+                    {/* Color-coded section header */}
+                    <div 
+                      className="mb-4 p-4 rounded-lg border-l-4"
+                      style={{ 
+                        borderLeftColor: parentColor,
+                        backgroundColor: hexToRgba(parentColor, 0.08), // Very light tint of the color
+                        borderTop: `1px solid ${hexToRgba(parentColor, 0.2)}`,
+                        borderRight: `1px solid ${hexToRgba(parentColor, 0.2)}`,
+                        borderBottom: `1px solid ${hexToRgba(parentColor, 0.2)}`
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Color swatch */}
+                        <div 
+                          className="w-5 h-5 rounded flex-shrink-0"
+                          style={{ 
+                            backgroundColor: parentColor,
+                            border: '1px solid rgba(0, 0, 0, 0.1)',
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                          }}
+                        />
+                        <div className="flex-1">
+                          <h4 
+                            className="text-base font-semibold mb-1"
+                            style={{ color: '#1f2937' }}
+                          >
+                            {group.parentReason}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            Follow-up questions for users who selected this churn reason
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Questions in this group */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ml-8">
+                      {group.questions.map((q) => (
+                        <QuestionTrendsChart 
+                          key={q.id}
+                          question={q.id}
+                          questionText={q.text}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Other questions without parent reasons */}
+              {otherQuestions.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h4 className="text-base font-semibold text-gray-900 mb-4">Other Survey Questions</h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {otherQuestions.map((q) => (
+                      <QuestionTrendsChart 
+                        key={q.id}
+                        question={q.id}
+                        questionText={q.text}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
