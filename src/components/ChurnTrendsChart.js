@@ -205,7 +205,7 @@ const ChurnTrendsChart = () => {
                 borderRadius: '12px',
                 padding: '0',
                 boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)',
-                maxWidth: '400px',
+                maxWidth: '500px',
                 opacity: 1
               }}
               wrapperStyle={{ 
@@ -232,15 +232,15 @@ const ChurnTrendsChart = () => {
                 const total = nonZeroSegments[0]?.payload?._total || 0;
                 
                 return (
-                  <div style={{ padding: '16px', backgroundColor: '#ffffff' }}>
+                  <div style={{ padding: '12px', backgroundColor: '#ffffff' }}>
                     {/* Header */}
                     <div style={{ 
                       fontWeight: '600', 
-                      fontSize: '15px', 
+                      fontSize: '14px', 
                       color: '#111827', 
-                      marginBottom: '12px', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      paddingBottom: '10px' 
+                      marginBottom: '8px', 
+                      borderBottom: '1px solid #e5e7eb', 
+                      paddingBottom: '6px' 
                     }}>
                       {label}
                     </div>
@@ -249,10 +249,7 @@ const ChurnTrendsChart = () => {
                     <div style={{ 
                       display: 'flex', 
                       flexDirection: 'column', 
-                      gap: '8px',
-                      maxHeight: '400px',
-                      overflowY: 'auto',
-                      paddingRight: '4px'
+                      gap: '4px'
                     }}>
                       {sortedSegments.map((segment, index) => {
                         const reasonName = segment.dataKey;
@@ -266,23 +263,21 @@ const ChurnTrendsChart = () => {
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '10px',
-                              padding: '8px',
-                              borderRadius: '6px',
-                              backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb',
-                              transition: 'background-color 0.2s'
+                              gap: '8px',
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb'
                             }}
                           >
                             {/* Color indicator */}
                             <div 
                               style={{ 
-                                width: '14px', 
-                                height: '14px', 
+                                width: '12px', 
+                                height: '12px', 
                                 backgroundColor: color,
-                                borderRadius: '3px',
+                                borderRadius: '2px',
                                 flexShrink: 0,
-                                border: '1px solid rgba(0, 0, 0, 0.1)',
-                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                                border: '1px solid rgba(0, 0, 0, 0.1)'
                               }} 
                             />
                             
@@ -291,29 +286,29 @@ const ChurnTrendsChart = () => {
                               <div style={{ 
                                 fontWeight: '500', 
                                 color: '#1f2937', 
-                                fontSize: '13px', 
-                                marginBottom: '4px',
-                                lineHeight: '1.4'
+                                fontSize: '12px', 
+                                marginBottom: '2px',
+                                lineHeight: '1.3'
                               }}>
                                 {reasonName}
                               </div>
                               <div style={{ 
                                 display: 'flex', 
                                 alignItems: 'center', 
-                                gap: '8px',
-                                fontSize: '12px'
+                                gap: '6px',
+                                fontSize: '11px'
                               }}>
                                 <span style={{ 
                                   fontWeight: '600', 
                                   color: '#111827',
-                                  fontSize: '14px'
+                                  fontSize: '12px'
                                 }}>
                                   {percentage.toFixed(2)}%
                                 </span>
                                 {count > 0 && (
                                   <span style={{ 
                                     color: '#6b7280',
-                                    fontSize: '11px'
+                                    fontSize: '10px'
                                   }}>
                                     ({count.toLocaleString()} of {total.toLocaleString()})
                                   </span>

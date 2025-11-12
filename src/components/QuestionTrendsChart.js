@@ -129,7 +129,7 @@ const QuestionTrendsChart = ({ question, questionText }) => {
                 borderRadius: '12px',
                 padding: '0',
                 boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)',
-                maxWidth: '400px',
+                maxWidth: '350px',
                 opacity: 1
               }}
               wrapperStyle={{ 
@@ -156,11 +156,11 @@ const QuestionTrendsChart = ({ question, questionText }) => {
                   <div style={{ padding: '10px', backgroundColor: '#ffffff' }}>
                     <div style={{ 
                       fontWeight: '600', 
-                      fontSize: '13px', 
+                      fontSize: '12px', 
                       color: '#1f2937', 
-                      marginBottom: '8px', 
+                      marginBottom: '6px', 
                       borderBottom: '1px solid #e5e7eb', 
-                      paddingBottom: '8px' 
+                      paddingBottom: '6px' 
                     }}>
                       Month: {label}
                     </div>
@@ -176,13 +176,13 @@ const QuestionTrendsChart = ({ question, questionText }) => {
                         }} 
                       />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '13px', marginBottom: '4px' }}>
+                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '12px', marginBottom: '3px' }}>
                           {answerName}
                         </div>
-                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', marginBottom: '2px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '2px' }}>
                           {percentage.toFixed(1)}%
                         </div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>
                           {count.toLocaleString()} of {total.toLocaleString()} responses
                         </div>
                       </div>
