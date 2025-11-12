@@ -253,7 +253,7 @@ def create_question_chart(df, question_id, question_text):
     
     # Get unique answers
     df_filtered['answer'] = df_filtered[column_name].astype(str).str.strip()
-    unique_answers = sorted(df_filtered['answer'].unique())
+    unique_answers = df_filtered['answer'].unique().tolist()
     
     # Group by month and answer
     grouped = df_filtered.groupby(['year_month', 'answer']).size().reset_index(name='count')
@@ -263,10 +263,21 @@ def create_question_chart(df, question_id, question_text):
         axis=1
     )
     
+    # Calculate total counts for each answer (for sorting)
+    answer_totals = {}
+    for answer in unique_answers:
+        answer_totals[answer] = int(grouped[grouped['answer'] == answer]['count'].sum())
+    
+    # Sort answers by total count (descending) for consistent ordering
+    sorted_answers = sorted(unique_answers, key=lambda x: answer_totals[x], reverse=True)
+    
     # Pivot data
     pivot_data = grouped.pivot(index='answer', columns='year_month', values='percentage').fillna(0)
     months = sorted(pivot_data.columns)
     pivot_data = pivot_data[months]
+    
+    # Reorder pivot_data rows by sorted_answers
+    pivot_data = pivot_data.loc[sorted_answers]
     
     # Color palette for answers
     answer_colors = ['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6']

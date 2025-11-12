@@ -549,7 +549,7 @@ def get_question_trends():
         
         # Get unique answers
         df_with_responses['answer'] = df_with_responses[column_name].astype(str).str.strip()
-        unique_answers = sorted(df_with_responses['answer'].unique())
+        unique_answers = df_with_responses['answer'].unique().tolist()
         
         # Group by month and answer to get counts
         grouped = df_with_responses.groupby(['year_month', 'answer']).size().reset_index(name='count')
@@ -560,6 +560,14 @@ def get_question_trends():
         # Get unique months
         months = sorted(df_with_responses['year_month'].unique())
         
+        # Calculate total counts for each answer (for sorting)
+        answer_totals = {}
+        for answer in unique_answers:
+            answer_totals[answer] = int(grouped[grouped['answer'] == answer]['count'].sum())
+        
+        # Sort answers by total count (descending) for consistent ordering
+        sorted_answers = sorted(unique_answers, key=lambda x: answer_totals[x], reverse=True)
+        
         # Format data for frontend - create array with month and all answer counts
         data = []
         for month in months:
@@ -567,7 +575,7 @@ def get_question_trends():
             month_total = int(monthly_totals[month])
             month_df = grouped[grouped['year_month'] == month]
             
-            for answer in unique_answers:
+            for answer in sorted_answers:
                 answer_data = month_df[month_df['answer'] == answer]
                 if len(answer_data) > 0:
                     count = int(answer_data['count'].values[0])
@@ -585,7 +593,7 @@ def get_question_trends():
             'question': question,
             'question_text': column_name,
             'data': data,
-            'answers': unique_answers,
+            'answers': sorted_answers,
             'months': months,
             'total_responses': int(len(df_with_responses))
         })
