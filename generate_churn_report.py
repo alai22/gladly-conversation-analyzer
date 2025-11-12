@@ -60,35 +60,65 @@ def generate_churn_report(csv_path='data/survicate_cancelled_subscriptions_augme
     
     # Sort reasons by total percentage (descending) to keep largest on top
     reason_totals = pivot_data.sum(axis=1).sort_values(ascending=False)
+    
+    # Keep only top 11 reasons, aggregate the rest into "Other"
+    top_n = 11
+    top_reasons = reason_totals.head(top_n).index.tolist()
+    other_reasons = reason_totals.tail(len(reason_totals) - top_n).index.tolist() if len(reason_totals) > top_n else []
+    
+    # Aggregate "Other" reasons if there are any (before filtering pivot_data)
+    if len(other_reasons) > 0:
+        other_data = pivot_data.loc[other_reasons].sum(axis=0)
+        # Create new pivot with top reasons + Other
+        pivot_data = pivot_data.loc[top_reasons]
+        pivot_data.loc['Other'] = other_data
+    else:
+        # Just keep top reasons
+        pivot_data = pivot_data.loc[top_reasons]
+    
+    # Re-sort to ensure "Other" is at the bottom
+    reason_totals = pivot_data.sum(axis=1).sort_values(ascending=False)
+    # Put "Other" at the end if it exists
+    if 'Other' in reason_totals.index:
+        other_total = reason_totals['Other']
+        reason_totals = reason_totals.drop('Other')
+        reason_totals['Other'] = other_total
     pivot_data = pivot_data.loc[reason_totals.index]
     
-    print(f"Found {len(pivot_data)} unique churn reasons across {len(months)} months")
+    print(f"Found {len(reason_totals)} churn reason categories (top {top_n} + {'Other' if len(other_reasons) > 0 else 'none'}) across {len(months)} months")
+    if len(other_reasons) > 0:
+        print(f"  - Aggregated {len(other_reasons)} reasons into 'Other'")
     
-    # Google Sheets-style color palette with varied saturation for better distinction
-    # First 7 are vibrant, then we introduce lower saturation colors for variety
+    # Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
+    # Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
     colors = [
-        '#4285F4',  # Google Blue - vibrant
-        '#EA4335',  # Google Red - vibrant
-        '#FBBC04',  # Google Yellow - vibrant
-        '#34A853',  # Google Green - vibrant
-        '#FF6D01',  # Bright Orange - vibrant
-        '#9334E6',  # Bright Purple - vibrant
-        '#00ACC1',  # Cyan - vibrant
-        '#8E6AB8',  # Muted Purple - lower saturation
-        '#4CAF50',  # Medium Green - medium saturation
-        '#FF9800',  # Deep Orange - medium saturation
-        '#9C27B0',  # Deep Purple - medium saturation
-        '#00BCD4',  # Light Cyan - medium saturation
-        '#795548',  # Brown - lower saturation
-        '#607D8B',  # Blue Grey - lower saturation
-        '#E91E63',  # Pink - medium saturation
-        '#009688',  # Teal - medium saturation
-        '#FF5722',  # Deep Orange-Red - medium saturation
-        '#3F51B5',  # Indigo - medium saturation
-        '#CDDC39',  # Lime - lower saturation
-        '#FFC107',  # Amber - medium saturation
-        '#9E9E9E',  # Grey - lower saturation
-        '#F44336',  # Light Red - medium saturation
+        # Cycle 1: Vibrant colors
+        '#4285F4',  # Blue - vibrant
+        '#EA4335',  # Red - vibrant
+        '#FBBC04',  # Yellow - vibrant
+        '#34A853',  # Green - vibrant
+        '#FF6D01',  # Orange - vibrant
+        '#9334E6',  # Purple - vibrant
+        '#00ACC1',  # Teal - vibrant
+        # Cycle 2: Softer pastels (same hue sequence, lower saturation)
+        '#64B5F6',  # Blue - softer pastel
+        '#F28B82',  # Red - softer pastel
+        '#FFF176',  # Yellow - softer pastel
+        '#81C784',  # Green - softer pastel
+        '#FFB74D',  # Orange - softer pastel
+        '#BA68C8',  # Purple - softer pastel
+        '#4DB6AC',  # Teal - softer pastel
+        # Cycle 3: Very soft pastels (same hue sequence, even lower saturation)
+        '#BBDEFB',  # Blue - very soft pastel
+        '#FAD2CF',  # Red - very soft pastel
+        '#FFF9C4',  # Yellow - very soft pastel
+        '#C8E6C9',  # Green - very soft pastel
+        '#FFE0B2',  # Orange - very soft pastel
+        '#E1BEE7',  # Purple - very soft pastel
+        '#B2DFDB',  # Teal - very soft pastel
+        # Additional very pale for overflow
+        '#E8F0FE',  # Very pale Blue
+        '#FCE8E6',  # Very pale Red
     ]
     
     # If we need more colors, use a light, vibrant colormap

@@ -125,11 +125,12 @@ const QuestionTrendsChart = ({ question, questionText }) => {
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 padding: '0',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                backdropFilter: 'blur(4px)'
               }}
               cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
               content={({ active, payload, label }) => {

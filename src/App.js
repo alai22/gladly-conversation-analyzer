@@ -20,7 +20,7 @@ function App() {
     survicate: [],
     'churn-trends': []
   });
-  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download', 'survicate', 'churn-trends'
+  const [currentMode, setCurrentMode] = useState('churn-trends'); // 'claude', 'conversations', 'ask', 'download', 'survicate', 'churn-trends'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);

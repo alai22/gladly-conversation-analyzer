@@ -25,10 +25,10 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch survey stats when in survicate mode (no auto-refresh since file is static)
+  // Fetch survey stats when in survicate or churn-trends mode (no auto-refresh since file is static)
   useEffect(() => {
     const fetchSurveyStats = async () => {
-      if (currentMode === 'survicate') {
+      if (currentMode === 'survicate' || currentMode === 'churn-trends') {
         try {
           const response = await fetch('/api/survicate/summary');
           const data = await response.json();
@@ -72,8 +72,8 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode }) => {
         <div className="flex items-center space-x-3 mb-4">
           <Database className="h-8 w-8 text-blue-600" />
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Gladly Tester</h2>
-            <p className="text-sm text-gray-500">Conversation Analysis</p>
+            <h2 className="text-lg font-semibold text-gray-900">Halo AI Insights</h2>
+            <p className="text-sm text-gray-500">Customer Intelligence</p>
           </div>
         </div>
         
@@ -129,6 +129,48 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode }) => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Churn Trends Stats */}
+      {surveyStats && currentMode === 'churn-trends' && (
+        <div className="p-6 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            <div className="mb-2">
+              <strong>Churn Trends Data:</strong>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Survey Responses</span>
+                <span className="font-semibold text-blue-600">{surveyStats.total_responses?.toLocaleString() || 0}</span>
+              </div>
+              {surveyStats.date_range && (
+                <div className="flex flex-col space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Start Date</span>
+                    <span className="font-semibold text-gray-700 text-xs">
+                      {surveyStats.date_range.start !== 'Unknown' ? (
+                        new Date(surveyStats.date_range.start).toLocaleDateString()
+                      ) : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">End Date</span>
+                    <span className="font-semibold text-gray-700 text-xs">
+                      {surveyStats.date_range.end !== 'Unknown' ? (
+                        new Date(surveyStats.date_range.end).toLocaleDateString()
+                      ) : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            {surveyStats.total_responses === 0 && (
+              <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                No survey data loaded. Ensure the CSV file is in the data directory.
+              </div>
+            )}
           </div>
         </div>
       )}

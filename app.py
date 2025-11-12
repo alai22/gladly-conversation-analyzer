@@ -102,7 +102,7 @@ def create_app():
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <meta name="theme-color" content="#000000" />
             <meta name="description" content="Gladly AI Analysis Interface" />
-            <title>Gladly AI Analyzer</title>
+            <title>Halo AI Insights</title>
         </head>
         <body>
             <noscript>You need to enable JavaScript to run this app.</noscript>

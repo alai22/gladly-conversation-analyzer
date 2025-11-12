@@ -12,31 +12,36 @@ const ChurnTrendsChart = () => {
   const [error, setError] = useState(null);
   const [totalResponses, setTotalResponses] = useState(0);
 
-  // Google Sheets-style color palette with varied saturation for better distinction
-  // First 7 are vibrant, then we introduce lower saturation colors for variety
+  // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
+  // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
   const colors = [
-    '#4285F4',  // Google Blue - vibrant
-    '#EA4335',  // Google Red - vibrant
-    '#FBBC04',  // Google Yellow - vibrant
-    '#34A853',  // Google Green - vibrant
-    '#FF6D01',  // Bright Orange - vibrant
-    '#9334E6',  // Bright Purple - vibrant
-    '#00ACC1',  // Cyan - vibrant
-    '#8E6AB8',  // Muted Purple - lower saturation
-    '#4CAF50',  // Medium Green - medium saturation
-    '#FF9800',  // Deep Orange - medium saturation
-    '#9C27B0',  // Deep Purple - medium saturation
-    '#00BCD4',  // Light Cyan - medium saturation
-    '#795548',  // Brown - lower saturation
-    '#607D8B',  // Blue Grey - lower saturation
-    '#E91E63',  // Pink - medium saturation
-    '#009688',  // Teal - medium saturation
-    '#FF5722',  // Deep Orange-Red - medium saturation
-    '#3F51B5',  // Indigo - medium saturation
-    '#CDDC39',  // Lime - lower saturation
-    '#FFC107',  // Amber - medium saturation
-    '#9E9E9E',  // Grey - lower saturation
-    '#F44336',  // Light Red - medium saturation
+    // Cycle 1: Vibrant colors
+    '#4285F4',  // Blue - vibrant
+    '#EA4335',  // Red - vibrant
+    '#FBBC04',  // Yellow - vibrant
+    '#34A853',  // Green - vibrant
+    '#FF6D01',  // Orange - vibrant
+    '#9334E6',  // Purple - vibrant
+    '#00ACC1',  // Teal - vibrant
+    // Cycle 2: Softer pastels (same hue sequence, lower saturation)
+    '#64B5F6',  // Blue - softer pastel
+    '#F28B82',  // Red - softer pastel
+    '#FFF176',  // Yellow - softer pastel
+    '#81C784',  // Green - softer pastel
+    '#FFB74D',  // Orange - softer pastel
+    '#BA68C8',  // Purple - softer pastel
+    '#4DB6AC',  // Teal - softer pastel
+    // Cycle 3: Very soft pastels (same hue sequence, even lower saturation)
+    '#BBDEFB',  // Blue - very soft pastel
+    '#FAD2CF',  // Red - very soft pastel
+    '#FFF9C4',  // Yellow - very soft pastel
+    '#C8E6C9',  // Green - very soft pastel
+    '#FFE0B2',  // Orange - very soft pastel
+    '#E1BEE7',  // Purple - very soft pastel
+    '#B2DFDB',  // Teal - very soft pastel
+    // Additional very pale for overflow
+    '#E8F0FE',  // Very pale Blue
+    '#FCE8E6',  // Very pale Red
   ];
 
   const fetchChurnTrends = async () => {
@@ -193,11 +198,12 @@ const ChurnTrendsChart = () => {
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 padding: '0',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                backdropFilter: 'blur(4px)'
               }}
               cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
               content={({ active, payload, label }) => {

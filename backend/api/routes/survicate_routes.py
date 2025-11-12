@@ -248,13 +248,62 @@ def get_churn_trends():
         # Sort reasons by total count (descending) for consistent ordering
         sorted_reasons = sorted(reasons, key=lambda x: reason_totals[x], reverse=True)
         
+        # Keep only top 11 reasons, aggregate the rest into "Other"
+        top_n = 11
+        top_reasons = sorted_reasons[:top_n]
+        other_reasons = sorted_reasons[top_n:] if len(sorted_reasons) > top_n else []
+        
+        # Aggregate data: combine non-top reasons into "Other"
+        aggregated_data = []
+        for month in months:
+            month_data = {'month': month}
+            month_total = int(monthly_totals[month])
+            month_data['_total'] = month_total
+            
+            # Get data for this month
+            month_df = grouped[grouped['year_month'] == month]
+            
+            # Add top reasons
+            for reason in top_reasons:
+                reason_data = month_df[month_df['augmented_churn_reason'] == reason]
+                count_key = f'{reason}_count'
+                if len(reason_data) > 0:
+                    month_data[reason] = round(reason_data['percentage'].values[0], 2)
+                    month_data[count_key] = int(reason_data['count'].values[0])
+                else:
+                    month_data[reason] = 0
+                    month_data[count_key] = 0
+            
+            # Aggregate "Other" reasons
+            other_count = 0
+            other_percentage = 0
+            for reason in other_reasons:
+                reason_data = month_df[month_df['augmented_churn_reason'] == reason]
+                if len(reason_data) > 0:
+                    other_count += int(reason_data['count'].values[0])
+                    other_percentage += reason_data['percentage'].values[0]
+            
+            # Add "Other" category
+            if len(other_reasons) > 0:
+                month_data['Other'] = round(other_percentage, 2)
+                month_data['Other_count'] = other_count
+            
+            aggregated_data.append(month_data)
+        
+        # Create final reasons list with "Other" if needed
+        final_reasons = top_reasons.copy()
+        if len(other_reasons) > 0:
+            final_reasons.append('Other')
+            reason_totals['Other'] = sum(reason_totals[r] for r in other_reasons)
+        
         return jsonify({
             'success': True,
-            'data': data,
-            'reasons': sorted_reasons,
+            'data': aggregated_data,
+            'reasons': final_reasons,
             'months': months,
-            'reason_totals': reason_totals,
-            'total_responses': int(len(df))
+            'reason_totals': {r: reason_totals[r] for r in final_reasons},
+            'total_responses': int(len(df)),
+            'other_reasons_count': len(other_reasons)
         })
     
     except Exception as e:
