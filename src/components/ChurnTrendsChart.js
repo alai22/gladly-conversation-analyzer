@@ -143,6 +143,23 @@ const ChurnTrendsChart = () => {
     return chartItem;
   });
 
+  // Calculate aggregate "Total" column
+  const aggregateData = {
+    month: 'Total',
+    _total: totalResponses,
+    _isAggregate: true // Flag to style differently
+  };
+  
+  reasons.forEach(reason => {
+    const totalCount = reasonTotals[reason] || 0;
+    const aggregatePercentage = totalResponses > 0 ? (totalCount / totalResponses) * 100 : 0;
+    aggregateData[reason] = Math.round(aggregatePercentage * 100) / 100; // Round to 2 decimal places
+    aggregateData[`${reason}_count`] = totalCount;
+  });
+
+  // Append aggregate column to chart data
+  const chartDataWithTotal = [...chartData, aggregateData];
+
   return (
     <div className="flex flex-col p-4 bg-white" style={{ minHeight: '100vh' }}>
       {/* Header */}
@@ -180,7 +197,7 @@ const ChurnTrendsChart = () => {
       <div style={{ height: '900px', flexShrink: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={chartData}
+            data={chartDataWithTotal}
             margin={{ top: 10, right: 30, left: 20, bottom: 50 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -190,6 +207,26 @@ const ChurnTrendsChart = () => {
               textAnchor="end"
               height={80}
               tick={{ fontSize: 12 }}
+              tickFormatter={(value) => value}
+              tick={(props) => {
+                const { x, y, payload } = props;
+                const isTotal = payload.value === 'Total';
+                return (
+                  <g transform={`translate(${x},${y})`}>
+                    <text
+                      x={0}
+                      y={0}
+                      dy={16}
+                      textAnchor="end"
+                      fill={isTotal ? '#1f2937' : '#6b7280'}
+                      fontSize={isTotal ? 13 : 12}
+                      fontWeight={isTotal ? '600' : '400'}
+                    >
+                      {payload.value}
+                    </text>
+                  </g>
+                );
+              }}
             />
             <YAxis 
               label={{ value: 'Percentage of Churn (%)', angle: -90, position: 'insideLeft' }}

@@ -95,6 +95,38 @@ const QuestionTrendsChart = ({ question, questionText }) => {
     return chartItem;
   });
 
+  // Calculate aggregate "Total" column
+  const aggregateData = {
+    month: 'Total',
+    _isAggregate: true // Flag to style differently
+  };
+
+  // Sum counts across all months for each answer
+  const answerTotals = {};
+  let aggregateTotal = 0;
+  
+  data.forEach(item => {
+    aggregateTotal += item._total || 0;
+    answers.forEach(answer => {
+      const count = item[answer] || 0;
+      answerTotals[answer] = (answerTotals[answer] || 0) + count;
+    });
+  });
+
+  // Calculate aggregate percentages
+  answers.forEach(answer => {
+    const totalCount = answerTotals[answer] || 0;
+    const aggregatePercentage = aggregateTotal > 0 ? (totalCount / aggregateTotal) * 100 : 0;
+    aggregateData[answer] = Math.round(aggregatePercentage * 100) / 100; // Round to 2 decimal places
+    aggregateData[`${answer}_count`] = totalCount;
+    aggregateData[`${answer}_percentage`] = aggregatePercentage;
+  });
+
+  aggregateData._total = aggregateTotal;
+
+  // Append aggregate column to chart data
+  const chartDataWithTotal = [...chartData, aggregateData];
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="mb-4">
@@ -104,7 +136,7 @@ const QuestionTrendsChart = ({ question, questionText }) => {
       <div style={{ height: '340px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={chartData}
+            data={chartDataWithTotal}
             margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -114,6 +146,26 @@ const QuestionTrendsChart = ({ question, questionText }) => {
               textAnchor="end"
               height={60}
               tick={{ fontSize: 11 }}
+              tickFormatter={(value) => value}
+              tick={(props) => {
+                const { x, y, payload } = props;
+                const isTotal = payload.value === 'Total';
+                return (
+                  <g transform={`translate(${x},${y})`}>
+                    <text
+                      x={0}
+                      y={0}
+                      dy={16}
+                      textAnchor="end"
+                      fill={isTotal ? '#1f2937' : '#6b7280'}
+                      fontSize={isTotal ? 12 : 11}
+                      fontWeight={isTotal ? '600' : '400'}
+                    >
+                      {payload.value}
+                    </text>
+                  </g>
+                );
+              }}
             />
             <YAxis 
               label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft', fontSize: 12 }}
