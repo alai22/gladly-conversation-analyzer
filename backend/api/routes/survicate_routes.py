@@ -378,6 +378,68 @@ def generate_pdf_report():
         }), 500
 
 
+@survicate_bp.route('/generate-slides-report', methods=['POST'])
+def generate_slides_report():
+    """Generate and return a PowerPoint presentation of churn trends"""
+    try:
+        import sys
+        import os
+        
+        # Get the path to the script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(current_dir, '..', '..', '..', 'generate_churn_slides.py')
+        
+        if not os.path.exists(script_path):
+            return jsonify({
+                'error': 'Slides generation script not found',
+                'details': f'Expected script at: {script_path}'
+            }), 404
+        
+        # Import and run the slides generation
+        sys.path.insert(0, os.path.dirname(script_path))
+        from generate_churn_slides import generate_churn_slides
+        
+        # Get CSV path
+        csv_path = os.path.join(current_dir, '..', '..', '..', 'data', 
+                                'survicate_cancelled_subscriptions_augmented.csv')
+        
+        # Generate PowerPoint in a temporary location
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        output_path = os.path.join(temp_dir, 'churn_trends_slides.pptx')
+        
+        result = generate_churn_slides(csv_path=csv_path, output_path=output_path)
+        
+        if result and os.path.exists(result):
+            from flask import send_file
+            return send_file(
+                result,
+                mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                as_attachment=True,
+                download_name='churn_trends_slides.pptx'
+            )
+        else:
+            return jsonify({
+                'error': 'Failed to generate PowerPoint',
+                'details': 'PowerPoint generation completed but file not found'
+            }), 500
+    
+    except ImportError as e:
+        logger.error(f"Failed to import slides generation script: {str(e)}")
+        return jsonify({
+            'error': 'Slides generation dependencies not available',
+            'details': 'Please ensure python-pptx, matplotlib, and pandas are installed.'
+        }), 500
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to generate PowerPoint: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'error': str(e),
+            'details': 'Failed to generate PowerPoint presentation'
+        }), 500
+
+
 @survicate_bp.route('/question-trends', methods=['GET'])
 def get_question_trends():
     """Get trends for specific survey questions by month (COUNTA of non-empty values)"""

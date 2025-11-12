@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { RefreshCw, AlertCircle, Download } from 'lucide-react';
+import { RefreshCw, AlertCircle, Download, Presentation } from 'lucide-react';
 import axios from 'axios';
 import QuestionTrendsChart from './QuestionTrendsChart';
 
@@ -90,6 +90,28 @@ const ChurnTrendsChart = () => {
     } catch (err) {
       console.error('Error downloading PDF:', err);
       alert('Failed to generate PDF. You can run the generate_churn_report.py script manually.');
+    }
+  };
+
+  const handleDownloadSlides = async () => {
+    try {
+      // Trigger PowerPoint generation on backend
+      const response = await axios.post('/api/survicate/generate-slides-report', {}, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'churn_trends_slides.pptx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading PowerPoint:', err);
+      alert('Failed to generate PowerPoint. Please try again.');
     }
   };
 
@@ -189,6 +211,13 @@ const ChurnTrendsChart = () => {
           >
             <Download className="h-4 w-4" />
             <span>Download PDF</span>
+          </button>
+          <button
+            onClick={handleDownloadSlides}
+            className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+          >
+            <Presentation className="h-4 w-4" />
+            <span>Download Slides</span>
           </button>
         </div>
       </div>
