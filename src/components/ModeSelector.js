@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Database, Search, MessageSquare, ChevronDown, Download, FileText } from 'lucide-react';
+import { Bot, Database, Search, MessageSquare, ChevronDown, Download, FileText, BarChart3 } from 'lucide-react';
 
 const ModeSelector = ({ currentMode, setCurrentMode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -40,6 +40,13 @@ const ModeSelector = ({ currentMode, setCurrentMode }) => {
       description: 'RAG-powered analysis of cancellation surveys',
       icon: FileText,
       color: 'text-teal-600'
+    },
+    {
+      id: 'churn-trends',
+      name: 'Churn Trends',
+      description: 'Visualize cancellation trends and patterns',
+      icon: BarChart3,
+      color: 'text-red-600'
     }
   ];
 

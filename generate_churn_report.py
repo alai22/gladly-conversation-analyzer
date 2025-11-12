@@ -64,29 +64,31 @@ def generate_churn_report(csv_path='data/survicate_cancelled_subscriptions_augme
     
     print(f"Found {len(pivot_data)} unique churn reasons across {len(months)} months")
     
-    # Google Sheets-style color palette - light, vibrant, and easy to distinguish
-    # These colors are bright, have good contrast, and are colorblind-friendly
+    # Google Sheets-style color palette with varied saturation for better distinction
+    # First 7 are vibrant, then we introduce lower saturation colors for variety
     colors = [
-        '#4285F4',  # Google Blue
-        '#EA4335',  # Google Red
-        '#FBBC04',  # Google Yellow
-        '#34A853',  # Google Green
-        '#FF6D01',  # Bright Orange
-        '#9334E6',  # Bright Purple
-        '#00ACC1',  # Cyan
-        '#FF5252',  # Light Red
-        '#66BB6A',  # Light Green
-        '#42A5F5',  # Light Blue
-        '#AB47BC',  # Light Purple
-        '#FFA726',  # Light Orange
-        '#26A69A',  # Teal
-        '#EF5350',  # Coral
-        '#5C6BC0',  # Indigo
-        '#FFCA28',  # Amber
-        '#26C6DA',  # Light Cyan
-        '#EC407A',  # Pink
-        '#7E57C2',  # Deep Purple
-        '#78909C',  # Blue Grey
+        '#4285F4',  # Google Blue - vibrant
+        '#EA4335',  # Google Red - vibrant
+        '#FBBC04',  # Google Yellow - vibrant
+        '#34A853',  # Google Green - vibrant
+        '#FF6D01',  # Bright Orange - vibrant
+        '#9334E6',  # Bright Purple - vibrant
+        '#00ACC1',  # Cyan - vibrant
+        '#8E6AB8',  # Muted Purple - lower saturation
+        '#4CAF50',  # Medium Green - medium saturation
+        '#FF9800',  # Deep Orange - medium saturation
+        '#9C27B0',  # Deep Purple - medium saturation
+        '#00BCD4',  # Light Cyan - medium saturation
+        '#795548',  # Brown - lower saturation
+        '#607D8B',  # Blue Grey - lower saturation
+        '#E91E63',  # Pink - medium saturation
+        '#009688',  # Teal - medium saturation
+        '#FF5722',  # Deep Orange-Red - medium saturation
+        '#3F51B5',  # Indigo - medium saturation
+        '#CDDC39',  # Lime - lower saturation
+        '#FFC107',  # Amber - medium saturation
+        '#9E9E9E',  # Grey - lower saturation
+        '#F44336',  # Light Red - medium saturation
     ]
     
     # If we need more colors, use a light, vibrant colormap

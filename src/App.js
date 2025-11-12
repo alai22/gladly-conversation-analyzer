@@ -17,9 +17,10 @@ function App() {
     conversations: [],
     ask: [],
     download: [],
-    survicate: []
+    survicate: [],
+    'churn-trends': []
   });
-  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download', 'survicate'
+  const [currentMode, setCurrentMode] = useState('ask'); // 'claude', 'conversations', 'ask', 'download', 'survicate', 'churn-trends'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -355,7 +356,8 @@ function App() {
       conversations: [],
       ask: [],
       download: [],
-      survicate: []
+      survicate: [],
+      'churn-trends': []
     });
     setError(null);
   };
@@ -370,7 +372,8 @@ function App() {
       'conversations': 'Search Data', 
       'ask': 'Ask Claude (RAG)',
       'download': 'Download Manager',
-      'survicate': 'Survicate Surveys'
+      'survicate': 'Survicate Surveys',
+      'churn-trends': 'Churn Trends'
     };
     return modeTitles[currentMode] || 'Unknown Mode';
   };
@@ -437,9 +440,11 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-hidden">
+        <div className={`flex-1 ${currentMode === 'churn-trends' || (currentMode === 'survicate' && survicateView === 'chart') ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {currentMode === 'download' ? (
             <DownloadManager />
+          ) : currentMode === 'churn-trends' ? (
+            <ChurnTrendsChart />
           ) : currentMode === 'survicate' && survicateView === 'chart' ? (
             <ChurnTrendsChart />
           ) : (
@@ -482,7 +487,7 @@ function App() {
         )}
 
         {/* Prompt Input */}
-        {currentMode !== 'download' && !(currentMode === 'survicate' && survicateView === 'chart') && (
+        {currentMode !== 'download' && currentMode !== 'churn-trends' && !(currentMode === 'survicate' && survicateView === 'chart') && (
           <div className="bg-white border-t border-gray-200 p-6">
             <PromptInput
               onSendMessage={handleSendMessage}

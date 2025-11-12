@@ -353,7 +353,7 @@ def get_question_trends():
         if not question:
             return jsonify({
                 'error': 'Question parameter required',
-                'details': 'Specify question as Q2 or Q3'
+                'details': 'Specify question as Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, or Q11'
             }), 400
         
         # Read the CSV first to get actual column names
@@ -362,42 +362,57 @@ def get_question_trends():
         # Map question codes to search patterns (flexible matching)
         question_patterns = {
             'Q2': ['location pin', 'not match', 'dog'],
-            'Q3': ['pet location pin', 'grayed out', 'inaccurate']
+            'Q3': ['pet location pin', 'grayed out', 'inaccurate'],
+            'Q4': ['collar', 'not sending feedback', 'dog not responding'],
+            'Q5': ['screw in', 'contact tips', 'static feedback'],
+            'Q6': ['battery life', 'charging', 'power issues'],
+            'Q7': ['containment solution', 'purchase'],
+            'Q8': ['engage', 'Learn training curriculum'],
+            'Q9': ['main reason', 'didn\'t complete', 'Learn curriculum'],
+            'Q10': ['contact', 'Customer Service', 'Dog Park'],
+            'Q11': ['free session', 'trainer', 'collar effectively']
         }
         
         if question not in question_patterns:
             return jsonify({
                 'error': 'Invalid question',
-                'details': f'Valid questions: {", ".join(question_patterns.keys())}'
+                'details': f'Valid questions: {", ".join(sorted(question_patterns.keys()))}'
             }), 400
         
         # Find the column that matches the pattern
         pattern = question_patterns[question]
         column_name = None
         
+        # First try pattern matching
         for col in df.columns:
             col_lower = str(col).lower()
             # Check if all pattern words are in the column name
             if all(word.lower() in col_lower for word in pattern):
-                column_name = col
-                break
-        
-        if not column_name:
-            # Fallback: try exact match with common variations
-            exact_matches = {
-                'Q2': ['Q#2: Where does the location pin not match your dog\'s location?'],
-                'Q3': ['Q#3: Was the pet location pin grayed out when the location was inaccurate?']
-            }
-            for match in exact_matches.get(question, []):
-                if match in df.columns:
-                    column_name = match
+                # Also check if it starts with the question number
+                if f'q#{question[1:]}' in col_lower or f'q{question[1:]}' in col_lower:
+                    column_name = col
                     break
         
+        # If pattern matching didn't work, try exact match
         if not column_name:
-            logger.error(f"Could not find column for question {question}. Available columns: {list(df.columns)}")
+            # Look for columns that start with the question number
+            for col in df.columns:
+                col_str = str(col)
+                if col_str.startswith(f'Q#{question[1:]}:') or col_str.startswith(f'Q{question[1:]}:'):
+                    # For Q4, Q6, Q9, prefer the (Answer) version
+                    if question in ['Q4', 'Q6', 'Q9']:
+                        if '(Answer)' in col_str:
+                            column_name = col
+                            break
+                    else:
+                        column_name = col
+                        break
+        
+        if not column_name:
+            logger.error(f"Could not find column for question {question}. Available columns: {[c for c in df.columns if question[1:] in str(c)]}")
             return jsonify({
                 'error': 'Column not found',
-                'details': f'Could not find matching column for question {question}. Available columns contain: {[c for c in df.columns if "location" in str(c).lower() or "pin" in str(c).lower()]}'
+                'details': f'Could not find matching column for question {question}'
             }), 404
         
         # Filter out rows with missing year_month

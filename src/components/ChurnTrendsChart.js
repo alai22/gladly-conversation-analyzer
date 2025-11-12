@@ -12,29 +12,31 @@ const ChurnTrendsChart = () => {
   const [error, setError] = useState(null);
   const [totalResponses, setTotalResponses] = useState(0);
 
-  // Google Sheets-style color palette - light, vibrant, and easy to distinguish
-  // These colors are bright, have good contrast, and are colorblind-friendly
+  // Google Sheets-style color palette with varied saturation for better distinction
+  // First 7 are vibrant, then we introduce lower saturation colors for variety
   const colors = [
-    '#4285F4',  // Google Blue
-    '#EA4335',  // Google Red
-    '#FBBC04',  // Google Yellow
-    '#34A853',  // Google Green
-    '#FF6D01',  // Bright Orange
-    '#9334E6',  // Bright Purple
-    '#00ACC1',  // Cyan
-    '#FF5252',  // Light Red
-    '#66BB6A',  // Light Green
-    '#42A5F5',  // Light Blue
-    '#AB47BC',  // Light Purple
-    '#FFA726',  // Light Orange
-    '#26A69A',  // Teal
-    '#EF5350',  // Coral
-    '#5C6BC0',  // Indigo
-    '#FFCA28',  // Amber
-    '#26C6DA',  // Light Cyan
-    '#EC407A',  // Pink
-    '#7E57C2',  // Deep Purple
-    '#78909C',  // Blue Grey
+    '#4285F4',  // Google Blue - vibrant
+    '#EA4335',  // Google Red - vibrant
+    '#FBBC04',  // Google Yellow - vibrant
+    '#34A853',  // Google Green - vibrant
+    '#FF6D01',  // Bright Orange - vibrant
+    '#9334E6',  // Bright Purple - vibrant
+    '#00ACC1',  // Cyan - vibrant
+    '#8E6AB8',  // Muted Purple - lower saturation
+    '#4CAF50',  // Medium Green - medium saturation
+    '#FF9800',  // Deep Orange - medium saturation
+    '#9C27B0',  // Deep Purple - medium saturation
+    '#00BCD4',  // Light Cyan - medium saturation
+    '#795548',  // Brown - lower saturation
+    '#607D8B',  // Blue Grey - lower saturation
+    '#E91E63',  // Pink - medium saturation
+    '#009688',  // Teal - medium saturation
+    '#FF5722',  // Deep Orange-Red - medium saturation
+    '#3F51B5',  // Indigo - medium saturation
+    '#CDDC39',  // Lime - lower saturation
+    '#FFC107',  // Amber - medium saturation
+    '#9E9E9E',  // Grey - lower saturation
+    '#F44336',  // Light Red - medium saturation
   ];
 
   const fetchChurnTrends = async () => {
@@ -135,9 +137,9 @@ const ChurnTrendsChart = () => {
   });
 
   return (
-    <div className="h-full flex flex-col p-6 bg-white" style={{ minHeight: '800px' }}>
+    <div className="flex flex-col p-6 bg-white" style={{ minHeight: '100vh' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Churn Reasons Over Time</h2>
           <p className="text-sm text-gray-600 mt-1">
@@ -167,8 +169,8 @@ const ChurnTrendsChart = () => {
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="flex-1" style={{ minHeight: '500px', height: '600px' }}>
+      {/* Chart - Fixed height that won't shrink */}
+      <div style={{ height: '750px', flexShrink: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -278,9 +280,21 @@ const ChurnTrendsChart = () => {
               content={({ payload }) => {
                 if (!payload || payload.length === 0) return null;
                 
-                // Organize legend into columns for better readability
-                // Use 3 columns for better space utilization
-                const itemsPerColumn = Math.ceil(payload.length / 3);
+                // Organize legend into columns - use 4-5 columns when there's space
+                // Determine number of columns based on screen width and item count
+                const screenWidth = window.innerWidth;
+                let numColumns = 3; // Default
+                if (screenWidth >= 1920) {
+                  numColumns = 5; // Large screens
+                } else if (screenWidth >= 1440) {
+                  numColumns = 4; // Medium-large screens
+                } else if (screenWidth >= 1024) {
+                  numColumns = 3; // Standard desktop
+                } else {
+                  numColumns = 2; // Smaller screens
+                }
+                
+                const itemsPerColumn = Math.ceil(payload.length / numColumns);
                 const columns = [];
                 for (let i = 0; i < payload.length; i += itemsPerColumn) {
                   columns.push(payload.slice(i, i + itemsPerColumn));
@@ -357,7 +371,7 @@ const ChurnTrendsChart = () => {
       </div>
 
       {/* Additional Question Trends */}
-      <div className="mt-8 pt-8 border-t border-gray-200">
+      <div className="mt-8 pt-8 border-t border-gray-200 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Survey Question Trends</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <QuestionTrendsChart 
@@ -367,6 +381,38 @@ const ChurnTrendsChart = () => {
           <QuestionTrendsChart 
             question="Q3"
             questionText="Q#3: Was the pet location pin grayed out when the location was inaccurate?"
+          />
+          <QuestionTrendsChart 
+            question="Q4"
+            questionText="Q#4: Is the collar not sending feedback or is your dog not responding to the feedback sent?"
+          />
+          <QuestionTrendsChart 
+            question="Q5"
+            questionText="Q#5: Did you screw in the contact tips required for static feedback to work properly?"
+          />
+          <QuestionTrendsChart 
+            question="Q6"
+            questionText="Q#6: What battery life, charging or power issues did you encounter?"
+          />
+          <QuestionTrendsChart 
+            question="Q7"
+            questionText="Q#7: Which containment solution did you purchase?"
+          />
+          <QuestionTrendsChart 
+            question="Q8"
+            questionText="Q#8: Did you engage with the Learn training curriculum?"
+          />
+          <QuestionTrendsChart 
+            question="Q9"
+            questionText="Q#9: What was the main reason you didn't complete the Learn curriculum?"
+          />
+          <QuestionTrendsChart 
+            question="Q10"
+            questionText="Q#10: Did you contact our Customer Service team via Dog Park?"
+          />
+          <QuestionTrendsChart 
+            question="Q11"
+            questionText="Q#11: Would a free session with a trainer to help your dog use the collar effectively have helped you continue to use it?"
           />
         </div>
       </div>
