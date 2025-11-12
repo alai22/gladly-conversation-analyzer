@@ -144,9 +144,9 @@ const ChurnTrendsChart = () => {
   });
 
   return (
-    <div className="flex flex-col p-6 bg-white" style={{ minHeight: '100vh' }}>
+    <div className="flex flex-col p-4 bg-white" style={{ minHeight: '100vh' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Churn Reasons Over Time</h2>
           <p className="text-sm text-gray-600 mt-1">
@@ -177,11 +177,11 @@ const ChurnTrendsChart = () => {
       </div>
 
       {/* Chart - Fixed height that won't shrink */}
-      <div style={{ height: '750px', flexShrink: 0 }}>
+      <div style={{ height: '900px', flexShrink: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+            margin={{ top: 10, right: 30, left: 20, bottom: 50 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis 
@@ -205,7 +205,12 @@ const ChurnTrendsChart = () => {
                 borderRadius: '12px',
                 padding: '0',
                 boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)',
-                maxWidth: '400px'
+                maxWidth: '400px',
+                opacity: 1
+              }}
+              wrapperStyle={{ 
+                opacity: 1,
+                backgroundColor: '#ffffff'
               }}
               cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
               content={({ active, payload, label }) => {
@@ -227,7 +232,7 @@ const ChurnTrendsChart = () => {
                 const total = nonZeroSegments[0]?.payload?._total || 0;
                 
                 return (
-                  <div style={{ padding: '16px' }}>
+                  <div style={{ padding: '16px', backgroundColor: '#ffffff' }}>
                     {/* Header */}
                     <div style={{ 
                       fontWeight: '600', 
@@ -264,7 +269,7 @@ const ChurnTrendsChart = () => {
                               gap: '10px',
                               padding: '8px',
                               borderRadius: '6px',
-                              backgroundColor: index % 2 === 0 ? 'transparent' : '#f9fafb',
+                              backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb',
                               transition: 'background-color 0.2s'
                             }}
                           >

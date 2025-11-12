@@ -111,6 +111,19 @@ def create_app():
         </html>
         """)
     
+    # Handle common static asset requests to prevent 404 noise in logs
+    @app.route('/favicon.ico')
+    def favicon():
+        """Return 204 No Content for favicon requests"""
+        from flask import Response
+        return Response(status=204)
+    
+    @app.route('/robots.txt')
+    def robots():
+        """Return 204 No Content for robots.txt requests"""
+        from flask import Response
+        return Response(status=204)
+    
     app_logger.info("Flask application created successfully")
     return app
 

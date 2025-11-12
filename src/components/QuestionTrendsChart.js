@@ -124,12 +124,17 @@ const QuestionTrendsChart = ({ question, questionText }) => {
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                backgroundColor: '#ffffff',
                 border: '1px solid #e5e7eb',
-                borderRadius: '8px',
+                borderRadius: '12px',
                 padding: '0',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                backdropFilter: 'blur(4px)'
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)',
+                maxWidth: '400px',
+                opacity: 1
+              }}
+              wrapperStyle={{ 
+                opacity: 1,
+                backgroundColor: '#ffffff'
               }}
               cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
               content={({ active, payload, label }) => {
@@ -148,7 +153,7 @@ const QuestionTrendsChart = ({ question, questionText }) => {
                 const color = activeSegment.color;
                 
                 return (
-                  <div style={{ padding: '10px' }}>
+                  <div style={{ padding: '10px', backgroundColor: '#ffffff' }}>
                     <div style={{ 
                       fontWeight: '600', 
                       fontSize: '13px', 

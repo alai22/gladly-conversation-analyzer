@@ -82,16 +82,29 @@ def register_request_logging(app):
         )
         
         # Log response body for errors (truncated)
+        # Skip error logging for common static asset requests (browsers request these automatically)
+        common_static_assets = ['/favicon.ico', '/robots.txt', '/apple-touch-icon.png', '/manifest.json']
+        is_common_static = request.path in common_static_assets
+        
         if response.status_code >= 400:
             try:
                 response_data = response.get_data(as_text=True)
                 if response_data and len(response_data) > 1000:
                     response_data = response_data[:1000] + "... (truncated)"
-                logger.error(
-                    f"[RESPONSE ERROR] {request.method} {request.path} | "
-                    f"Status: {response.status_code} | "
-                    f"Body: {response_data}"
-                )
+                
+                # For 404s on common static assets, use debug level instead of error
+                if response.status_code == 404 and is_common_static:
+                    logger.debug(
+                        f"[RESPONSE] {request.method} {request.path} | "
+                        f"Status: {response.status_code} | "
+                        f"(Common static asset - not an error)"
+                    )
+                else:
+                    logger.error(
+                        f"[RESPONSE ERROR] {request.method} {request.path} | "
+                        f"Status: {response.status_code} | "
+                        f"Body: {response_data}"
+                    )
             except Exception as e:
                 logger.warning(f"[RESPONSE] Failed to log error response: {str(e)}")
         
