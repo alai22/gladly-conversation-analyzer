@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, Bot, Settings as SettingsIcon } from 'lucide-react';
+import { X, Bot, Settings as SettingsIcon, Download } from 'lucide-react';
 
-const SettingsPanel = ({ settings, setSettings, onClose }) => {
+const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurrentMode, onClose }) => {
   const handleChange = (key, value) => {
     setSettings(prev => ({
       ...prev,
@@ -125,6 +125,69 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
             <div><strong>System Prompt:</strong> {settings.systemPrompt ? 'Set' : 'Not set'}</div>
             <div><strong>Streaming:</strong> {settings.stream ? 'Enabled' : 'Disabled'}</div>
           </div>
+        </div>
+
+        {/* Admin Tools Section */}
+        <div className="mt-8 pt-8 border-t border-gray-200">
+          <h3 className="text-sm font-medium text-gray-900 mb-4">Admin Tools</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Claude Chat */}
+            <button
+              onClick={() => {
+                setAdminMode(adminMode === 'claude' ? null : 'claude');
+                setCurrentMode('ask'); // Reset to a regular mode
+                onClose();
+              }}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                adminMode === 'claude'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center space-x-3 mb-2">
+                <Bot className={`h-5 w-5 ${adminMode === 'claude' ? 'text-blue-600' : 'text-gray-600'}`} />
+                <h4 className={`font-medium ${adminMode === 'claude' ? 'text-blue-900' : 'text-gray-900'}`}>
+                  Claude Chat
+                </h4>
+              </div>
+              <p className="text-xs text-gray-600">
+                Direct Claude API interaction (no RAG)
+              </p>
+              {adminMode === 'claude' && (
+                <p className="text-xs text-blue-600 mt-2 font-medium">Active</p>
+              )}
+            </button>
+
+            {/* Download Manager */}
+            <button
+              onClick={() => {
+                setAdminMode(adminMode === 'download' ? null : 'download');
+                setCurrentMode('ask'); // Reset to a regular mode
+                onClose();
+              }}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                adminMode === 'download'
+                  ? 'border-orange-500 bg-orange-50'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center space-x-3 mb-2">
+                <Download className={`h-5 w-5 ${adminMode === 'download' ? 'text-orange-600' : 'text-gray-600'}`} />
+                <h4 className={`font-medium ${adminMode === 'download' ? 'text-orange-900' : 'text-gray-900'}`}>
+                  Download Manager
+                </h4>
+              </div>
+              <p className="text-xs text-gray-600">
+                Download conversation data from Gladly
+              </p>
+              {adminMode === 'download' && (
+                <p className="text-xs text-orange-600 mt-2 font-medium">Active</p>
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-4">
+            Admin tools are for advanced users and system administration. Click to activate.
+          </p>
         </div>
       </div>
     </div>

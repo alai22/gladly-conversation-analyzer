@@ -5,7 +5,7 @@ import ConversationDisplay from './components/ConversationDisplay';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
 import Login from './components/Login';
-import ModeSelector from './components/ModeSelector';
+import TabNavigation from './components/TabNavigation';
 import DownloadManager from './components/DownloadManager';
 import ChurnTrendsChart from './components/ChurnTrendsChart';
 import axios from 'axios';
@@ -20,7 +20,7 @@ function App() {
     survicate: [],
     'churn-trends': []
   });
-  const [currentMode, setCurrentMode] = useState('churn-trends'); // 'claude', 'conversations', 'ask', 'download', 'survicate', 'churn-trends'
+  const [currentMode, setCurrentMode] = useState('churn-trends'); // 'conversations', 'ask', 'survicate', 'churn-trends' (admin: 'claude', 'download')
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -31,7 +31,7 @@ function App() {
     stream: false
   });
   const [healthStatus, setHealthStatus] = useState(null);
-  const [survicateView, setSurvicateView] = useState('chat'); // 'chat' or 'chart'
+  const [adminMode, setAdminMode] = useState(null); // 'claude' or 'download' for admin tools
 
   // Load conversations and settings from localStorage on mount
   useEffect(() => {
@@ -137,15 +137,17 @@ function App() {
       response,
       metadata
     };
+    const mode = adminMode || currentMode;
     setConversations(prev => ({
       ...prev,
-      [currentMode]: [...prev[currentMode], newConversation]
+      [mode]: [...(prev[mode] || []), newConversation]
     }));
   };
 
   // Get current mode's conversations
   const getCurrentConversations = () => {
-    return conversations[currentMode] || [];
+    const mode = adminMode || currentMode;
+    return conversations[mode] || [];
   };
 
   const handleClaudeMessage = async (message) => {
@@ -322,10 +324,13 @@ function App() {
   const handleSendMessage = (message) => {
     if (!message.trim()) return;
 
+    // Check admin mode first
+    if (adminMode === 'claude') {
+      handleClaudeMessage(message);
+      return;
+    }
+
     switch (currentMode) {
-      case 'claude':
-        handleClaudeMessage(message);
-        break;
       case 'conversations':
         handleConversationSearch(message);
         break;
@@ -336,15 +341,16 @@ function App() {
         handleSurvicateAsk(message);
         break;
       default:
-        handleClaudeMessage(message);
+        handleConversationAsk(message);
     }
   };
 
   // Clear conversations for the current mode only
   const clearCurrentConversations = () => {
+    const mode = adminMode || currentMode;
     setConversations(prev => ({
       ...prev,
-      [currentMode]: []
+      [mode]: []
     }));
     setError(null);
   };
@@ -369,12 +375,15 @@ function App() {
   const getModeTitle = () => {
     const modeTitles = {
       'claude': 'Claude Chat',
-      'conversations': 'Search Data', 
-      'ask': 'Ask Claude (RAG)',
+      'conversations': 'Search Conversations', 
+      'ask': 'Ask About Conversations',
       'download': 'Download Manager',
-      'survicate': 'Survicate Surveys',
+      'survicate': 'Ask About Churn',
       'churn-trends': 'Churn Trends'
     };
+    if (adminMode) {
+      return modeTitles[adminMode] || 'Admin Mode';
+    }
     return modeTitles[currentMode] || 'Unknown Mode';
   };
 
@@ -393,10 +402,27 @@ function App() {
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <ModeSelector 
-                currentMode={currentMode} 
-                setCurrentMode={setCurrentMode} 
-              />
+              {adminMode ? (
+                <div className="flex items-center space-x-3 px-4 py-2 bg-orange-50 border-2 border-orange-200 rounded-lg">
+                  <span className="text-sm font-medium text-orange-900">
+                    Admin Mode: {getModeTitle()}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setAdminMode(null);
+                      setCurrentMode('ask');
+                    }}
+                    className="text-xs text-orange-600 hover:text-orange-800 underline"
+                  >
+                    Exit
+                  </button>
+                </div>
+              ) : (
+                <TabNavigation 
+                  currentMode={currentMode} 
+                  setCurrentMode={setCurrentMode} 
+                />
+              )}
               {getCurrentConversationCount() > 0 && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                   {getCurrentConversationCount()} messages
@@ -411,21 +437,23 @@ function App() {
               >
                 <Settings className="h-5 w-5" />
               </button>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={clearCurrentConversations}
-                  disabled={getCurrentConversationCount() === 0}
-                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Clear {getModeTitle()}
-                </button>
-                <button
-                  onClick={clearAllConversations}
-                  className="px-3 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  Clear All
-                </button>
-              </div>
+              {!adminMode && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={clearCurrentConversations}
+                    disabled={getCurrentConversationCount() === 0}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Clear {getModeTitle()}
+                  </button>
+                  <button
+                    onClick={clearAllConversations}
+                    className="px-3 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -435,17 +463,18 @@ function App() {
           <SettingsPanel
             settings={settings}
             setSettings={setSettings}
+            adminMode={adminMode}
+            setAdminMode={setAdminMode}
+            setCurrentMode={setCurrentMode}
             onClose={() => setShowSettings(false)}
           />
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || (currentMode === 'survicate' && survicateView === 'chart') ? 'overflow-y-auto' : 'overflow-hidden'}`}>
-          {currentMode === 'download' ? (
+        <div className={`flex-1 ${currentMode === 'churn-trends' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+          {adminMode === 'download' ? (
             <DownloadManager />
           ) : currentMode === 'churn-trends' ? (
-            <ChurnTrendsChart />
-          ) : currentMode === 'survicate' && survicateView === 'chart' ? (
             <ChurnTrendsChart />
           ) : (
             <ConversationDisplay
@@ -456,45 +485,15 @@ function App() {
           )}
         </div>
 
-        {/* Survicate View Toggle */}
-        {currentMode === 'survicate' && (
-          <div className="bg-white border-t border-gray-200 px-6 py-3">
-            <div className="flex items-center justify-center space-x-2">
-              <button
-                onClick={() => setSurvicateView('chat')}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center space-x-2 ${
-                  survicateView === 'chat'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <MessageSquare className="h-4 w-4" />
-                <span>Chat</span>
-              </button>
-              <button
-                onClick={() => setSurvicateView('chart')}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center space-x-2 ${
-                  survicateView === 'chart'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span>Churn Trends</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Prompt Input */}
-        {currentMode !== 'download' && currentMode !== 'churn-trends' && !(currentMode === 'survicate' && survicateView === 'chart') && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && (
           <div className="bg-white border-t border-gray-200 p-6">
             <PromptInput
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
               placeholder={
-                currentMode === 'claude' ? 'Ask Claude anything...' :
-                currentMode === 'conversations' ? 'Search conversation data...' :
+                adminMode === 'claude' ? 'Ask Claude anything...' :
+                currentMode === 'conversations' ? 'Search Gladly conversation data...' :
                 currentMode === 'survicate' ? 'Ask about cancellation survey data (e.g., "What are the main cancellation reasons?")' :
                 'Ask Claude to analyze your conversation data (e.g., "What are the main customer complaints?")'
               }
