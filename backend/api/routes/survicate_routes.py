@@ -199,6 +199,9 @@ def get_churn_trends():
         # Filter out rows with missing data
         df = df[df['augmented_churn_reason'].notna() & df['year_month'].notna()]
         
+        # Filter out November 2024 (low data volume)
+        df = df[df['year_month'] != '2024-11']
+        
         if len(df) == 0:
             return jsonify({
                 'error': 'No valid data found',
@@ -323,4 +326,149 @@ def generate_pdf_report():
         return jsonify({
             'error': str(e),
             'details': 'Failed to generate PDF report'
+        }), 500
+
+
+@survicate_bp.route('/question-trends', methods=['GET'])
+def get_question_trends():
+    """Get trends for specific survey questions by month (COUNTA of non-empty values)"""
+    try:
+        import pandas as pd
+        import os
+        
+        # Get the path to the CSV file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.join(current_dir, '..', '..', '..', 'data', 
+                                'survicate_cancelled_subscriptions_augmented.csv')
+        
+        if not os.path.exists(csv_path):
+            logger.error(f"CSV file not found at {csv_path}")
+            return jsonify({
+                'error': 'Data file not found',
+                'details': f'Expected file at: {csv_path}'
+            }), 404
+        
+        # Get question parameter
+        question = request.args.get('question')
+        if not question:
+            return jsonify({
+                'error': 'Question parameter required',
+                'details': 'Specify question as Q2 or Q3'
+            }), 400
+        
+        # Read the CSV first to get actual column names
+        df = pd.read_csv(csv_path)
+        
+        # Map question codes to search patterns (flexible matching)
+        question_patterns = {
+            'Q2': ['location pin', 'not match', 'dog'],
+            'Q3': ['pet location pin', 'grayed out', 'inaccurate']
+        }
+        
+        if question not in question_patterns:
+            return jsonify({
+                'error': 'Invalid question',
+                'details': f'Valid questions: {", ".join(question_patterns.keys())}'
+            }), 400
+        
+        # Find the column that matches the pattern
+        pattern = question_patterns[question]
+        column_name = None
+        
+        for col in df.columns:
+            col_lower = str(col).lower()
+            # Check if all pattern words are in the column name
+            if all(word.lower() in col_lower for word in pattern):
+                column_name = col
+                break
+        
+        if not column_name:
+            # Fallback: try exact match with common variations
+            exact_matches = {
+                'Q2': ['Q#2: Where does the location pin not match your dog\'s location?'],
+                'Q3': ['Q#3: Was the pet location pin grayed out when the location was inaccurate?']
+            }
+            for match in exact_matches.get(question, []):
+                if match in df.columns:
+                    column_name = match
+                    break
+        
+        if not column_name:
+            logger.error(f"Could not find column for question {question}. Available columns: {list(df.columns)}")
+            return jsonify({
+                'error': 'Column not found',
+                'details': f'Could not find matching column for question {question}. Available columns contain: {[c for c in df.columns if "location" in str(c).lower() or "pin" in str(c).lower()]}'
+            }), 404
+        
+        # Filter out rows with missing year_month
+        df = df[df['year_month'].notna()]
+        
+        # Filter out November 2024 (low data volume)
+        df = df[df['year_month'] != '2024-11']
+        
+        if len(df) == 0:
+            return jsonify({
+                'error': 'No valid data found',
+                'details': 'No rows with valid year_month'
+            }), 400
+        
+        # Filter to only rows with responses to this question
+        df_with_responses = df[df[column_name].notna() & (df[column_name].astype(str).str.strip() != '')].copy()
+        
+        if len(df_with_responses) == 0:
+            return jsonify({
+                'error': 'No responses found',
+                'details': f'No responses found for question {question}'
+            }), 400
+        
+        # Get unique answers
+        df_with_responses['answer'] = df_with_responses[column_name].astype(str).str.strip()
+        unique_answers = sorted(df_with_responses['answer'].unique())
+        
+        # Group by month and answer to get counts
+        grouped = df_with_responses.groupby(['year_month', 'answer']).size().reset_index(name='count')
+        
+        # Get total responses per month (for this question only)
+        monthly_totals = df_with_responses.groupby('year_month').size()
+        
+        # Get unique months
+        months = sorted(df_with_responses['year_month'].unique())
+        
+        # Format data for frontend - create array with month and all answer counts
+        data = []
+        for month in months:
+            month_data = {'month': month}
+            month_total = int(monthly_totals[month])
+            month_df = grouped[grouped['year_month'] == month]
+            
+            for answer in unique_answers:
+                answer_data = month_df[month_df['answer'] == answer]
+                if len(answer_data) > 0:
+                    count = int(answer_data['count'].values[0])
+                    month_data[answer] = count
+                    month_data[f'{answer}_percentage'] = round((count / month_total) * 100, 2)
+                else:
+                    month_data[answer] = 0
+                    month_data[f'{answer}_percentage'] = 0
+            
+            month_data['_total'] = month_total
+            data.append(month_data)
+        
+        return jsonify({
+            'success': True,
+            'question': question,
+            'question_text': column_name,
+            'data': data,
+            'answers': unique_answers,
+            'months': months,
+            'total_responses': int(len(df_with_responses))
+        })
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to get question trends: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'error': str(e),
+            'details': 'Failed to process question trends data'
         }), 500

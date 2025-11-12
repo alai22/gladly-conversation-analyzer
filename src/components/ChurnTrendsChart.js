@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { RefreshCw, AlertCircle, Download } from 'lucide-react';
 import axios from 'axios';
+import QuestionTrendsChart from './QuestionTrendsChart';
 
 const ChurnTrendsChart = () => {
   const [data, setData] = useState([]);
@@ -134,7 +135,7 @@ const ChurnTrendsChart = () => {
   });
 
   return (
-    <div className="h-full flex flex-col p-6 bg-white">
+    <div className="h-full flex flex-col p-6 bg-white" style={{ minHeight: '800px' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -142,6 +143,11 @@ const ChurnTrendsChart = () => {
           <p className="text-sm text-gray-600 mt-1">
             {totalResponses.toLocaleString()} total responses across {months.length} months
           </p>
+          <div className="mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-md inline-block">
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">Note:</span> November 2024 data excluded due to low response volume
+            </p>
+          </div>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -162,7 +168,7 @@ const ChurnTrendsChart = () => {
       </div>
 
       {/* Chart */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1" style={{ minHeight: '500px', height: '600px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -350,30 +356,18 @@ const ChurnTrendsChart = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Summary Stats */}
-      <div className="mt-6 pt-6 border-t border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Top Churn Reasons (All Time)</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {reasons.slice(0, 8).map((reason, index) => {
-            const total = data.reduce((sum, item) => sum + (item[reason] || 0), 0);
-            const avg = total / months.length;
-            return (
-              <div key={reason} className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-2 mb-1">
-                  <div 
-                    className="w-3 h-3 rounded"
-                    style={{ backgroundColor: colors[index % colors.length] }}
-                  />
-                  <span className="text-xs font-medium text-gray-700 truncate" title={reason}>
-                    {reason.length > 25 ? reason.substring(0, 22) + '...' : reason}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-600">
-                  Avg: {avg.toFixed(1)}%
-                </div>
-              </div>
-            );
-          })}
+      {/* Additional Question Trends */}
+      <div className="mt-8 pt-8 border-t border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Survey Question Trends</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <QuestionTrendsChart 
+            question="Q2"
+            questionText="Q#2: Where does the location pin not match your dog's location?"
+          />
+          <QuestionTrendsChart 
+            question="Q3"
+            questionText="Q#3: Was the pet location pin grayed out when the location was inaccurate?"
+          />
         </div>
       </div>
     </div>

@@ -106,7 +106,20 @@ npm run build
 
 ### Running Locally
 
-**Option 1: Using the deployment script**
+**Option 1: Run both backend and frontend together (Recommended for development)**
+
+This starts both the Flask backend and React frontend concurrently in a single terminal:
+
+```bash
+npm run dev
+```
+
+This will:
+- Start the Flask backend on `http://localhost:5000`
+- Start the React frontend on `http://localhost:3000`
+- Run both processes concurrently (press `CTRL+C` to stop both)
+
+**Option 2: Using the deployment script**
 
 **On Linux/Mac:**
 ```bash
@@ -119,15 +132,15 @@ chmod +x deploy.sh
 .\deploy.bat development
 ```
 
-**Option 2: Manual startup**
+**Option 3: Manual startup (separate terminals)**
 
 **Terminal 1 (Backend):**
 ```bash
 # On Linux/Mac:
 source venv/bin/activate && python app.py
 
-# On Windows:
-venv\Scripts\activate && python app.py
+# On Windows (PowerShell):
+venv\Scripts\activate; python app.py
 ```
 
 **Terminal 2 (Frontend - if developing):**
