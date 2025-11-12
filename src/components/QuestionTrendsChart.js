@@ -99,7 +99,6 @@ const QuestionTrendsChart = ({ question, questionText }) => {
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-900 mb-1">{questionText}</h3>
-        <p className="text-xs text-gray-600">Response breakdown by month</p>
       </div>
       
       <div style={{ height: '340px' }}>

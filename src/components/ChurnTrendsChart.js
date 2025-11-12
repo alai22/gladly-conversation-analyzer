@@ -11,6 +11,7 @@ const ChurnTrendsChart = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [totalResponses, setTotalResponses] = useState(0);
+  const [reasonTotals, setReasonTotals] = useState({});
 
   // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
   // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
@@ -54,6 +55,7 @@ const ChurnTrendsChart = () => {
         setReasons(response.data.reasons);
         setMonths(response.data.months);
         setTotalResponses(response.data.total_responses || 0);
+        setReasonTotals(response.data.reason_totals || {});
       } else {
         setError(response.data.error || 'Failed to load churn trends');
       }
@@ -198,12 +200,12 @@ const ChurnTrendsChart = () => {
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                backgroundColor: '#ffffff',
                 border: '1px solid #e5e7eb',
-                borderRadius: '8px',
+                borderRadius: '12px',
                 padding: '0',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                backdropFilter: 'blur(4px)'
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)',
+                maxWidth: '400px'
               }}
               cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
               content={({ active, payload, label }) => {
@@ -212,61 +214,110 @@ const ChurnTrendsChart = () => {
                 }
                 
                 // Filter to only show segments with non-zero values
-                // In a stacked bar, we want to show only the segment being hovered
-                // Recharts provides all segments, but we'll show the one that's most relevant
-                // (typically the one with the highest value in the hover area)
                 const nonZeroSegments = payload.filter(item => item.value > 0);
                 
                 if (nonZeroSegments.length === 0) {
                   return null;
                 }
                 
-                // For stacked bars, show the segment that's likely being hovered
-                // We'll show the segment with the highest value (top of stack) or use the first non-zero
-                const activeSegment = nonZeroSegments[0]; // Recharts orders by stack position
+                // Sort segments by value (highest to lowest) for better readability
+                const sortedSegments = [...nonZeroSegments].sort((a, b) => b.value - a.value);
                 
-                const reasonName = activeSegment.dataKey;
-                const percentage = activeSegment.value;
-                const count = activeSegment.payload[`${reasonName}_count`] || 0;
-                const total = activeSegment.payload._total || 0;
-                const color = activeSegment.color;
+                // Get total for this month
+                const total = nonZeroSegments[0]?.payload?._total || 0;
                 
                 return (
-                  <div style={{ padding: '12px' }}>
+                  <div style={{ padding: '16px' }}>
+                    {/* Header */}
                     <div style={{ 
                       fontWeight: '600', 
-                      fontSize: '14px', 
-                      color: '#1f2937', 
-                      marginBottom: '8px', 
-                      borderBottom: '1px solid #e5e7eb', 
-                      paddingBottom: '8px' 
+                      fontSize: '15px', 
+                      color: '#111827', 
+                      marginBottom: '12px', 
+                      borderBottom: '2px solid #e5e7eb', 
+                      paddingBottom: '10px' 
                     }}>
-                      Month: {label}
+                      {label}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                      <div 
-                        style={{ 
-                          width: '12px', 
-                          height: '12px', 
-                          backgroundColor: color,
-                          borderRadius: '2px',
-                          flexShrink: 0,
-                          marginTop: '2px'
-                        }} 
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px', marginBottom: '6px' }}>
-                          {reasonName}
-                        </div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
-                          {percentage.toFixed(2)}%
-                        </div>
-                        {count > 0 && (
-                          <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                            {count.toLocaleString()} of {total.toLocaleString()} responses
+                    
+                    {/* Segments list */}
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '8px',
+                      maxHeight: '400px',
+                      overflowY: 'auto',
+                      paddingRight: '4px'
+                    }}>
+                      {sortedSegments.map((segment, index) => {
+                        const reasonName = segment.dataKey;
+                        const percentage = segment.value;
+                        const count = segment.payload[`${reasonName}_count`] || 0;
+                        const color = segment.color;
+                        
+                        return (
+                          <div
+                            key={index}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '8px',
+                              borderRadius: '6px',
+                              backgroundColor: index % 2 === 0 ? 'transparent' : '#f9fafb',
+                              transition: 'background-color 0.2s'
+                            }}
+                          >
+                            {/* Color indicator */}
+                            <div 
+                              style={{ 
+                                width: '14px', 
+                                height: '14px', 
+                                backgroundColor: color,
+                                borderRadius: '3px',
+                                flexShrink: 0,
+                                border: '1px solid rgba(0, 0, 0, 0.1)',
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                              }} 
+                            />
+                            
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontWeight: '500', 
+                                color: '#1f2937', 
+                                fontSize: '13px', 
+                                marginBottom: '4px',
+                                lineHeight: '1.4'
+                              }}>
+                                {reasonName}
+                              </div>
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{ 
+                                  fontWeight: '600', 
+                                  color: '#111827',
+                                  fontSize: '14px'
+                                }}>
+                                  {percentage.toFixed(2)}%
+                                </span>
+                                {count > 0 && (
+                                  <span style={{ 
+                                    color: '#6b7280',
+                                    fontSize: '11px'
+                                  }}>
+                                    ({count.toLocaleString()} of {total.toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -274,8 +325,8 @@ const ChurnTrendsChart = () => {
             />
             <Legend 
               wrapperStyle={{ 
-                paddingTop: '20px',
-                paddingBottom: '10px'
+                paddingTop: '10px',
+                paddingBottom: '5px'
               }}
               iconType="rect"
               iconSize={14}
@@ -285,6 +336,13 @@ const ChurnTrendsChart = () => {
               }}
               content={({ payload }) => {
                 if (!payload || payload.length === 0) return null;
+                
+                // Sort payload by total count (highest to lowest) to match bar chart order
+                const sortedPayload = [...payload].sort((a, b) => {
+                  const totalA = reasonTotals[a.dataKey] || 0;
+                  const totalB = reasonTotals[b.dataKey] || 0;
+                  return totalB - totalA; // Descending order
+                });
                 
                 // Organize legend into columns - use 4-5 columns when there's space
                 // Determine number of columns based on screen width and item count
@@ -300,10 +358,10 @@ const ChurnTrendsChart = () => {
                   numColumns = 2; // Smaller screens
                 }
                 
-                const itemsPerColumn = Math.ceil(payload.length / numColumns);
+                const itemsPerColumn = Math.ceil(sortedPayload.length / numColumns);
                 const columns = [];
-                for (let i = 0; i < payload.length; i += itemsPerColumn) {
-                  columns.push(payload.slice(i, i + itemsPerColumn));
+                for (let i = 0; i < sortedPayload.length; i += itemsPerColumn) {
+                  columns.push(sortedPayload.slice(i, i + itemsPerColumn));
                 }
                 
                 return (
@@ -311,11 +369,11 @@ const ChurnTrendsChart = () => {
                     display: 'flex', 
                     justifyContent: 'center', 
                     gap: '40px',
-                    padding: '24px 20px 16px 20px',
+                    padding: '12px 20px 8px 20px',
                     flexWrap: 'wrap',
                     backgroundColor: '#f9fafb',
                     borderRadius: '8px',
-                    marginTop: '20px'
+                    marginTop: '10px'
                   }}>
                     {columns.map((column, colIndex) => (
                       <div key={colIndex} style={{ 
