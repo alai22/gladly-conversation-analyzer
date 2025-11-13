@@ -27,7 +27,7 @@ function Login({ onLogin }) {
           <Lock className="h-12 w-12 text-blue-600" />
         </div>
         <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">
-          Gladly Conversation Analyzer
+          Halo Insights
         </h1>
         <p className="text-center text-gray-600 mb-6">
           Enter password to access
