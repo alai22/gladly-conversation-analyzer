@@ -119,127 +119,122 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
     }, 10000); // Check every 10 seconds (matches backend's 10-conversation batch interval)
 
     try {
+      // Start extraction (returns immediately, runs in background)
       const response = await axios.post('/api/conversations/extract-topics', {
         start_date: startDate,
         end_date: endDate
       }, {
-        timeout: 1800000 // 30 minute timeout for very large batches (allows ~3600 conversations at 0.5s delay)
+        timeout: 10000 // 10 second timeout for starting the job
       });
 
       // Clear progress interval
       if (progressInterval) {
         clearInterval(progressInterval);
       }
-      
-      const endTime = Date.now();
-      const elapsedSeconds = Math.floor((endTime - startTime) / 1000);
-      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-      const elapsedSecs = elapsedSeconds % 60;
-      const elapsedTimeStr = `${elapsedMinutes}m ${elapsedSecs}s`;
-      
-      if (response.data.success) {
-        const processedCount = response.data.processed_count || 0;
-        const skippedCount = response.data.skipped_count || 0;
-        const timestamp = getTimestamp();
-        const totalBatches = Math.ceil(processedCount / 10);
-        
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] ✅ Completed successfully!`);
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Total batches processed: ${totalBatches} (${processedCount} conversations)`);
-        if (skippedCount > 0) {
-          console.log(`[${timestamp}] [TOPIC EXTRACTION] Skipped: ${skippedCount} already-extracted conversations`);
-        }
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
-        if (processedCount > 0) {
-          console.log(`[${timestamp}] [TOPIC EXTRACTION] Average time per conversation: ${(elapsedSeconds / processedCount).toFixed(2)}s`);
-        }
-        if (response.data.topic_summary) {
-          console.log(`[${timestamp}] [TOPIC EXTRACTION] Topic summary:`, response.data.topic_summary);
-        }
-        
-        let successMessage = `Successfully extracted topics for ${processedCount} conversations`;
-        if (skippedCount > 0) {
-          successMessage += `. Skipped ${skippedCount} already-extracted conversations.`;
-        }
-        
+
+      if (!response.data.success) {
         setTopicExtractionStatus({
           isRunning: false,
           progress: null,
-          error: null,
-          success: successMessage
-        });
-      } else {
-        const errorDetails = response.data.details || response.data.message || response.data.error || 'Failed to extract topics';
-        setTopicExtractionStatus({
-          isRunning: false,
-          progress: null,
-          error: errorDetails,
+          error: response.data.error || response.data.message || 'Failed to start extraction',
           success: null
         });
+        return;
       }
+
+      // Poll for status
+      const statusInterval = setInterval(async () => {
+        try {
+          const statusResponse = await axios.get('/api/conversations/extract-topics-status');
+          if (statusResponse.data.success) {
+            const status = statusResponse.data;
+            
+            if (status.is_running) {
+              const progressMsg = `Processing: ${status.current}/${status.total} conversations (${status.progress_percentage.toFixed(1)}%)`;
+              const details = [];
+              if (status.processed_count > 0) details.push(`${status.processed_count} processed`);
+              if (status.skipped_count > 0) details.push(`${status.skipped_count} skipped`);
+              const detailsMsg = details.length > 0 ? ` (${details.join(', ')})` : '';
+              
+              setTopicExtractionStatus({
+                isRunning: true,
+                progress: progressMsg + detailsMsg,
+                error: null,
+                success: null
+              });
+              
+              // Log progress every 10 conversations
+              if (status.current % 10 === 0 || status.current === status.total) {
+                const elapsed = status.elapsed_time ? Math.floor(status.elapsed_time) : 0;
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                console.log(`[${getTimestamp()}] [TOPIC EXTRACTION PROGRESS] ${status.current}/${status.total} (${status.progress_percentage.toFixed(1)}%) - Elapsed: ${minutes}m ${seconds}s`);
+              }
+            } else {
+              // Completed
+              clearInterval(statusInterval);
+              const elapsed = status.elapsed_time ? Math.floor(status.elapsed_time) : 0;
+              const minutes = Math.floor(elapsed / 60);
+              const seconds = elapsed % 60;
+              const elapsedTimeStr = `${minutes}m ${seconds}s`;
+              
+              if (status.error) {
+                console.error(`[${getTimestamp()}] [TOPIC EXTRACTION] ❌ Failed: ${status.error}`);
+                setTopicExtractionStatus({
+                  isRunning: false,
+                  progress: null,
+                  error: status.error,
+                  success: null
+                });
+              } else {
+                let successMsg = `Successfully extracted topics for ${status.processed_count || 0} conversations`;
+                if (status.skipped_count > 0) {
+                  successMsg += `. Skipped ${status.skipped_count} already-extracted conversations.`;
+                }
+                
+                console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] ✅ Completed!`);
+                console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] Processed: ${status.processed_count}, Skipped: ${status.skipped_count}`);
+                console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
+                
+                setTopicExtractionStatus({
+                  isRunning: false,
+                  progress: null,
+                  error: null,
+                  success: successMsg
+                });
+              }
+            }
+          }
+        } catch (statusErr) {
+          console.error('Error polling extraction status:', statusErr);
+        }
+      }, 2000); // Poll every 2 seconds
     } catch (err) {
-      let errorMessage = 'Failed to extract topics';
-      let errorDetails = '';
-      
-      if (err.response) {
-        // Server responded with error status
-        const status = err.response.status;
-        const data = err.response.data || {};
-        
-        if (status === 429) {
-          errorMessage = 'Rate Limit Exceeded';
-          errorDetails = data.details || data.message || 'Claude API rate limit reached. Please wait 1-2 minutes and try again.';
-        } else if (status === 504) {
-          errorMessage = 'Request Timeout';
-          const partialCount = data.partial_count || 0;
-          const partialMsg = partialCount > 0 ? ` ${partialCount} conversations were processed and saved before the timeout.` : '';
-          errorDetails = (data.details || data.message || 'The request took too long. This can happen with large batches.') + partialMsg;
-        } else {
-          errorMessage = data.error || `Server error (${status})`;
-          errorDetails = data.details || data.message || err.message;
-        }
-      } else if (err.request) {
-        // Request made but no response
-        if (err.code === 'ECONNABORTED') {
-          errorMessage = 'Request Timeout';
-          errorDetails = 'The request took too long to complete (30 minute limit). This can happen with very large batches. Progress is saved incrementally every 10 conversations - check the Conversation Trends tab to see what was extracted. You can try again later.';
-        } else {
-          errorMessage = 'Network Error';
-          errorDetails = err.message || 'Unable to connect to server. Please check your connection.';
-        }
-      } else {
-        errorMessage = 'Error';
-        errorDetails = err.message || 'An unexpected error occurred';
-      }
-      
       // Clear progress interval
       if (progressInterval) {
         clearInterval(progressInterval);
       }
       
-      const endTime = Date.now();
-      const elapsedSeconds = Math.floor((endTime - startTime) / 1000);
-      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-      const elapsedSecs = elapsedSeconds % 60;
-      const elapsedTimeStr = `${elapsedMinutes}m ${elapsedSecs}s`;
+      let errorMessage = 'Failed to start extraction';
+      let errorDetails = '';
       
-      const timestamp = new Date().toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit'
-      });
-      
-      if (err.response?.data?.partial_count > 0) {
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] ⚠️ Partial completion`);
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Processed: ${err.response.data.partial_count} conversations before ${errorMessage.toLowerCase()}`);
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Partial progress has been saved. Check Conversation Trends tab.`);
+      if (err.response) {
+        const status = err.response.status;
+        const data = err.response.data || {};
+        
+        if (status === 400 && data.error === 'Extraction already running') {
+          errorMessage = 'Extraction Already Running';
+          errorDetails = 'Topic extraction is already in progress. Please wait for it to complete.';
+        } else {
+          errorMessage = data.error || `Server error (${status})`;
+          errorDetails = data.details || data.message || err.message;
+        }
       } else {
-        console.error(`[${timestamp}] [TOPIC EXTRACTION] ❌ Failed`);
-        console.error(`[${timestamp}] [TOPIC EXTRACTION] Error: ${errorMessage}`);
-        console.error(`[${timestamp}] [TOPIC EXTRACTION] Details: ${errorDetails}`);
-        console.error(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
+        errorDetails = err.message || 'Unable to connect to server. Please check your connection.';
       }
+      
+      const timestamp = getTimestamp();
+      console.error(`[${timestamp}] [TOPIC EXTRACTION] ❌ Failed to start: ${errorMessage}`);
       
       setTopicExtractionStatus({
         isRunning: false,

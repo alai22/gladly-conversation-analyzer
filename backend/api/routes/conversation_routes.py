@@ -2,6 +2,9 @@
 API routes for conversation data interactions
 """
 
+import threading
+from datetime import datetime
+from typing import Dict, Optional
 from flask import Blueprint, request, jsonify, g
 from ...models.response import SearchResult
 from ...utils.logging import get_logger
@@ -10,6 +13,26 @@ logger = get_logger('conversation_routes')
 
 # Create blueprint
 conversation_bp = Blueprint('conversations', __name__, url_prefix='/api/conversations')
+
+# Global topic extraction state (for async processing)
+topic_extraction_state = {
+    'is_running': False,
+    'current': 0,
+    'total': 0,
+    'processed_count': 0,
+    'skipped_count': 0,
+    'failed_count': 0,
+    'start_time': None,
+    'end_time': None,
+    'error': None,
+    'progress_percentage': 0,
+    'start_date': None,
+    'end_date': None,
+    'dates_processed': []
+}
+
+# Global topic extraction thread
+topic_extraction_thread: Optional[threading.Thread] = None
 
 
 @conversation_bp.route('/summary')
@@ -188,8 +211,18 @@ def get_topic_trends():
 
 @conversation_bp.route('/extract-topics', methods=['POST'])
 def extract_topics():
-    """Extract topics from conversations for a specific date (pre-processing for trends)"""
+    """Start topic extraction in background thread (async)"""
+    global topic_extraction_state, topic_extraction_thread
+    
     try:
+        # Check if extraction is already running
+        if topic_extraction_state['is_running']:
+            return jsonify({
+                'success': False,
+                'error': 'Extraction already running',
+                'message': 'Topic extraction is already in progress. Please wait for it to complete.'
+            }), 400
+        
         # Get service from container (injected via Flask's g)
         service_container = getattr(g, 'service_container', None)
         if not service_container:
@@ -236,26 +269,79 @@ def extract_topics():
                 'message': f'No conversations found for date range {start_date} to {end_date}'
             })
         
-        # Import services
+        # Reset state
+        topic_extraction_state.update({
+            'is_running': True,
+            'current': 0,
+            'total': len(conversations_by_id),
+            'processed_count': 0,
+            'skipped_count': 0,
+            'failed_count': 0,
+            'start_time': datetime.now(),
+            'end_time': None,
+            'error': None,
+            'progress_percentage': 0,
+            'start_date': start_date,
+            'end_date': end_date,
+            'dates_processed': []
+        })
+        
+        # Start extraction in background thread
+        topic_extraction_thread = threading.Thread(
+            target=_run_topic_extraction,
+            args=(conversation_service, claude_service, start_date, end_date, conversations_by_id),
+            daemon=True
+        )
+        topic_extraction_thread.start()
+        
+        logger.info(f"Started topic extraction in background thread for {len(conversations_by_id)} conversations")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Topic extraction started for {len(conversations_by_id)} conversations. Use /api/conversations/extract-topics-status to check progress.',
+            'total': len(conversations_by_id)
+        })
+    
+    except Exception as e:
+        logger.error(f"Extract topics error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _update_extraction_progress(current: int, total: int, processed: int, skipped: int, failed: int):
+    """Update topic extraction progress state"""
+    global topic_extraction_state
+    
+    topic_extraction_state['current'] = current
+    topic_extraction_state['total'] = total
+    topic_extraction_state['processed_count'] = processed
+    topic_extraction_state['skipped_count'] = skipped
+    topic_extraction_state['failed_count'] = failed
+    
+    # Calculate progress percentage
+    if total > 0:
+        topic_extraction_state['progress_percentage'] = (current / total) * 100
+
+
+def _run_topic_extraction(conversation_service, claude_service, start_date: str, end_date: str, conversations_by_id: Dict):
+    """Run topic extraction in background thread"""
+    global topic_extraction_state
+    
+    try:
         from ...services.topic_extraction_service import TopicExtractionService
         from ...services.topic_storage_service import TopicStorageService
         
-        # Initialize services
         topic_service = TopicExtractionService(claude_service)
         topic_storage = TopicStorageService()
         
-        # Extract topics for all conversations with rate limiting
-        # Use 0.5 second delay between requests to avoid rate limits
-        # Claude allows 200k input tokens/minute, so we need to pace requests
         total_conversations = len(conversations_by_id)
         logger.info(f"Extracting topics for {total_conversations} conversations with rate limiting...")
-        logger.info(f"Estimated time: ~{total_conversations * 0.5 / 60:.1f} minutes (plus API call time)")
         
-        # Group conversations by date for proper saving
+        # Group conversations by date
         from datetime import datetime, timedelta
         conversations_by_date: Dict[str, Dict[str, List[Dict]]] = {}
         for conv_id, items in conversations_by_id.items():
-            # Get date from first item
             if items and items[0].get('timestamp'):
                 try:
                     item_time = datetime.fromisoformat(items[0]['timestamp'].replace('Z', '+00:00'))
@@ -264,153 +350,116 @@ def extract_topics():
                         conversations_by_date[item_date_str] = {}
                     conversations_by_date[item_date_str][conv_id] = items
                 except (ValueError, KeyError):
-                    # Fallback to start_date if we can't parse
                     if start_date not in conversations_by_date:
                         conversations_by_date[start_date] = {}
                     conversations_by_date[start_date][conv_id] = items
             else:
-                # Fallback to start_date
                 if start_date not in conversations_by_date:
                     conversations_by_date[start_date] = {}
                 conversations_by_date[start_date][conv_id] = items
         
-        # Track overall progress
         all_extracted_mapping = {}
         dates_processed = []
-        total_processed_count = 0
-        total_skipped_count = 0
+        total_processed = 0
+        total_skipped = 0
+        current_count = 0
         
-        try:
-            # Extract topics for all dates in range
-            for date_str, date_conversations in conversations_by_date.items():
-                logger.info(f"Processing {len(date_conversations)} conversations for date {date_str}")
-                
-                # Check which conversations already have topics extracted
-                existing_topics = topic_storage.get_topics_for_date(date_str) or {}
-                conversations_to_process = {}
-                skipped_count = 0
-                
-                for conv_id, items in date_conversations.items():
-                    if conv_id in existing_topics:
-                        # Skip already extracted conversations
-                        skipped_count += 1
-                        total_skipped_count += 1
-                        all_extracted_mapping[conv_id] = existing_topics[conv_id]
-                    else:
-                        conversations_to_process[conv_id] = items
-                
-                if skipped_count > 0:
-                    logger.info(f"Skipped {skipped_count} already-extracted conversations for {date_str}")
-                
-                if not conversations_to_process:
-                    logger.info(f"All conversations for {date_str} already have topics extracted")
-                    dates_processed.append(date_str)
-                    continue
-                
-                date_topic_mapping = {}
-                date_last_save = 0
-                
-                def date_incremental_save(conversation_id: str, topic: str):
-                    nonlocal date_topic_mapping, date_last_save, all_extracted_mapping, total_processed_count
-                    date_topic_mapping[conversation_id] = topic
-                    all_extracted_mapping[conversation_id] = topic
-                    total_processed_count += 1
-                    
-                    # Save every 10 conversations
-                    if len(date_topic_mapping) - date_last_save >= 10:
-                        try:
-                            # Merge with existing topics for this date
-                            existing = topic_storage.get_topics_for_date(date_str) or {}
-                            existing.update(date_topic_mapping)
-                            topic_storage.save_topics_for_date(date_str, existing)
-                            date_last_save = len(date_topic_mapping)
-                            logger.info(f"Incremental save for {date_str}: {len(date_topic_mapping)} new topics saved")
-                        except Exception as save_error:
-                            logger.warning(f"Failed incremental save for {date_str}: {save_error}")
-                
-                # Extract topics for conversations that need processing
-                logger.info(f"Extracting topics for {len(conversations_to_process)} new conversations for {date_str}")
-                extracted_for_date = topic_service.batch_extract_topics(
-                    conversations_to_process,
-                    delay_between_requests=0.5,
-                    incremental_save_callback=date_incremental_save,
-                    save_every=10
-                )
-                
-                # Final save for this date (merge with existing)
-                if date_topic_mapping:
-                    existing = topic_storage.get_topics_for_date(date_str) or {}
-                    existing.update(date_topic_mapping)
-                    topic_storage.save_topics_for_date(date_str, existing)
-                
+        for date_str, date_conversations in conversations_by_date.items():
+            existing_topics = topic_storage.get_topics_for_date(date_str) or {}
+            conversations_to_process = {}
+            
+            for conv_id, items in date_conversations.items():
+                current_count += 1
+                if conv_id in existing_topics:
+                    total_skipped += 1
+                    all_extracted_mapping[conv_id] = existing_topics[conv_id]
+                else:
+                    conversations_to_process[conv_id] = items
+                _update_extraction_progress(current_count, total_conversations, total_processed, total_skipped, 0)
+            
+            if not conversations_to_process:
                 dates_processed.append(date_str)
+                continue
             
-            extracted_mapping = all_extracted_mapping
+            date_topic_mapping = {}
+            date_last_save = 0
             
-            processed_count = len(extracted_mapping)
+            def date_incremental_save(conversation_id: str, topic: str):
+                nonlocal date_topic_mapping, date_last_save, all_extracted_mapping, total_processed, current_count
+                date_topic_mapping[conversation_id] = topic
+                all_extracted_mapping[conversation_id] = topic
+                total_processed += 1
+                current_count += 1
+                
+                if len(date_topic_mapping) - date_last_save >= 10:
+                    try:
+                        existing = topic_storage.get_topics_for_date(date_str) or {}
+                        existing.update(date_topic_mapping)
+                        topic_storage.save_topics_for_date(date_str, existing)
+                        date_last_save = len(date_topic_mapping)
+                    except Exception as save_error:
+                        logger.warning(f"Failed incremental save for {date_str}: {save_error}")
+                
+                _update_extraction_progress(current_count, total_conversations, total_processed, total_skipped, 0)
             
-            # Count topics for summary
-            topic_counts = {}
-            for conversation_id, topic in extracted_mapping.items():
-                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+            extracted_for_date = topic_service.batch_extract_topics(
+                conversations_to_process,
+                delay_between_requests=0.5,
+                incremental_save_callback=date_incremental_save,
+                save_every=10
+            )
             
-            logger.info(f"Topic extraction completed: {processed_count} conversations processed, {len(topic_counts)} unique topics")
+            if date_topic_mapping:
+                existing = topic_storage.get_topics_for_date(date_str) or {}
+                existing.update(date_topic_mapping)
+                topic_storage.save_topics_for_date(date_str, existing)
             
-            message = f'Successfully extracted topics for {processed_count} conversations across {len(dates_processed)} date(s)'
-            if total_skipped_count > 0:
-                message += f' Skipped {total_skipped_count} already-extracted conversations.'
-            
-            return jsonify({
-                'success': True,
-                'start_date': start_date,
-                'end_date': end_date,
-                'dates_processed': dates_processed,
-                'processed_count': processed_count,
-                'skipped_count': total_skipped_count,
-                'topic_summary': topic_counts,
-                'message': message
-            })
+            dates_processed.append(date_str)
         
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Topic extraction failed: {error_msg}")
-            
-            # Save any partial progress before returning error
-            # Note: Partial progress saving is handled in incremental_save callbacks
-            
-            # Provide more helpful error messages
-            partial_count = total_processed_count if 'total_processed_count' in locals() else 0
-            partial_msg = f" Partial progress ({partial_count} conversations) has been saved." if partial_count > 0 else ""
-            
-            if '429' in error_msg or 'rate_limit' in error_msg.lower() or 'Too Many Requests' in error_msg:
-                return jsonify({
-                    'success': False,
-                    'error': 'Rate limit exceeded',
-                    'details': f'Claude API rate limit reached. Please wait 1-2 minutes and try again. The system processes conversations with delays to avoid rate limits, but large batches may still hit limits.{partial_msg}',
-                    'message': error_msg,
-                    'partial_count': partial_count
-                }), 429
-            elif 'timeout' in error_msg.lower() or '504' in error_msg:
-                return jsonify({
-                    'success': False,
-                    'error': 'Request timeout',
-                    'details': f'The request took too long to complete. This can happen with large batches.{partial_msg} Try again later - the system will continue from where it left off.',
-                    'message': error_msg,
-                    'partial_count': partial_count
-                }), 504
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Extraction failed',
-                    'details': f'{error_msg}{partial_msg}',
-                    'message': f'Failed to extract topics: {error_msg}',
-                    'partial_count': partial_count
-                }), 500
+        topic_extraction_state['end_time'] = datetime.now()
+        topic_extraction_state['dates_processed'] = dates_processed
+        topic_extraction_state['is_running'] = False
+        
+        logger.info(f"Topic extraction completed: {total_processed} processed, {total_skipped} skipped")
     
     except Exception as e:
-        logger.error(f"Extract topics error: {str(e)}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        error_msg = str(e)
+        logger.error(f"Topic extraction failed: {error_msg}")
+        topic_extraction_state['error'] = error_msg
+        topic_extraction_state['is_running'] = False
+        topic_extraction_state['end_time'] = datetime.now()
+
+
+@conversation_bp.route('/extract-topics-status', methods=['GET'])
+def get_extract_topics_status():
+    """Get status of running topic extraction"""
+    global topic_extraction_state
+    
+    try:
+        elapsed_time = None
+        if topic_extraction_state['start_time']:
+            end = topic_extraction_state['end_time'] or datetime.now()
+            elapsed_time = (end - topic_extraction_state['start_time']).total_seconds()
+        
+        return jsonify({
+            'success': True,
+            'is_running': topic_extraction_state['is_running'],
+            'current': topic_extraction_state['current'],
+            'total': topic_extraction_state['total'],
+            'processed_count': topic_extraction_state['processed_count'],
+            'skipped_count': topic_extraction_state['skipped_count'],
+            'failed_count': topic_extraction_state['failed_count'],
+            'progress_percentage': round(topic_extraction_state['progress_percentage'], 2),
+            'start_time': topic_extraction_state['start_time'].isoformat() if topic_extraction_state['start_time'] else None,
+            'end_time': topic_extraction_state['end_time'].isoformat() if topic_extraction_state['end_time'] else None,
+            'elapsed_time': elapsed_time,
+            'error': topic_extraction_state['error'],
+            'start_date': topic_extraction_state['start_date'],
+            'end_date': topic_extraction_state['end_date'],
+            'dates_processed': topic_extraction_state['dates_processed']
+        })
+    except Exception as e:
+        logger.error(f"Get extract topics status error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
