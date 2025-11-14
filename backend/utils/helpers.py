@@ -5,6 +5,8 @@ Utility functions
 import json
 import re
 from typing import Dict, Any, Optional
+from .pii_protection import create_pii_protector
+from .config import Config
 
 
 def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
@@ -27,9 +29,15 @@ def truncate_text(text: str, max_length: int = 500) -> str:
 
 
 def format_conversation_for_claude(conversations: list, max_items: int = 50) -> str:
-    """Format conversation data for Claude analysis"""
+    """Format conversation data for Claude analysis with PII protection"""
     if not conversations:
         return "No conversation data was retrieved from the search. This could mean:\n- The search terms did not match any conversations\n- The conversations have not been loaded yet\n- The content type filters excluded all results\n\nPlease inform the user that no data was found and suggest they try different search terms or check if conversation data has been loaded."
+    
+    # Apply PII protection if enabled
+    pii_config = Config.get_pii_config()
+    if pii_config.get('redact_mode'):
+        protector = create_pii_protector(pii_config)
+        conversations = protector.sanitize_list(conversations, item_type='conversation')
     
     # Group items by conversation ID to show structure
     conversation_groups = {}
@@ -126,9 +134,15 @@ Make your response well-structured and easy to read with clear visual hierarchy.
 
 
 def format_survey_for_claude(surveys: list, max_items: int = 50) -> str:
-    """Format survey data for Claude analysis"""
+    """Format survey data for Claude analysis with PII protection"""
     if not surveys:
         return "No survey data was retrieved from the search. This could mean:\n- The search terms did not match any survey responses\n- The surveys have not been loaded yet\n\nPlease inform the user that no data was found and suggest they try different search terms or check if survey data has been loaded."
+    
+    # Apply PII protection if enabled
+    pii_config = Config.get_pii_config()
+    if pii_config.get('redact_mode'):
+        protector = create_pii_protector(pii_config)
+        surveys = protector.sanitize_list(surveys, item_type='survey')
     
     survey_text = f"Retrieved Survey Data: {len(surveys)} survey responses found\n\n"
     survey_text += "Each response below represents a customer's cancellation survey response:\n\n"

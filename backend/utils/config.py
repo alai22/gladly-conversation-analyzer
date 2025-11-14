@@ -108,6 +108,24 @@ class Config:
     # Use cleaned CSV with proper headers (single header row with Answer/Comment labels)
     SURVICATE_CSV_PATH: str = os.getenv('SURVICATE_CSV_PATH', 'data/survicate_cancelled_subscriptions_cleaned.csv')
     
+    # PII Protection Configuration
+    # Enable PII protection before sending data to Claude API
+    # Options: 'hash' (deterministic hash), 'redact' ([REDACTED] placeholder), 'remove' (delete), 'none' (disabled)
+    PII_REDACT_MODE: str = os.getenv('PII_REDACT_MODE', 'hash')
+    # Preserve customer/conversation IDs (don't pseudonymize) - set to 'true' to preserve
+    PII_PRESERVE_IDS: bool = os.getenv('PII_PRESERVE_IDS', 'false').lower() in ('true', '1', 'yes')
+    # Enable name detection (may have false positives) - set to 'true' to enable
+    PII_ENABLE_NAME_DETECTION: bool = os.getenv('PII_ENABLE_NAME_DETECTION', 'false').lower() in ('true', '1', 'yes')
+    
+    @classmethod
+    def get_pii_config(cls) -> dict:
+        """Get PII protection configuration"""
+        return {
+            'redact_mode': cls.PII_REDACT_MODE if cls.PII_REDACT_MODE != 'none' else None,
+            'preserve_ids': cls.PII_PRESERVE_IDS,
+            'enable_name_detection': cls.PII_ENABLE_NAME_DETECTION
+        }
+    
     @classmethod
     def validate(cls) -> bool:
         """Validate required configuration"""

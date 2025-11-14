@@ -10,6 +10,7 @@ from typing import List, Dict, Optional, Callable
 from requests.exceptions import RequestException, HTTPError
 from ..utils.config import Config
 from ..utils.logging import get_logger
+from ..utils.pii_protection import create_pii_protector
 from .claude_service import ClaudeService
 
 logger = get_logger('topic_extraction_service')
@@ -418,14 +419,20 @@ Return ONLY the category name, nothing else."""
     
     def _format_conversation_transcript(self, conversation_items: List[Dict]) -> str:
         """
-        Format conversation items into a readable transcript
+        Format conversation items into a readable transcript with PII protection
         
         Args:
             conversation_items: List of conversation items
             
         Returns:
-            Formatted transcript string
+            Formatted transcript string with PII redacted
         """
+        # Apply PII protection if enabled
+        pii_config = Config.get_pii_config()
+        if pii_config.get('redact_mode'):
+            protector = create_pii_protector(pii_config)
+            conversation_items = protector.sanitize_list(conversation_items, item_type='conversation')
+        
         # Sort items by timestamp
         sorted_items = sorted(
             conversation_items,
