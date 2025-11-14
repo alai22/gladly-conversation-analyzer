@@ -201,3 +201,76 @@ def get_topic_trends():
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/extract-topics', methods=['POST'])
+def extract_topics():
+    """Extract topics from conversations for a specific date (pre-processing for trends)"""
+    try:
+        # Get service from container (injected via Flask's g)
+        service_container = getattr(g, 'service_container', None)
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        claude_service = service_container.get_claude_service()
+        
+        # Check if Claude service is initialized
+        if claude_service is None:
+            error_msg = "Claude API service is not initialized. Please check ANTHROPIC_API_KEY configuration."
+            logger.error(error_msg)
+            return jsonify({
+                'error': error_msg,
+                'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
+            }), 503
+        
+        # Get date parameter from request body
+        data = request.get_json() or {}
+        date = data.get('date', '2025-10-20')
+        
+        logger.info(f"Extract topics request: date={date}")
+        
+        # Get conversations for the date
+        conversations_by_id = conversation_service.get_conversations_by_date(date)
+        
+        if not conversations_by_id:
+            return jsonify({
+                'success': True,
+                'date': date,
+                'processed_count': 0,
+                'message': f'No conversations found for date {date}'
+            })
+        
+        # Import topic extraction service
+        from ...services.topic_extraction_service import TopicExtractionService
+        
+        # Initialize topic extraction service
+        topic_service = TopicExtractionService(claude_service)
+        
+        # Extract topics for all conversations
+        logger.info(f"Extracting topics for {len(conversations_by_id)} conversations...")
+        topic_mapping = topic_service.batch_extract_topics(conversations_by_id)
+        
+        processed_count = len(topic_mapping)
+        
+        # Count topics for summary
+        topic_counts = {}
+        for conversation_id, topic in topic_mapping.items():
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        
+        logger.info(f"Topic extraction completed: {processed_count} conversations processed, {len(topic_counts)} unique topics")
+        
+        return jsonify({
+            'success': True,
+            'date': date,
+            'processed_count': processed_count,
+            'topic_summary': topic_counts,
+            'message': f'Successfully extracted topics for {processed_count} conversations'
+        })
+    
+    except Exception as e:
+        logger.error(f"Extract topics error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500

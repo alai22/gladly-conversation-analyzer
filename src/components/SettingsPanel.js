@@ -1,5 +1,6 @@
-import React from 'react';
-import { X, Bot, Settings as SettingsIcon, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Bot, Settings as SettingsIcon, Download, TrendingUp, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import axios from 'axios';
 
 const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurrentMode, onClose }) => {
   const handleChange = (key, value) => {
@@ -23,6 +24,53 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
     'claude-3-5-haiku-20241022'
   ];
 
+  const [topicExtractionStatus, setTopicExtractionStatus] = useState({
+    isRunning: false,
+    progress: null,
+    error: null,
+    success: null
+  });
+
+  const handleExtractTopics = async () => {
+    setTopicExtractionStatus({
+      isRunning: true,
+      progress: 'Starting topic extraction...',
+      error: null,
+      success: null
+    });
+
+    try {
+      // For prototype, extract topics for Oct 20, 2025
+      // In future, this could accept date range parameters
+      const response = await axios.post('/api/conversations/extract-topics', {
+        date: '2025-10-20'
+      });
+
+      if (response.data.success) {
+        setTopicExtractionStatus({
+          isRunning: false,
+          progress: null,
+          error: null,
+          success: `Successfully extracted topics for ${response.data.processed_count || 0} conversations`
+        });
+      } else {
+        setTopicExtractionStatus({
+          isRunning: false,
+          progress: null,
+          error: response.data.error || 'Failed to extract topics',
+          success: null
+        });
+      }
+    } catch (err) {
+      setTopicExtractionStatus({
+        isRunning: false,
+        progress: null,
+        error: err.response?.data?.error || err.message || 'Failed to extract topics',
+        success: null
+      });
+    }
+  };
+
   return (
     <div className="bg-white border-b border-gray-200 p-6">
       <div className="max-w-4xl mx-auto">
@@ -39,7 +87,128 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Admin Tools Section - Moved to Top */}
+        <div className="mb-8 pb-8 border-b border-gray-200">
+          <h3 className="text-sm font-medium text-gray-900 mb-4">Admin Tools</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Claude Chat */}
+            <button
+              onClick={() => {
+                setAdminMode(adminMode === 'claude' ? null : 'claude');
+                setCurrentMode('ask'); // Reset to a regular mode
+                onClose();
+              }}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                adminMode === 'claude'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center space-x-3 mb-2">
+                <Bot className={`h-5 w-5 ${adminMode === 'claude' ? 'text-blue-600' : 'text-gray-600'}`} />
+                <h4 className={`font-medium ${adminMode === 'claude' ? 'text-blue-900' : 'text-gray-900'}`}>
+                  Claude Chat
+                </h4>
+              </div>
+              <p className="text-xs text-gray-600">
+                Direct Claude API interaction (no RAG)
+              </p>
+              {adminMode === 'claude' && (
+                <p className="text-xs text-blue-600 mt-2 font-medium">Active</p>
+              )}
+            </button>
+
+            {/* Download Manager */}
+            <button
+              onClick={() => {
+                setAdminMode(adminMode === 'download' ? null : 'download');
+                setCurrentMode('ask'); // Reset to a regular mode
+                onClose();
+              }}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                adminMode === 'download'
+                  ? 'border-orange-500 bg-orange-50'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center space-x-3 mb-2">
+                <Download className={`h-5 w-5 ${adminMode === 'download' ? 'text-orange-600' : 'text-gray-600'}`} />
+                <h4 className={`font-medium ${adminMode === 'download' ? 'text-orange-900' : 'text-gray-900'}`}>
+                  Download Manager
+                </h4>
+              </div>
+              <p className="text-xs text-gray-600">
+                Download conversation data from Gladly
+              </p>
+              {adminMode === 'download' && (
+                <p className="text-xs text-orange-600 mt-2 font-medium">Active</p>
+              )}
+            </button>
+
+            {/* Extract Conversation Topics */}
+            <div className="md:col-span-2">
+              <div className={`p-4 border-2 rounded-lg ${
+                topicExtractionStatus.isRunning
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-gray-50'
+              }`}>
+                <div className="flex items-center space-x-3 mb-2">
+                  <TrendingUp className="h-5 w-5 text-gray-600" />
+                  <h4 className="font-medium text-gray-900">
+                    Extract Conversation Topics
+                  </h4>
+                </div>
+                <p className="text-xs text-gray-600 mb-3">
+                  Pre-process conversations to extract topics for trend analysis. This uses Claude AI to analyze conversation transcripts.
+                </p>
+                <button
+                  onClick={handleExtractTopics}
+                  disabled={topicExtractionStatus.isRunning}
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center space-x-2 ${
+                    topicExtractionStatus.isRunning
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {topicExtractionStatus.isRunning ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4" />
+                      <span>Extract Topics for Oct 20, 2025</span>
+                    </>
+                  )}
+                </button>
+                {topicExtractionStatus.progress && (
+                  <p className="text-xs text-blue-600 mt-2">{topicExtractionStatus.progress}</p>
+                )}
+                {topicExtractionStatus.error && (
+                  <div className="mt-2 flex items-start space-x-2">
+                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-red-600">{topicExtractionStatus.error}</p>
+                  </div>
+                )}
+                {topicExtractionStatus.success && (
+                  <div className="mt-2 flex items-start space-x-2">
+                    <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-green-600">{topicExtractionStatus.success}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-4">
+            Admin tools are for advanced users and system administration.
+          </p>
+        </div>
+
+        {/* Claude Model Settings */}
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-900 mb-4">Claude Model Settings</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Model Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -114,6 +283,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
               Stream responses for real-time output (experimental)
             </p>
           </div>
+          </div>
         </div>
 
         {/* Current Settings Summary */}
@@ -125,69 +295,6 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
             <div><strong>System Prompt:</strong> {settings.systemPrompt ? 'Set' : 'Not set'}</div>
             <div><strong>Streaming:</strong> {settings.stream ? 'Enabled' : 'Disabled'}</div>
           </div>
-        </div>
-
-        {/* Admin Tools Section */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-900 mb-4">Admin Tools</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Claude Chat */}
-            <button
-              onClick={() => {
-                setAdminMode(adminMode === 'claude' ? null : 'claude');
-                setCurrentMode('ask'); // Reset to a regular mode
-                onClose();
-              }}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
-                adminMode === 'claude'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center space-x-3 mb-2">
-                <Bot className={`h-5 w-5 ${adminMode === 'claude' ? 'text-blue-600' : 'text-gray-600'}`} />
-                <h4 className={`font-medium ${adminMode === 'claude' ? 'text-blue-900' : 'text-gray-900'}`}>
-                  Claude Chat
-                </h4>
-              </div>
-              <p className="text-xs text-gray-600">
-                Direct Claude API interaction (no RAG)
-              </p>
-              {adminMode === 'claude' && (
-                <p className="text-xs text-blue-600 mt-2 font-medium">Active</p>
-              )}
-            </button>
-
-            {/* Download Manager */}
-            <button
-              onClick={() => {
-                setAdminMode(adminMode === 'download' ? null : 'download');
-                setCurrentMode('ask'); // Reset to a regular mode
-                onClose();
-              }}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
-                adminMode === 'download'
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center space-x-3 mb-2">
-                <Download className={`h-5 w-5 ${adminMode === 'download' ? 'text-orange-600' : 'text-gray-600'}`} />
-                <h4 className={`font-medium ${adminMode === 'download' ? 'text-orange-900' : 'text-gray-900'}`}>
-                  Download Manager
-                </h4>
-              </div>
-              <p className="text-xs text-gray-600">
-                Download conversation data from Gladly
-              </p>
-              {adminMode === 'download' && (
-                <p className="text-xs text-orange-600 mt-2 font-medium">Active</p>
-              )}
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-4">
-            Admin tools are for advanced users and system administration. Click to activate.
-          </p>
         </div>
       </div>
     </div>
