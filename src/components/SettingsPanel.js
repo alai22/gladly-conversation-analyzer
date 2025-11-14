@@ -139,22 +139,33 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
       
       if (response.data.success) {
         const processedCount = response.data.processed_count || 0;
+        const skippedCount = response.data.skipped_count || 0;
         const timestamp = getTimestamp();
         const totalBatches = Math.ceil(processedCount / 10);
         
         console.log(`[${timestamp}] [TOPIC EXTRACTION] ✅ Completed successfully!`);
         console.log(`[${timestamp}] [TOPIC EXTRACTION] Total batches processed: ${totalBatches} (${processedCount} conversations)`);
+        if (skippedCount > 0) {
+          console.log(`[${timestamp}] [TOPIC EXTRACTION] Skipped: ${skippedCount} already-extracted conversations`);
+        }
         console.log(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
-        console.log(`[${timestamp}] [TOPIC EXTRACTION] Average time per conversation: ${(elapsedSeconds / processedCount).toFixed(2)}s`);
+        if (processedCount > 0) {
+          console.log(`[${timestamp}] [TOPIC EXTRACTION] Average time per conversation: ${(elapsedSeconds / processedCount).toFixed(2)}s`);
+        }
         if (response.data.topic_summary) {
           console.log(`[${timestamp}] [TOPIC EXTRACTION] Topic summary:`, response.data.topic_summary);
+        }
+        
+        let successMessage = `Successfully extracted topics for ${processedCount} conversations`;
+        if (skippedCount > 0) {
+          successMessage += `. Skipped ${skippedCount} already-extracted conversations.`;
         }
         
         setTopicExtractionStatus({
           isRunning: false,
           progress: null,
           error: null,
-          success: `Successfully extracted topics for ${processedCount} conversations`
+          success: successMessage
         });
       } else {
         const errorDetails = response.data.details || response.data.message || response.data.error || 'Failed to extract topics';

@@ -251,32 +251,8 @@ def extract_topics():
         logger.info(f"Extracting topics for {total_conversations} conversations with rate limiting...")
         logger.info(f"Estimated time: ~{total_conversations * 0.5 / 60:.1f} minutes (plus API call time)")
         
-        # Track results for incremental saving
-        topic_mapping = {}
-        last_save_count = 0
-        
-        # Process conversations by date to save topics per date
-        from datetime import datetime, timedelta
-        
-        def incremental_save(conversation_id: str, topic: str, item_date: str = None):
-            """Callback to save topics incrementally"""
-            nonlocal topic_mapping, last_save_count
-            topic_mapping[conversation_id] = topic
-            
-            # Save every 10 conversations to avoid too many writes, but ensure progress is saved
-            if len(topic_mapping) - last_save_count >= 10:
-                try:
-                    # If we have item_date, save to that specific date, otherwise use start_date
-                    save_date = item_date or start_date
-                    existing = topic_storage.get_topics_for_date(save_date) or {}
-                    existing.update(topic_mapping)
-                    topic_storage.save_topics_for_date(save_date, existing)
-                    last_save_count = len(topic_mapping)
-                    logger.info(f"Incremental save: {len(topic_mapping)}/{total_conversations} topics saved for {save_date}")
-                except Exception as save_error:
-                    logger.warning(f"Failed incremental save (non-critical): {save_error}")
-        
         # Group conversations by date for proper saving
+        from datetime import datetime, timedelta
         conversations_by_date: Dict[str, Dict[str, List[Dict]]] = {}
         for conv_id, items in conversations_by_id.items():
             # Get date from first item
@@ -302,11 +278,35 @@ def extract_topics():
         all_extracted_mapping = {}
         dates_processed = []
         total_processed_count = 0
+        total_skipped_count = 0
         
         try:
             # Extract topics for all dates in range
             for date_str, date_conversations in conversations_by_date.items():
                 logger.info(f"Processing {len(date_conversations)} conversations for date {date_str}")
+                
+                # Check which conversations already have topics extracted
+                existing_topics = topic_storage.get_topics_for_date(date_str) or {}
+                conversations_to_process = {}
+                skipped_count = 0
+                
+                for conv_id, items in date_conversations.items():
+                    if conv_id in existing_topics:
+                        # Skip already extracted conversations
+                        skipped_count += 1
+                        total_skipped_count += 1
+                        all_extracted_mapping[conv_id] = existing_topics[conv_id]
+                    else:
+                        conversations_to_process[conv_id] = items
+                
+                if skipped_count > 0:
+                    logger.info(f"Skipped {skipped_count} already-extracted conversations for {date_str}")
+                
+                if not conversations_to_process:
+                    logger.info(f"All conversations for {date_str} already have topics extracted")
+                    dates_processed.append(date_str)
+                    continue
+                
                 date_topic_mapping = {}
                 date_last_save = 0
                 
@@ -319,23 +319,25 @@ def extract_topics():
                     # Save every 10 conversations
                     if len(date_topic_mapping) - date_last_save >= 10:
                         try:
+                            # Merge with existing topics for this date
                             existing = topic_storage.get_topics_for_date(date_str) or {}
                             existing.update(date_topic_mapping)
                             topic_storage.save_topics_for_date(date_str, existing)
                             date_last_save = len(date_topic_mapping)
-                            logger.info(f"Incremental save for {date_str}: {len(date_topic_mapping)} topics saved")
+                            logger.info(f"Incremental save for {date_str}: {len(date_topic_mapping)} new topics saved")
                         except Exception as save_error:
                             logger.warning(f"Failed incremental save for {date_str}: {save_error}")
                 
-                # Extract topics for this date
+                # Extract topics for conversations that need processing
+                logger.info(f"Extracting topics for {len(conversations_to_process)} new conversations for {date_str}")
                 extracted_for_date = topic_service.batch_extract_topics(
-                    date_conversations,
+                    conversations_to_process,
                     delay_between_requests=0.5,
                     incremental_save_callback=date_incremental_save,
                     save_every=10
                 )
                 
-                # Final save for this date
+                # Final save for this date (merge with existing)
                 if date_topic_mapping:
                     existing = topic_storage.get_topics_for_date(date_str) or {}
                     existing.update(date_topic_mapping)
@@ -354,14 +356,19 @@ def extract_topics():
             
             logger.info(f"Topic extraction completed: {processed_count} conversations processed, {len(topic_counts)} unique topics")
             
+            message = f'Successfully extracted topics for {processed_count} conversations across {len(dates_processed)} date(s)'
+            if total_skipped_count > 0:
+                message += f' Skipped {total_skipped_count} already-extracted conversations.'
+            
             return jsonify({
                 'success': True,
                 'start_date': start_date,
                 'end_date': end_date,
                 'dates_processed': dates_processed,
                 'processed_count': processed_count,
+                'skipped_count': total_skipped_count,
                 'topic_summary': topic_counts,
-                'message': f'Successfully extracted topics for {processed_count} conversations across {len(dates_processed)} date(s)'
+                'message': message
             })
         
         except Exception as e:
