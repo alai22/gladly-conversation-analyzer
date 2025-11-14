@@ -27,7 +27,7 @@ const ConversationTrendsChart = () => {
   const [timeSeriesError, setTimeSeriesError] = useState(null);
   const [timeSeriesStartDate, setTimeSeriesStartDate] = useState('2025-10-20');
   const [timeSeriesEndDate, setTimeSeriesEndDate] = useState('2025-10-25');
-  const [timeSeriesMode, setTimeSeriesMode] = useState('count'); // 'count' or 'percentage'
+  const [timeSeriesMode, setTimeSeriesMode] = useState('percentage'); // 'count' or 'percentage'
 
   // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
   // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
@@ -916,12 +916,12 @@ const ConversationTrendsChart = () => {
               <button
                 onClick={() => setTimeSeriesMode(timeSeriesMode === 'count' ? 'percentage' : 'count')}
                 className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                  timeSeriesMode === 'count'
+                  timeSeriesMode === 'percentage'
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {timeSeriesMode === 'count' ? 'Count' : 'Percentage'}
+                {timeSeriesMode === 'percentage' ? 'Percentage' : 'Count'}
               </button>
               <button
                 onClick={fetchTopicTrendsOverTime}
