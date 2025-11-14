@@ -125,10 +125,11 @@ const ConversationTrendsChart = () => {
         let chartData = response.data.data || [];
         const topics = response.data.topics || [];
         
-        // Calculate total column (aggregate across all dates)
+        // Calculate total column (aggregate across all dates) and order topics by total count
         if (chartData.length > 0) {
           const totalData = { date: 'Total' };
           let grandTotal = 0;
+          const topicTotals = {};
           
           // Sum up all topics across all dates
           topics.forEach(topic => {
@@ -136,6 +137,7 @@ const ConversationTrendsChart = () => {
             chartData.forEach(day => {
               topicTotal += day[topic] || 0;
             });
+            topicTotals[topic] = topicTotal;
             totalData[topic] = topicTotal;
             grandTotal += topicTotal;
           });
@@ -149,10 +151,20 @@ const ConversationTrendsChart = () => {
           
           totalData.total = grandTotal;
           chartData = [...chartData, totalData];
+          
+          // Order topics by total count (descending) - most common at bottom of stack
+          const sortedTopics = [...topics].sort((a, b) => {
+            const totalA = topicTotals[a] || 0;
+            const totalB = topicTotals[b] || 0;
+            return totalB - totalA; // Descending order
+          });
+          
+          setTimeSeriesTopics(sortedTopics);
+        } else {
+          setTimeSeriesTopics(topics);
         }
         
         setTimeSeriesData(chartData);
-        setTimeSeriesTopics(topics);
       } else {
         setTimeSeriesData([]);
         setTimeSeriesTopics([]);

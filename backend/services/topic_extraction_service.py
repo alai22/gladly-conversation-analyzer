@@ -15,7 +15,13 @@ logger = get_logger('topic_extraction_service')
 
 # Define conversation topic categories
 CONVERSATION_TOPICS = [
-    "Product Issues / Technical Problems",
+    # Product Issue Subcategories (replacing broad "Product Issues / Technical Problems")
+    "GPS and Location Accuracy Issues",
+    "Dog doesn't respond to collar",
+    "Battery life, charging or power issues",
+    "Feedback Timing / Response Delay Issues",
+    "Hardware Reliability Issues",
+    # Other Categories
     "Billing / Subscription Questions",
     "Shipping / Delivery Issues",
     "Account Management / Login Issues",
@@ -72,9 +78,18 @@ INSTRUCTIONS:
 3. Choose the SINGLE most appropriate category from the list above
 4. Return ONLY the category name (exact match from the list)
 
+IMPORTANT - Product Issue Categories:
+If the conversation is about a product issue, use the MOST SPECIFIC category:
+- GPS/location problems → "GPS and Location Accuracy Issues"
+- Collar not responding/not working → "Dog doesn't respond to collar"
+- Battery/charging/power problems → "Battery life, charging or power issues"
+- Delayed notifications/alerts → "Feedback Timing / Response Delay Issues"
+- Hardware breaking/malfunctioning → "Hardware Reliability Issues"
+- Only use "Other" if it's a product issue that doesn't fit any of the above
+
 RESPONSE FORMAT:
 Return ONLY the category name, nothing else. For example:
-"Product Issues / Technical Problems"
+"GPS and Location Accuracy Issues"
 
 If the conversation doesn't clearly fit any category, use "Other"."""
         
