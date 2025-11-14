@@ -431,20 +431,34 @@ def _run_topic_extraction(conversation_service, claude_service, start_date: str,
         for date_str, date_conversations in conversations_by_date.items():
             existing_topics = topic_storage.get_topics_for_date(date_str) or {}
             conversations_to_process = {}
+            date_skipped = 0
             
+            # Only re-extract conversations that don't have an extracted_at timestamp
+            # Skip conversations that already have timestamps (they have the full metadata)
             for conv_id, items in date_conversations.items():
                 current_count += 1
                 if conv_id in existing_topics:
-                    total_skipped += 1
-                    # Store existing metadata (could be old string format or new dict format)
-                    all_extracted_mapping[conv_id] = existing_topics[conv_id]
+                    existing_value = existing_topics[conv_id]
+                    # Check if it's a dict with extracted_at timestamp
+                    if isinstance(existing_value, dict) and existing_value.get('extracted_at'):
+                        # Has timestamp, skip it
+                        total_skipped += 1
+                        date_skipped += 1
+                        all_extracted_mapping[conv_id] = existing_value
+                    else:
+                        # No timestamp (old format), re-extract it
+                        conversations_to_process[conv_id] = items
                 else:
+                    # Not in existing topics, extract it
                     conversations_to_process[conv_id] = items
                 _update_extraction_progress(current_count, total_conversations, total_processed, total_skipped, 0)
             
             if not conversations_to_process:
+                logger.info(f"No conversations to re-extract for date {date_str} (all {date_skipped} have timestamps)")
                 dates_processed.append(date_str)
                 continue
+            
+            logger.info(f"Processing {len(conversations_to_process)} conversations for date {date_str} (re-extracting {len(conversations_to_process)} without timestamps, skipping {date_skipped} with timestamps)")
             
             date_topic_mapping = {}
             date_last_save = 0
@@ -475,7 +489,9 @@ def _run_topic_extraction(conversation_service, claude_service, start_date: str,
                 save_every=10
             )
             
+            # Save all extracted metadata (this will overwrite existing entries with new metadata)
             if date_topic_mapping:
+                # Get existing topics and update with new metadata
                 existing = topic_storage.get_topics_for_date(date_str) or {}
                 existing.update(date_topic_mapping)
                 topic_storage.save_topics_for_date(date_str, existing)
@@ -486,7 +502,7 @@ def _run_topic_extraction(conversation_service, claude_service, start_date: str,
         topic_extraction_state['dates_processed'] = dates_processed
         topic_extraction_state['is_running'] = False
         
-        logger.info(f"Topic extraction completed: {total_processed} processed, {total_skipped} skipped")
+        logger.info(f"Topic extraction completed: {total_processed} processed, {total_skipped} skipped (conversations with timestamps were skipped)")
     
     except Exception as e:
         error_msg = str(e)
