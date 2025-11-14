@@ -5,6 +5,7 @@ Topic extraction service for conversation analysis
 import json
 import re
 import time
+from datetime import datetime, timezone
 from typing import List, Dict, Optional, Callable
 from requests.exceptions import RequestException, HTTPError
 from ..utils.config import Config
@@ -53,15 +54,19 @@ class TopicExtractionService:
             max_retries: Maximum number of retries for rate limit errors
             
         Returns:
-            Dict with keys: topic, sentiment, customer_sentiment, key_phrases, product_version
+            Dict with keys: topic, sentiment, customer_sentiment, key_phrases, product_version, extracted_at
         """
+        # Get current timestamp in ISO format
+        extracted_at = datetime.now(timezone.utc).isoformat()
+        
         if not conversation_items:
             return {
                 'topic': 'Other',
                 'sentiment': 'Neutral',
                 'customer_sentiment': 'Neutral',
                 'key_phrases': [],
-                'product_version': None
+                'product_version': None,
+                'extracted_at': extracted_at
             }
         
         # Format conversation transcript
@@ -141,7 +146,8 @@ RESPONSE FORMAT (JSON only, no other text):
                     'sentiment': self._validate_sentiment(metadata.get('sentiment', 'Neutral')),
                     'customer_sentiment': self._validate_customer_sentiment(metadata.get('customer_sentiment', 'Neutral')),
                     'key_phrases': self._validate_key_phrases(metadata.get('key_phrases', [])),
-                    'product_version': metadata.get('product_version') or None
+                    'product_version': metadata.get('product_version') or None,
+                    'extracted_at': extracted_at
                 }
                 
                 return result
@@ -159,7 +165,8 @@ RESPONSE FORMAT (JSON only, no other text):
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None
+                    'product_version': None,
+                    'extracted_at': extracted_at
                 }
             except (HTTPError, RequestException) as e:
                 error_msg = str(e)
@@ -211,12 +218,14 @@ RESPONSE FORMAT (JSON only, no other text):
                     raise Exception(f"Failed to extract metadata after {max_retries} attempts: {error_msg}")
         
         # Final fallback if all retries failed
+        extracted_at = datetime.now(timezone.utc).isoformat()
         return {
             'topic': 'Other',
             'sentiment': 'Neutral',
             'customer_sentiment': 'Neutral',
             'key_phrases': [],
-            'product_version': None
+            'product_version': None,
+            'extracted_at': extracted_at
         }
     
     def extract_conversation_topic(self, conversation_items: List[Dict], max_retries: int = 3) -> str:
@@ -385,12 +394,14 @@ Return ONLY the category name, nothing else."""
                                   f"Please wait 1-2 minutes and try again. Partial progress has been saved. Error: {error_msg}")
                 
                 # For other errors, continue but mark with default values
+                extracted_at = datetime.now(timezone.utc).isoformat()
                 default_metadata = {
                     'topic': 'Other',
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None
+                    'product_version': None,
+                    'extracted_at': extracted_at
                 }
                 results[conversation_id] = default_metadata
                 

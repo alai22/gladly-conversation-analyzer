@@ -209,6 +209,19 @@ def get_topic_trends():
         
         logger.info(f"Topic trends calculated: {len(topics)} unique topics, {total_conversations} total conversations")
         
+        # Calculate extraction timestamp statistics
+        extraction_timestamps = []
+        for conversation_id, value in topic_mapping.items():
+            if isinstance(value, dict):
+                extracted_at = value.get('extracted_at')
+                if extracted_at:
+                    extraction_timestamps.append(extracted_at)
+        
+        oldest_extraction = min(extraction_timestamps) if extraction_timestamps else None
+        newest_extraction = max(extraction_timestamps) if extraction_timestamps else None
+        unknown_timestamp_count = sum(1 for v in topic_mapping.values() 
+                                     if isinstance(v, dict) and v.get('extracted_at') is None)
+        
         return jsonify({
             'success': True,
             'date': date,
@@ -216,7 +229,13 @@ def get_topic_trends():
             'data': data,
             'total': total_conversations,
             'sentiment_breakdown': sentiment_counts,
-            'customer_sentiment_breakdown': customer_sentiment_counts
+            'customer_sentiment_breakdown': customer_sentiment_counts,
+            'extraction_info': {
+                'oldest_extraction': oldest_extraction,
+                'newest_extraction': newest_extraction,
+                'unknown_timestamp_count': unknown_timestamp_count,
+                'total_with_timestamps': len(extraction_timestamps)
+            }
         })
     
     except Exception as e:
@@ -636,6 +655,95 @@ def get_topic_trends_over_time():
     
     except Exception as e:
         logger.error(f"Topic trends over time error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/extraction-timestamps', methods=['GET'])
+def get_extraction_timestamps():
+    """Get extraction timestamps for conversations to help identify which need re-extraction"""
+    try:
+        from ...services.topic_storage_service import TopicStorageService
+        
+        # Get date range parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        date = request.args.get('date')  # Single date option
+        
+        if date:
+            start_date = date
+            end_date = date
+        
+        topic_storage = TopicStorageService()
+        
+        if not start_date or not end_date:
+            # If no date range, return all dates
+            status = topic_storage.get_extraction_status()
+            all_topics = topic_storage.topics_by_date
+            
+            extraction_info = {}
+            for date_str, topic_mapping in all_topics.items():
+                timestamps = []
+                for conv_id, value in topic_mapping.items():
+                    if isinstance(value, dict):
+                        extracted_at = value.get('extracted_at')
+                        if extracted_at:
+                            timestamps.append(extracted_at)
+                
+                extraction_info[date_str] = {
+                    'conversation_count': len(topic_mapping),
+                    'oldest_extraction': min(timestamps) if timestamps else None,
+                    'newest_extraction': max(timestamps) if timestamps else None,
+                    'unknown_timestamp_count': sum(1 for v in topic_mapping.values() 
+                                                  if isinstance(v, dict) and v.get('extracted_at') is None),
+                    'total_with_timestamps': len(timestamps)
+                }
+            
+            return jsonify({
+                'success': True,
+                'extraction_info': extraction_info
+            })
+        
+        # Filter by date range
+        from datetime import datetime, timedelta
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        all_topics = topic_storage.topics_by_date
+        extraction_info = {}
+        
+        current_date = start
+        while current_date <= end:
+            date_str = current_date.isoformat()
+            if date_str in all_topics:
+                topic_mapping = all_topics[date_str]
+                timestamps = []
+                for conv_id, value in topic_mapping.items():
+                    if isinstance(value, dict):
+                        extracted_at = value.get('extracted_at')
+                        if extracted_at:
+                            timestamps.append(extracted_at)
+                
+                extraction_info[date_str] = {
+                    'conversation_count': len(topic_mapping),
+                    'oldest_extraction': min(timestamps) if timestamps else None,
+                    'newest_extraction': max(timestamps) if timestamps else None,
+                    'unknown_timestamp_count': sum(1 for v in topic_mapping.values() 
+                                                  if isinstance(v, dict) and v.get('extracted_at') is None),
+                    'total_with_timestamps': len(timestamps)
+                }
+            current_date += timedelta(days=1)
+        
+        return jsonify({
+            'success': True,
+            'start_date': start_date,
+            'end_date': end_date,
+            'extraction_info': extraction_info
+        })
+    
+    except Exception as e:
+        logger.error(f"Get extraction timestamps error: {str(e)}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500

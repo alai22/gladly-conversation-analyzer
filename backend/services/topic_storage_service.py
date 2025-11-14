@@ -8,7 +8,7 @@ Uses S3 for persistence (with local fallback).
 import json
 import os
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, List, Any, Union
 from ..utils.config import Config
 from ..utils.logging import get_logger
@@ -126,16 +126,20 @@ class TopicStorageService:
         normalized_mapping = {}
         for conv_id, value in topic_mapping.items():
             if isinstance(value, str):
-                # Old format: just topic string
+                # Old format: just topic string - mark extracted_at as None (unknown)
                 normalized_mapping[conv_id] = {
                     'topic': value,
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None
+                    'product_version': None,
+                    'extracted_at': None  # Unknown timestamp for old data
                 }
             elif isinstance(value, dict):
-                # New format: metadata dict
+                # New format: metadata dict - ensure extracted_at exists
+                if 'extracted_at' not in value:
+                    # If missing timestamp, mark as unknown
+                    value['extracted_at'] = None
                 normalized_mapping[conv_id] = value
             else:
                 logger.warning(f"Unexpected topic format for {conv_id}: {type(value)}")
@@ -160,14 +164,19 @@ class TopicStorageService:
         
         # Normalize to dict format
         if isinstance(topic_or_metadata, str):
+            # Old format: mark extracted_at as None (unknown)
             self.topics_by_date[date][conversation_id] = {
                 'topic': topic_or_metadata,
                 'sentiment': 'Neutral',
                 'customer_sentiment': 'Neutral',
                 'key_phrases': [],
-                'product_version': None
+                'product_version': None,
+                'extracted_at': None  # Unknown timestamp for old data
             }
         elif isinstance(topic_or_metadata, dict):
+            # Ensure extracted_at exists in metadata dict
+            if 'extracted_at' not in topic_or_metadata:
+                topic_or_metadata['extracted_at'] = None
             self.topics_by_date[date][conversation_id] = topic_or_metadata
         else:
             logger.warning(f"Unexpected topic format for {conversation_id}: {type(topic_or_metadata)}")
