@@ -287,7 +287,10 @@ class ConversationService:
                 logger.debug(f"Skipping item with invalid timestamp '{item.timestamp}': {e}")
                 continue
         
-        logger.info(f"Retrieved {len(conversations_by_id)} conversations for date {date}")
+        if start_date == end_date:
+            logger.info(f"Retrieved {len(conversations_by_id)} conversations for date {start_date}")
+        else:
+            logger.info(f"Retrieved {len(conversations_by_id)} conversations for date range {start_date} to {end_date}")
         return conversations_by_id
     
     def refresh_conversations(self):
