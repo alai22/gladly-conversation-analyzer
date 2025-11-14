@@ -44,19 +44,25 @@ class TopicExtractionService:
             # For now, we'll require it to be passed in
             raise ValueError("ClaudeService is required for TopicExtractionService")
     
-    def extract_conversation_topic(self, conversation_items: List[Dict], max_retries: int = 3) -> str:
+    def extract_conversation_metadata(self, conversation_items: List[Dict], max_retries: int = 3) -> Dict[str, any]:
         """
-        Extract the primary topic from a conversation using Claude API with retry logic
+        Extract topic and metadata from a conversation using Claude API
         
         Args:
             conversation_items: List of conversation items (messages, notes, etc.)
             max_retries: Maximum number of retries for rate limit errors
             
         Returns:
-            Topic category string
+            Dict with keys: topic, sentiment, customer_sentiment, key_phrases, product_version
         """
         if not conversation_items:
-            return "Other"
+            return {
+                'topic': 'Other',
+                'sentiment': 'Neutral',
+                'customer_sentiment': 'Neutral',
+                'key_phrases': [],
+                'product_version': None
+            }
         
         # Format conversation transcript
         transcript = self._format_conversation_transcript(conversation_items)
@@ -64,7 +70,7 @@ class TopicExtractionService:
         # Create prompt for Claude
         topic_list = '\n'.join([f'  "{topic}"' for topic in CONVERSATION_TOPICS])
         
-        prompt = f"""Analyze this customer support conversation and identify the PRIMARY topic/category.
+        prompt = f"""Analyze this customer support conversation and extract structured information.
 
 CONVERSATION TRANSCRIPT:
 {transcript}
@@ -72,50 +78,89 @@ CONVERSATION TRANSCRIPT:
 VALID TOPIC CATEGORIES (use exact spelling):
 {topic_list}
 
-INSTRUCTIONS:
-1. Read through the entire conversation transcript
-2. Identify the PRIMARY topic or main reason for this conversation
-3. Choose the SINGLE most appropriate category from the list above
-4. Return ONLY the category name (exact match from the list)
+EXTRACTION REQUIREMENTS:
+1. PRIMARY TOPIC: Choose the SINGLE most appropriate category from the list above
+   - For product issues, use the MOST SPECIFIC category:
+     * GPS/location problems → "GPS and Location Accuracy Issues"
+     * Collar not responding → "Dog doesn't respond to collar"
+     * Battery/charging/power → "Battery life, charging or power issues"
+     * Delayed notifications → "Feedback Timing / Response Delay Issues"
+     * Hardware breaking → "Hardware Reliability Issues"
 
-IMPORTANT - Product Issue Categories:
-If the conversation is about a product issue, use the MOST SPECIFIC category:
-- GPS/location problems → "GPS and Location Accuracy Issues"
-- Collar not responding/not working → "Dog doesn't respond to collar"
-- Battery/charging/power problems → "Battery life, charging or power issues"
-- Delayed notifications/alerts → "Feedback Timing / Response Delay Issues"
-- Hardware breaking/malfunctioning → "Hardware Reliability Issues"
-- Only use "Other" if it's a product issue that doesn't fit any of the above
+2. SENTIMENT: Overall sentiment of the conversation
+   - Options: "Positive", "Negative", "Neutral"
+   - Consider the overall tone and outcome
 
-RESPONSE FORMAT:
-Return ONLY the category name, nothing else. For example:
-"GPS and Location Accuracy Issues"
+3. CUSTOMER SENTIMENT: Specific customer emotional state
+   - Options: "Frustrated", "Satisfied", "Neutral", "Angry", "Happy", "Concerned"
+   - Focus on the customer's expressed emotions
 
-If the conversation doesn't clearly fit any category, use "Other"."""
+4. KEY PHRASES: Extract 2-5 important phrases or keywords that capture the main issue
+   - Examples: "GPS not accurate", "battery dies quickly", "collar won't respond"
+   - Return as a JSON array of strings
+   - Maximum 5 phrases, keep them concise (3-8 words each)
+
+5. PRODUCT VERSION: Extract product model or version if mentioned
+   - Look for: version numbers (v2.1, version 3, etc.), model names, product IDs
+   - Return the exact text mentioned, or null if not found
+   - Examples: "v2.1", "Halo 3", "Model X", null
+
+RESPONSE FORMAT (JSON only, no other text):
+{{
+  "topic": "GPS and Location Accuracy Issues",
+  "sentiment": "Negative",
+  "customer_sentiment": "Frustrated",
+  "key_phrases": ["GPS not accurate", "location wrong", "pin placement off"],
+  "product_version": "v2.1"
+}}"""
         
         for attempt in range(max_retries):
             try:
                 response = self.claude_service.send_message(
                     message=prompt,
                     model=Config.CLAUDE_MODEL,
-                    max_tokens=100
+                    max_tokens=200  # Increased for structured response
                 )
                 
-                topic = response.content.strip().strip('"').strip("'")
+                # Parse JSON response
+                content = response.content.strip()
+                # Remove markdown code blocks if present
+                if content.startswith('```'):
+                    parts = content.split('```')
+                    if len(parts) >= 2:
+                        content = parts[1]
+                        if content.startswith('json'):
+                            content = content[4:]
+                    content = content.strip()
                 
-                # Validate topic is in our list
-                if topic in CONVERSATION_TOPICS:
-                    return topic
+                metadata = json.loads(content)
                 
-                # Try fuzzy matching
-                topic_lower = topic.lower()
-                for valid_topic in CONVERSATION_TOPICS:
-                    if valid_topic.lower() == topic_lower:
-                        return valid_topic
+                # Validate and normalize
+                result = {
+                    'topic': self._validate_topic(metadata.get('topic', 'Other')),
+                    'sentiment': self._validate_sentiment(metadata.get('sentiment', 'Neutral')),
+                    'customer_sentiment': self._validate_customer_sentiment(metadata.get('customer_sentiment', 'Neutral')),
+                    'key_phrases': self._validate_key_phrases(metadata.get('key_phrases', [])),
+                    'product_version': metadata.get('product_version') or None
+                }
                 
-                logger.warning(f"Claude returned unexpected topic: '{topic}', using 'Other'")
-                return "Other"
+                return result
                 
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON response (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.debug(f"Response content: {response.content[:500] if 'response' in locals() else 'N/A'}")
+                if attempt < max_retries - 1:
+                    # Try again with a simpler prompt as fallback
+                    continue
+                # Final fallback: extract just topic
+                topic = self._extract_topic_fallback(conversation_items)
+                return {
+                    'topic': topic,
+                    'sentiment': 'Neutral',
+                    'customer_sentiment': 'Neutral',
+                    'key_phrases': [],
+                    'product_version': None
+                }
             except (HTTPError, RequestException) as e:
                 error_msg = str(e)
                 status_code = None
@@ -139,7 +184,7 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                         raise Exception(f"Rate limit exceeded. Claude API is rate limiting requests. Please wait 1-2 minutes and try again. Details: {error_msg}")
                 else:
                     # Other HTTP errors
-                    logger.error(f"HTTP error extracting topic (status={status_code}): {error_msg}")
+                    logger.error(f"HTTP error extracting metadata (status={status_code}): {error_msg}")
                     if attempt < max_retries - 1:
                         wait_time = min(2 ** attempt, 10)
                         time.sleep(wait_time)
@@ -158,40 +203,144 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                         logger.error(f"Rate limit error after {max_retries} attempts: {error_msg}")
                         raise Exception(f"Rate limit exceeded. Claude API is rate limiting requests. Please wait a minute and try again. Details: {error_msg}")
                 else:
-                    logger.error(f"Error extracting topic: {error_msg}")
+                    logger.error(f"Error extracting metadata: {error_msg}")
                     if attempt < max_retries - 1:
                         wait_time = min(2 ** attempt, 5)
                         time.sleep(wait_time)
                         continue
-                    raise Exception(f"Failed to extract topic after {max_retries} attempts: {error_msg}")
+                    raise Exception(f"Failed to extract metadata after {max_retries} attempts: {error_msg}")
         
-        # If we get here, all retries failed
+        # Final fallback if all retries failed
+        return {
+            'topic': 'Other',
+            'sentiment': 'Neutral',
+            'customer_sentiment': 'Neutral',
+            'key_phrases': [],
+            'product_version': None
+        }
+    
+    def extract_conversation_topic(self, conversation_items: List[Dict], max_retries: int = 3) -> str:
+        """
+        Extract the primary topic from a conversation (backward compatibility method)
+        
+        Args:
+            conversation_items: List of conversation items (messages, notes, etc.)
+            max_retries: Maximum number of retries for rate limit errors
+            
+        Returns:
+            Topic category string
+        """
+        metadata = self.extract_conversation_metadata(conversation_items, max_retries)
+        return metadata['topic']
+    
+    def _validate_topic(self, topic: str) -> str:
+        """Validate topic is in our list"""
+        if not topic or not isinstance(topic, str):
+            return "Other"
+        if topic in CONVERSATION_TOPICS:
+            return topic
+        topic_lower = topic.lower()
+        for valid_topic in CONVERSATION_TOPICS:
+            if valid_topic.lower() == topic_lower:
+                return valid_topic
+        logger.warning(f"Invalid topic '{topic}', using 'Other'")
         return "Other"
+    
+    def _validate_sentiment(self, sentiment: str) -> str:
+        """Validate sentiment"""
+        if not sentiment or not isinstance(sentiment, str):
+            return 'Neutral'
+        valid = ['Positive', 'Negative', 'Neutral']
+        if sentiment in valid:
+            return sentiment
+        sentiment_lower = sentiment.lower()
+        if 'positive' in sentiment_lower or 'good' in sentiment_lower:
+            return 'Positive'
+        elif 'negative' in sentiment_lower or 'bad' in sentiment_lower:
+            return 'Negative'
+        return 'Neutral'
+    
+    def _validate_customer_sentiment(self, sentiment: str) -> str:
+        """Validate customer sentiment"""
+        if not sentiment or not isinstance(sentiment, str):
+            return 'Neutral'
+        valid = ['Frustrated', 'Satisfied', 'Neutral', 'Angry', 'Happy', 'Concerned']
+        if sentiment in valid:
+            return sentiment
+        sentiment_lower = sentiment.lower()
+        if 'frustrat' in sentiment_lower:
+            return 'Frustrated'
+        elif 'satisf' in sentiment_lower or 'happy' in sentiment_lower:
+            return 'Satisfied'
+        elif 'angry' in sentiment_lower or 'mad' in sentiment_lower:
+            return 'Angry'
+        elif 'concern' in sentiment_lower or 'worri' in sentiment_lower:
+            return 'Concerned'
+        return 'Neutral'
+    
+    def _validate_key_phrases(self, phrases: any) -> List[str]:
+        """Validate and clean key phrases"""
+        if not isinstance(phrases, list):
+            return []
+        # Limit to 5 phrases, clean them
+        cleaned = []
+        for phrase in phrases[:5]:
+            if isinstance(phrase, str) and phrase.strip():
+                cleaned.append(phrase.strip()[:100])  # Max 100 chars per phrase
+        return cleaned
+    
+    def _extract_topic_fallback(self, conversation_items: List[Dict]) -> str:
+        """Fallback topic extraction if JSON parsing fails"""
+        # Use a simple prompt to extract just the topic
+        transcript = self._format_conversation_transcript(conversation_items)
+        topic_list = '\n'.join([f'  "{topic}"' for topic in CONVERSATION_TOPICS])
+        
+        prompt = f"""Analyze this customer support conversation and identify the PRIMARY topic/category.
+
+CONVERSATION TRANSCRIPT:
+{transcript}
+
+VALID TOPIC CATEGORIES (use exact spelling):
+{topic_list}
+
+Return ONLY the category name, nothing else."""
+        
+        try:
+            response = self.claude_service.send_message(
+                message=prompt,
+                model=Config.CLAUDE_MODEL,
+                max_tokens=100
+            )
+            topic = response.content.strip().strip('"').strip("'")
+            return self._validate_topic(topic)
+        except Exception as e:
+            logger.error(f"Fallback topic extraction failed: {e}")
+            return "Other"
     
     def batch_extract_topics(self, conversations: Dict[str, List[Dict]], 
                             delay_between_requests: float = 0.5,
                             progress_callback: Optional[Callable[[int, int, int, int], None]] = None,
-                            incremental_save_callback: Optional[Callable[[str, str], None]] = None,
-                            save_every: int = 10) -> Dict[str, str]:
+                            incremental_save_callback: Optional[Callable[[str, Dict], None]] = None,
+                            save_every: int = 10) -> Dict[str, Dict]:
         """
-        Extract topics for multiple conversations with rate limiting and incremental saving
+        Extract topics and metadata for multiple conversations with rate limiting and incremental saving
         
         Args:
             conversations: Dict mapping conversation_id -> list of conversation items
             delay_between_requests: Delay in seconds between API requests (default 0.5s)
             progress_callback: Optional callback function(current, total, success, failed)
-            incremental_save_callback: Optional callback(conversation_id, topic) for incremental saving
+            incremental_save_callback: Optional callback(conversation_id, metadata_dict) for incremental saving
             save_every: Save incrementally every N conversations (default 10)
             
         Returns:
-            Dict mapping conversation_id -> topic
+            Dict mapping conversation_id -> metadata dict (topic, sentiment, customer_sentiment, key_phrases, product_version)
         """
         results = {}
         total = len(conversations)
         success_count = 0
         failed_count = 0
         
-        logger.info(f"Starting batch topic extraction for {total} conversations with {delay_between_requests}s delay between requests")
+        logger.info(f"Starting batch topic and metadata extraction for {total} conversations with {delay_between_requests}s delay between requests")
         logger.info(f"Estimated time: ~{total * delay_between_requests / 60:.1f} minutes (plus API call time)")
         
         for idx, (conversation_id, items) in enumerate(conversations.items(), 1):
@@ -200,19 +349,19 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                 if idx > 1:
                     time.sleep(delay_between_requests)
                 
-                topic = self.extract_conversation_topic(items)
-                results[conversation_id] = topic
+                metadata = self.extract_conversation_metadata(items)
+                results[conversation_id] = metadata
                 success_count += 1
                 
                 # Log progress every 10 conversations or at milestones
                 if idx % 10 == 0 or idx == total:
                     logger.info(f"Progress: {idx}/{total} conversations processed ({success_count} succeeded, {failed_count} failed) - {idx*100//total}%")
                 else:
-                    logger.debug(f"Extracted topic '{topic}' for conversation {conversation_id} ({idx}/{total})")
+                    logger.debug(f"Extracted metadata for conversation {conversation_id} ({idx}/{total}): topic={metadata.get('topic')}, sentiment={metadata.get('sentiment')}")
                 
                 # Incremental save callback (for saving progress as we go)
                 if incremental_save_callback:
-                    incremental_save_callback(conversation_id, topic)
+                    incremental_save_callback(conversation_id, metadata)
                     # Save periodically to avoid too many writes
                     if idx % save_every == 0:
                         logger.debug(f"Incremental save checkpoint: {idx} conversations processed")
@@ -224,7 +373,7 @@ If the conversation doesn't clearly fit any category, use "Other"."""
             except Exception as e:
                 failed_count += 1
                 error_msg = str(e)
-                logger.error(f"Error extracting topic for conversation {conversation_id} ({idx}/{total}): {error_msg}")
+                logger.error(f"Error extracting metadata for conversation {conversation_id} ({idx}/{total}): {error_msg}")
                 
                 # If it's a rate limit error, we should stop and let the user know
                 if '429' in error_msg or 'rate_limit' in error_msg.lower() or 'Too Many Requests' in error_msg:
@@ -235,12 +384,19 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                     raise Exception(f"Rate limit exceeded after processing {success_count} of {total} conversations. "
                                   f"Please wait 1-2 minutes and try again. Partial progress has been saved. Error: {error_msg}")
                 
-                # For other errors, continue but mark as "Other"
-                results[conversation_id] = "Other"
+                # For other errors, continue but mark with default values
+                default_metadata = {
+                    'topic': 'Other',
+                    'sentiment': 'Neutral',
+                    'customer_sentiment': 'Neutral',
+                    'key_phrases': [],
+                    'product_version': None
+                }
+                results[conversation_id] = default_metadata
                 
-                # Incremental save for failed ones too (marked as "Other")
+                # Incremental save for failed ones too (with default metadata)
                 if incremental_save_callback:
-                    incremental_save_callback(conversation_id, "Other")
+                    incremental_save_callback(conversation_id, default_metadata)
                 
                 # Call progress callback even on failure
                 if progress_callback:

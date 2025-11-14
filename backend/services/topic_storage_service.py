@@ -9,7 +9,7 @@ import json
 import os
 import boto3
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any, Union
 from ..utils.config import Config
 from ..utils.logging import get_logger
 
@@ -34,9 +34,11 @@ class TopicStorageService:
                 logger.warning(f"Could not initialize S3 client: {e}")
         
         # Load existing topics
-        self.topics_by_date: Dict[str, Dict[str, str]] = self._load_topics()
+        # Format: Dict[date, Dict[conversation_id, topic_or_metadata]]
+        # topic_or_metadata can be: str (old format) or Dict (new format with metadata)
+        self.topics_by_date: Dict[str, Dict[str, Union[str, Dict[str, Any]]]] = self._load_topics()
     
-    def _load_topics(self) -> Dict[str, Dict[str, str]]:
+    def _load_topics(self) -> Dict[str, Dict[str, Union[str, Dict[str, Any]]]]:
         """Load topics from S3 or local file"""
         try:
             # Try S3 first
@@ -58,7 +60,7 @@ class TopicStorageService:
         logger.info("No existing topics found, starting fresh")
         return {}
     
-    def _load_from_s3(self) -> Dict[str, Dict[str, str]]:
+    def _load_from_s3(self) -> Dict[str, Dict[str, Union[str, Dict[str, Any]]]]:
         """Load topics from S3"""
         try:
             response = self.s3_client.get_object(
@@ -115,17 +117,61 @@ class TopicStorageService:
             json.dump(self.topics_by_date, f, indent=2)
         logger.info(f"Saved topics to local file: {len(self.topics_by_date)} dates")
     
-    def save_topics_for_date(self, date: str, topic_mapping: Dict[str, str]):
-        """Save topic mappings for a specific date"""
-        self.topics_by_date[date] = topic_mapping
+    def save_topics_for_date(self, date: str, topic_mapping: Dict[str, Union[str, Dict[str, Any]]]):
+        """
+        Save topic mappings for a specific date
+        Supports both old format (conversation_id -> topic string) and new format (conversation_id -> metadata dict)
+        """
+        # Normalize: convert old string format to new dict format for consistency
+        normalized_mapping = {}
+        for conv_id, value in topic_mapping.items():
+            if isinstance(value, str):
+                # Old format: just topic string
+                normalized_mapping[conv_id] = {
+                    'topic': value,
+                    'sentiment': 'Neutral',
+                    'customer_sentiment': 'Neutral',
+                    'key_phrases': [],
+                    'product_version': None
+                }
+            elif isinstance(value, dict):
+                # New format: metadata dict
+                normalized_mapping[conv_id] = value
+            else:
+                logger.warning(f"Unexpected topic format for {conv_id}: {type(value)}")
+                continue
+        
+        self.topics_by_date[date] = normalized_mapping
         self._save_topics()
-        logger.info(f"Saved topics for date {date}: {len(topic_mapping)} conversations")
+        logger.info(f"Saved topics for date {date}: {len(normalized_mapping)} conversations")
     
-    def add_topic_for_date(self, date: str, conversation_id: str, topic: str, save_immediately: bool = False):
-        """Add a single topic mapping for a date (for incremental saving)"""
+    def add_topic_for_date(self, date: str, conversation_id: str, topic_or_metadata: Union[str, Dict[str, Any]], save_immediately: bool = False):
+        """
+        Add a single topic mapping for a date (for incremental saving)
+        
+        Args:
+            date: Date string (YYYY-MM-DD)
+            conversation_id: Conversation ID
+            topic_or_metadata: Either a topic string (old format) or metadata dict (new format)
+            save_immediately: Whether to save immediately to disk/S3
+        """
         if date not in self.topics_by_date:
             self.topics_by_date[date] = {}
-        self.topics_by_date[date][conversation_id] = topic
+        
+        # Normalize to dict format
+        if isinstance(topic_or_metadata, str):
+            self.topics_by_date[date][conversation_id] = {
+                'topic': topic_or_metadata,
+                'sentiment': 'Neutral',
+                'customer_sentiment': 'Neutral',
+                'key_phrases': [],
+                'product_version': None
+            }
+        elif isinstance(topic_or_metadata, dict):
+            self.topics_by_date[date][conversation_id] = topic_or_metadata
+        else:
+            logger.warning(f"Unexpected topic format for {conversation_id}: {type(topic_or_metadata)}")
+            return
         
         if save_immediately:
             self._save_topics()
@@ -136,17 +182,48 @@ class TopicStorageService:
             self._save_topics()
             logger.debug(f"Incrementally saved topics for date {date}: {len(self.topics_by_date[date])} conversations")
     
-    def get_topics_for_date(self, date: str) -> Optional[Dict[str, str]]:
-        """Get topic mappings for a specific date"""
+    def get_topics_for_date(self, date: str) -> Optional[Dict[str, Union[str, Dict[str, Any]]]]:
+        """
+        Get topic mappings for a specific date (returns full metadata dict format)
+        
+        Returns:
+            Dict mapping conversation_id -> metadata dict (or topic string for old format)
+        """
         return self.topics_by_date.get(date)
+    
+    def get_topics_only_for_date(self, date: str) -> Optional[Dict[str, str]]:
+        """
+        Get only topic strings for backward compatibility
+        
+        Returns:
+            Dict mapping conversation_id -> topic string
+        """
+        full_data = self.get_topics_for_date(date)
+        if not full_data:
+            return None
+        result = {}
+        for conv_id, value in full_data.items():
+            if isinstance(value, dict):
+                result[conv_id] = value.get('topic', 'Other')
+            else:
+                result[conv_id] = value
+        return result
     
     def get_extraction_status(self) -> Dict[str, Dict[str, int]]:
         """Get status of extracted topics by date"""
         status = {}
         for date, topic_mapping in self.topics_by_date.items():
+            # Count unique topics (handle both formats)
+            topics = set()
+            for value in topic_mapping.values():
+                if isinstance(value, dict):
+                    topics.add(value.get('topic', 'Other'))
+                else:
+                    topics.add(value)
+            
             status[date] = {
                 'conversation_count': len(topic_mapping),
-                'unique_topics': len(set(topic_mapping.values()))
+                'unique_topics': len(topics)
             }
         return status
     

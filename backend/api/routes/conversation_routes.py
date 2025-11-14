@@ -170,10 +170,25 @@ def get_topic_trends():
                 'message': f'No topics extracted for date {date}. Please extract topics first in Settings.'
             })
         
-        # Aggregate topics
+        # Aggregate topics (handle both old string format and new dict format)
         topic_counts = {}
-        for conversation_id, topic in topic_mapping.items():
+        sentiment_counts = {}
+        customer_sentiment_counts = {}
+        
+        for conversation_id, value in topic_mapping.items():
+            if isinstance(value, dict):
+                topic = value.get('topic', 'Other')
+                sentiment = value.get('sentiment', 'Neutral')
+                customer_sentiment = value.get('customer_sentiment', 'Neutral')
+            else:
+                # Old format: just topic string
+                topic = value
+                sentiment = 'Neutral'
+                customer_sentiment = 'Neutral'
+            
             topic_counts[topic] = topic_counts.get(topic, 0) + 1
+            sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+            customer_sentiment_counts[customer_sentiment] = customer_sentiment_counts.get(customer_sentiment, 0) + 1
         
         total_conversations = len(topic_mapping)
         
@@ -199,7 +214,9 @@ def get_topic_trends():
             'date': date,
             'topics': topics,
             'data': data,
-            'total': total_conversations
+            'total': total_conversations,
+            'sentiment_breakdown': sentiment_counts,
+            'customer_sentiment_breakdown': customer_sentiment_counts
         })
     
     except Exception as e:
@@ -372,6 +389,7 @@ def _run_topic_extraction(conversation_service, claude_service, start_date: str,
                 current_count += 1
                 if conv_id in existing_topics:
                     total_skipped += 1
+                    # Store existing metadata (could be old string format or new dict format)
                     all_extracted_mapping[conv_id] = existing_topics[conv_id]
                 else:
                     conversations_to_process[conv_id] = items
@@ -384,10 +402,11 @@ def _run_topic_extraction(conversation_service, claude_service, start_date: str,
             date_topic_mapping = {}
             date_last_save = 0
             
-            def date_incremental_save(conversation_id: str, topic: str):
+            def date_incremental_save(conversation_id: str, metadata: Dict):
+                """Callback now receives full metadata dict instead of just topic string"""
                 nonlocal date_topic_mapping, date_last_save, all_extracted_mapping, total_processed, current_count
-                date_topic_mapping[conversation_id] = topic
-                all_extracted_mapping[conversation_id] = topic
+                date_topic_mapping[conversation_id] = metadata  # Store full metadata
+                all_extracted_mapping[conversation_id] = metadata
                 total_processed += 1
                 current_count += 1
                 
@@ -569,14 +588,19 @@ def get_topic_trends_over_time():
                 'message': f'No topics extracted for date range {start_date} to {end_date}'
             })
         
-        # Aggregate topics by date
+        # Aggregate topics by date (handle both old string format and new dict format)
         all_topics_set = set()
         date_topic_data = {}
         
         for date_str in dates_in_range:
             topic_mapping = all_topics.get(date_str, {})
             topic_counts = {}
-            for conversation_id, topic in topic_mapping.items():
+            for conversation_id, value in topic_mapping.items():
+                # Handle both formats
+                if isinstance(value, dict):
+                    topic = value.get('topic', 'Other')
+                else:
+                    topic = value
                 topic_counts[topic] = topic_counts.get(topic, 0) + 1
                 all_topics_set.add(topic)
             
