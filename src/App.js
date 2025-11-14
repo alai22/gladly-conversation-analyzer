@@ -8,6 +8,7 @@ import Login from './components/Login';
 import TabNavigation from './components/TabNavigation';
 import DownloadManager from './components/DownloadManager';
 import ChurnTrendsChart from './components/ChurnTrendsChart';
+import ConversationTrendsChart from './components/ConversationTrendsChart';
 import axios from 'axios';
 
 function App() {
@@ -18,7 +19,8 @@ function App() {
     ask: [],
     download: [],
     survicate: [],
-    'churn-trends': []
+    'churn-trends': [],
+    'conversation-trends': []
   });
   const [currentMode, setCurrentMode] = useState('churn-trends'); // 'conversations', 'ask', 'survicate', 'churn-trends' (admin: 'claude', 'download')
   const [isLoading, setIsLoading] = useState(false);
@@ -374,6 +376,7 @@ function App() {
 
   const getModeTitle = () => {
     const modeTitles = {
+      'conversation-trends': 'Conversation Trends',
       'claude': 'Claude Chat',
       'conversations': 'Search Conversations', 
       'ask': 'Ask About Conversations',
@@ -471,11 +474,13 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {adminMode === 'download' ? (
             <DownloadManager />
           ) : currentMode === 'churn-trends' ? (
             <ChurnTrendsChart />
+          ) : currentMode === 'conversation-trends' ? (
+            <ConversationTrendsChart />
           ) : (
             <ConversationDisplay
               conversations={getCurrentConversations()}
@@ -486,7 +491,7 @@ function App() {
         </div>
 
         {/* Prompt Input */}
-        {adminMode !== 'download' && currentMode !== 'churn-trends' && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && (
           <div className="bg-white border-t border-gray-200 p-6">
             <PromptInput
               onSendMessage={handleSendMessage}

@@ -222,6 +222,56 @@ class ConversationService:
         logger.info(f"Retrieved {len(results)} items for conversation ID: {conversation_id}")
         return results
     
+    def get_conversations_by_date(self, date: str) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get conversations filtered by date, grouped by conversation_id
+        
+        Args:
+            date: Date string in format 'YYYY-MM-DD' (e.g., '2025-10-20')
+            
+        Returns:
+            Dict mapping conversation_id -> list of conversation items
+        """
+        if not self.conversations:
+            logger.warning("No conversations available for date filtering")
+            return {}
+        
+        from datetime import datetime
+        
+        # Parse target date
+        try:
+            target_date = datetime.strptime(date, '%Y-%m-%d').date()
+        except ValueError as e:
+            logger.error(f"Invalid date format '{date}': {e}")
+            return {}
+        
+        # Group items by conversation_id and filter by date
+        conversations_by_id: Dict[str, List[Dict[str, Any]]] = {}
+        
+        for item in self.conversations:
+            if not item.timestamp:
+                continue
+            
+            try:
+                # Parse timestamp (ISO format: YYYY-MM-DDTHH:MM:SSZ)
+                item_time = datetime.fromisoformat(item.timestamp.replace('Z', '+00:00'))
+                item_date = item_time.date()
+                
+                # Check if date matches
+                if item_date == target_date:
+                    conv_id = item.conversation_id
+                    if conv_id not in conversations_by_id:
+                        conversations_by_id[conv_id] = []
+                    conversations_by_id[conv_id].append(item.to_dict())
+                    
+            except (ValueError, AttributeError) as e:
+                # Skip items with invalid timestamps
+                logger.debug(f"Skipping item with invalid timestamp '{item.timestamp}': {e}")
+                continue
+        
+        logger.info(f"Retrieved {len(conversations_by_id)} conversations for date {date}")
+        return conversations_by_id
+    
     def refresh_conversations(self):
         """Refresh conversations from storage (useful after aggregation)"""
         logger.info("Refreshing conversations from storage")

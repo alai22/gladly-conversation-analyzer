@@ -95,8 +95,8 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode }) => {
         </div>
       </div>
 
-      {/* Conversation Stats */}
-      {downloadStats && currentMode !== 'survicate' && (
+      {/* Conversation Stats - Only show in Gladly Conversations mode */}
+      {downloadStats && (currentMode === 'conversations' || currentMode === 'ask') && (
         <div className="p-6 border-t border-gray-200">
           <div className="text-xs text-gray-500">
             <div className="mb-2">

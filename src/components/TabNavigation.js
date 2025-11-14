@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MessageSquare, BarChart3, FileText } from 'lucide-react';
+import { Search, MessageSquare, BarChart3, FileText, TrendingUp } from 'lucide-react';
 
 const TabNavigation = ({ currentMode, setCurrentMode }) => {
   const [activeTab, setActiveTab] = useState(() => {
     // Determine active tab based on current mode
-    if (['conversations', 'ask'].includes(currentMode)) {
+    if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       return 'gladly';
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
       return 'churn';
@@ -15,7 +15,7 @@ const TabNavigation = ({ currentMode, setCurrentMode }) => {
 
   // Update active tab when currentMode changes externally
   useEffect(() => {
-    if (['conversations', 'ask'].includes(currentMode)) {
+    if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       setActiveTab('gladly');
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
       setActiveTab('churn');
@@ -40,6 +40,15 @@ const TabNavigation = ({ currentMode, setCurrentMode }) => {
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
       borderColor: 'border-purple-200'
+    },
+    {
+      id: 'conversation-trends',
+      name: 'Conversation Trends',
+      description: 'Visualize conversation topic trends',
+      icon: TrendingUp,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200'
     }
   ];
 
@@ -78,7 +87,7 @@ const TabNavigation = ({ currentMode, setCurrentMode }) => {
           onClick={() => {
             setActiveTab('gladly');
             // Switch to first mode of the tab if current mode is from other tab
-            if (!['conversations', 'ask'].includes(currentMode)) {
+            if (!['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
               setCurrentMode('ask');
             }
           }}

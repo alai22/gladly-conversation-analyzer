@@ -112,3 +112,92 @@ def get_conversation(conversation_id):
     except Exception as e:
         logger.error(f"Get conversation error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/topic-trends', methods=['GET'])
+def get_topic_trends():
+    """Get conversation topic trends for a specific date"""
+    try:
+        # Get service from container (injected via Flask's g)
+        service_container = getattr(g, 'service_container', None)
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        claude_service = service_container.get_claude_service()
+        
+        # Check if Claude service is initialized
+        if claude_service is None:
+            error_msg = "Claude API service is not initialized. Please check ANTHROPIC_API_KEY configuration."
+            logger.error(error_msg)
+            return jsonify({
+                'error': error_msg,
+                'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
+            }), 503
+        
+        # Get date parameter (default to 2025-10-20 for prototype)
+        date = request.args.get('date', '2025-10-20')
+        
+        logger.info(f"Topic trends request: date={date}")
+        
+        # Get conversations for the date
+        conversations_by_id = conversation_service.get_conversations_by_date(date)
+        
+        if not conversations_by_id:
+            return jsonify({
+                'success': True,
+                'date': date,
+                'topics': [],
+                'data': [],
+                'total': 0,
+                'message': f'No conversations found for date {date}'
+            })
+        
+        # Import topic extraction service
+        from ...services.topic_extraction_service import TopicExtractionService
+        
+        # Initialize topic extraction service
+        topic_service = TopicExtractionService(claude_service)
+        
+        # Extract topics for all conversations
+        logger.info(f"Extracting topics for {len(conversations_by_id)} conversations...")
+        topic_mapping = topic_service.batch_extract_topics(conversations_by_id)
+        
+        # Aggregate topics
+        topic_counts = {}
+        for conversation_id, topic in topic_mapping.items():
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        
+        total_conversations = len(topic_mapping)
+        
+        # Calculate percentages and format data
+        topics = sorted(topic_counts.keys())
+        data = []
+        for topic in topics:
+            count = topic_counts[topic]
+            percentage = (count / total_conversations * 100) if total_conversations > 0 else 0
+            data.append({
+                'topic': topic,
+                'count': count,
+                'percentage': round(percentage, 2)
+            })
+        
+        # Sort by count (descending)
+        data.sort(key=lambda x: x['count'], reverse=True)
+        
+        logger.info(f"Topic trends calculated: {len(topics)} unique topics, {total_conversations} total conversations")
+        
+        return jsonify({
+            'success': True,
+            'date': date,
+            'topics': topics,
+            'data': data,
+            'total': total_conversations
+        })
+    
+    except Exception as e:
+        logger.error(f"Topic trends error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
