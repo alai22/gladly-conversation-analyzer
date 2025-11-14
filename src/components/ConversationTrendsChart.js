@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { RefreshCw, AlertCircle } from 'lucide-react';
+import { RefreshCw, AlertCircle, Info, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 
 const ConversationTrendsChart = () => {
@@ -11,6 +11,8 @@ const ConversationTrendsChart = () => {
   const [total, setTotal] = useState(0);
   const [date, setDate] = useState('2025-10-20');
   const [chartType, setChartType] = useState('bar'); // 'bar' or 'pie'
+  const [extractionStatus, setExtractionStatus] = useState({});
+  const [statusLoading, setStatusLoading] = useState(true);
 
   // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
   // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
@@ -44,6 +46,20 @@ const ConversationTrendsChart = () => {
     '#FCE8E6',  // Very pale Red
   ];
 
+  const fetchExtractionStatus = async () => {
+    setStatusLoading(true);
+    try {
+      const response = await axios.get('/api/conversations/topic-extraction-status');
+      if (response.data.success) {
+        setExtractionStatus(response.data.status || {});
+      }
+    } catch (err) {
+      console.error('Error fetching extraction status:', err);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
   const fetchTopicTrends = async () => {
     setLoading(true);
     setError(null);
@@ -54,7 +70,11 @@ const ConversationTrendsChart = () => {
         setTopics(response.data.topics);
         setTotal(response.data.total || 0);
       } else {
-        setError(response.data.error || 'Failed to load topic trends');
+        // No topics extracted for this date
+        setData([]);
+        setTopics([]);
+        setTotal(0);
+        setError(response.data.message || 'No topics extracted for this date');
       }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to load topic trends');
@@ -63,6 +83,10 @@ const ConversationTrendsChart = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchExtractionStatus();
+  }, []);
 
   useEffect(() => {
     fetchTopicTrends();
@@ -77,13 +101,12 @@ const ConversationTrendsChart = () => {
     }
   };
 
-  if (loading) {
+  if (statusLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading conversation topic trends...</p>
-          <p className="text-gray-500 text-sm mt-2">This may take a moment as we analyze conversations...</p>
+          <p className="text-gray-600">Loading extraction status...</p>
         </div>
       </div>
     );
@@ -107,12 +130,86 @@ const ConversationTrendsChart = () => {
     );
   }
 
-  if (data.length === 0) {
+  // Format extraction status for display
+  const statusEntries = Object.entries(extractionStatus).sort((a, b) => b[0].localeCompare(a[0]));
+  const hasTopicsForDate = extractionStatus[date] && extractionStatus[date].conversation_count > 0;
+
+  if (data.length === 0 && !error) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center">
-          <p className="text-gray-600">No conversation data available for {formatDate(date)}</p>
-          <p className="text-gray-500 text-sm mt-2">Try selecting a different date or check if conversations have been loaded.</p>
+      <div className="flex flex-col p-4 bg-white" style={{ minHeight: '100vh' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Conversation Topic Trends</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              View topic distribution for conversations with extracted topics
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={() => {
+                fetchExtractionStatus();
+                fetchTopicTrends();
+              }}
+              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Extraction Status */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-blue-900 mb-2">Topic Extraction Status</h3>
+              {statusEntries.length === 0 ? (
+                <p className="text-sm text-blue-800">
+                  No topics have been extracted yet. Go to Settings → Admin Tools → Extract Conversation Topics to get started.
+                </p>
+              ) : (
+                <div>
+                  <p className="text-sm text-blue-800 mb-3">
+                    Topics have been extracted for the following dates:
+                  </p>
+                  <div className="space-y-2">
+                    {statusEntries.map(([statusDate, status]) => (
+                      <div key={statusDate} className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <span className="text-sm font-medium text-gray-900">{formatDate(statusDate)}</span>
+                        </div>
+                        <span className="text-sm text-gray-600">
+                          {status.conversation_count.toLocaleString()} conversations, {status.unique_topics} topics
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* No Data Message */}
+        <div className="flex items-center justify-center p-8 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="text-center">
+            <AlertCircle className="h-8 w-8 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 font-medium">No topics extracted for {formatDate(date)}</p>
+            <p className="text-gray-500 text-sm mt-2">
+              {hasTopicsForDate 
+                ? 'Topics are being processed. Please try again in a moment.'
+                : 'Please extract topics for this date in Settings → Admin Tools → Extract Conversation Topics.'}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -155,7 +252,10 @@ const ConversationTrendsChart = () => {
             {chartType === 'bar' ? 'Pie Chart' : 'Bar Chart'}
           </button>
           <button
-            onClick={fetchTopicTrends}
+            onClick={() => {
+              fetchExtractionStatus();
+              fetchTopicTrends();
+            }}
             className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
           >
             <RefreshCw className="h-4 w-4" />
@@ -267,6 +367,32 @@ const ConversationTrendsChart = () => {
           )}
         </ResponsiveContainer>
       </div>
+
+      {/* Extraction Status Summary */}
+      {statusEntries.length > 0 && (
+        <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <h3 className="text-sm font-medium text-gray-900 mb-3">Extraction Status</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {statusEntries.map(([statusDate, status]) => (
+              <div key={statusDate} className={`p-3 rounded border ${
+                statusDate === date 
+                  ? 'bg-blue-50 border-blue-300' 
+                  : 'bg-white border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">{formatDate(statusDate)}</span>
+                  {statusDate === date && (
+                    <span className="text-xs text-blue-600 font-medium">Current</span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-gray-600">
+                  {status.conversation_count.toLocaleString()} conversations
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Summary Table */}
       <div className="mt-8 pt-8 border-t border-gray-200 flex-shrink-0">

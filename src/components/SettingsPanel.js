@@ -34,7 +34,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
   const handleExtractTopics = async () => {
     setTopicExtractionStatus({
       isRunning: true,
-      progress: 'Starting topic extraction...',
+      progress: 'Starting topic extraction... This may take several minutes for large batches.',
       error: null,
       success: null
     });
@@ -44,6 +44,8 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
       // In future, this could accept date range parameters
       const response = await axios.post('/api/conversations/extract-topics', {
         date: '2025-10-20'
+      }, {
+        timeout: 600000 // 10 minute timeout for large batches
       });
 
       if (response.data.success) {
@@ -54,18 +56,51 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
           success: `Successfully extracted topics for ${response.data.processed_count || 0} conversations`
         });
       } else {
+        const errorDetails = response.data.details || response.data.message || response.data.error || 'Failed to extract topics';
         setTopicExtractionStatus({
           isRunning: false,
           progress: null,
-          error: response.data.error || 'Failed to extract topics',
+          error: errorDetails,
           success: null
         });
       }
     } catch (err) {
+      let errorMessage = 'Failed to extract topics';
+      let errorDetails = '';
+      
+      if (err.response) {
+        // Server responded with error status
+        const status = err.response.status;
+        const data = err.response.data || {};
+        
+        if (status === 429) {
+          errorMessage = 'Rate Limit Exceeded';
+          errorDetails = data.details || data.message || 'Claude API rate limit reached. Please wait 1-2 minutes and try again.';
+        } else if (status === 504) {
+          errorMessage = 'Request Timeout';
+          errorDetails = data.details || data.message || 'The request took too long. This can happen with large batches. Try again in a moment.';
+        } else {
+          errorMessage = data.error || `Server error (${status})`;
+          errorDetails = data.details || data.message || err.message;
+        }
+      } else if (err.request) {
+        // Request made but no response
+        if (err.code === 'ECONNABORTED') {
+          errorMessage = 'Request Timeout';
+          errorDetails = 'The request took too long to complete. This can happen with large batches. Please try again.';
+        } else {
+          errorMessage = 'Network Error';
+          errorDetails = err.message || 'Unable to connect to server. Please check your connection.';
+        }
+      } else {
+        errorMessage = 'Error';
+        errorDetails = err.message || 'An unexpected error occurred';
+      }
+      
       setTopicExtractionStatus({
         isRunning: false,
         progress: null,
-        error: err.response?.data?.error || err.message || 'Failed to extract topics',
+        error: `${errorMessage}: ${errorDetails}`,
         success: null
       });
     }
@@ -186,9 +221,14 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
                   <p className="text-xs text-blue-600 mt-2">{topicExtractionStatus.progress}</p>
                 )}
                 {topicExtractionStatus.error && (
-                  <div className="mt-2 flex items-start space-x-2">
-                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-red-600">{topicExtractionStatus.error}</p>
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-red-900 mb-1">Error</p>
+                        <p className="text-xs text-red-700 whitespace-pre-wrap">{topicExtractionStatus.error}</p>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {topicExtractionStatus.success && (
