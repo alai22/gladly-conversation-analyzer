@@ -34,7 +34,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
   const handleExtractTopics = async () => {
     setTopicExtractionStatus({
       isRunning: true,
-      progress: 'Starting topic extraction... This may take several minutes for large batches.',
+      progress: 'Starting topic extraction... This may take several minutes for large batches. Progress is saved incrementally every 10 conversations.',
       error: null,
       success: null
     });
@@ -45,7 +45,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
       const response = await axios.post('/api/conversations/extract-topics', {
         date: '2025-10-20'
       }, {
-        timeout: 600000 // 10 minute timeout for large batches
+        timeout: 1800000 // 30 minute timeout for very large batches (allows ~3600 conversations at 0.5s delay)
       });
 
       if (response.data.success) {
@@ -78,7 +78,9 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
           errorDetails = data.details || data.message || 'Claude API rate limit reached. Please wait 1-2 minutes and try again.';
         } else if (status === 504) {
           errorMessage = 'Request Timeout';
-          errorDetails = data.details || data.message || 'The request took too long. This can happen with large batches. Try again in a moment.';
+          const partialCount = data.partial_count || 0;
+          const partialMsg = partialCount > 0 ? ` ${partialCount} conversations were processed and saved before the timeout.` : '';
+          errorDetails = (data.details || data.message || 'The request took too long. This can happen with large batches.') + partialMsg;
         } else {
           errorMessage = data.error || `Server error (${status})`;
           errorDetails = data.details || data.message || err.message;
@@ -87,7 +89,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
         // Request made but no response
         if (err.code === 'ECONNABORTED') {
           errorMessage = 'Request Timeout';
-          errorDetails = 'The request took too long to complete. This can happen with large batches. Please try again.';
+          errorDetails = 'The request took too long to complete (30 minute limit). This can happen with very large batches. Progress is saved incrementally every 10 conversations - check the Conversation Trends tab to see what was extracted. You can try again later.';
         } else {
           errorMessage = 'Network Error';
           errorDetails = err.message || 'Unable to connect to server. Please check your connection.';

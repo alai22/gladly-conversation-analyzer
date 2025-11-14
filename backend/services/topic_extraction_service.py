@@ -155,14 +155,18 @@ If the conversation doesn't clearly fit any category, use "Other"."""
     
     def batch_extract_topics(self, conversations: Dict[str, List[Dict]], 
                             delay_between_requests: float = 0.5,
-                            progress_callback: Optional[Callable[[int, int, int, int], None]] = None) -> Dict[str, str]:
+                            progress_callback: Optional[Callable[[int, int, int, int], None]] = None,
+                            incremental_save_callback: Optional[Callable[[str, str], None]] = None,
+                            save_every: int = 10) -> Dict[str, str]:
         """
-        Extract topics for multiple conversations with rate limiting
+        Extract topics for multiple conversations with rate limiting and incremental saving
         
         Args:
             conversations: Dict mapping conversation_id -> list of conversation items
             delay_between_requests: Delay in seconds between API requests (default 0.5s)
             progress_callback: Optional callback function(current, total, success, failed)
+            incremental_save_callback: Optional callback(conversation_id, topic) for incremental saving
+            save_every: Save incrementally every N conversations (default 10)
             
         Returns:
             Dict mapping conversation_id -> topic
@@ -173,6 +177,7 @@ If the conversation doesn't clearly fit any category, use "Other"."""
         failed_count = 0
         
         logger.info(f"Starting batch topic extraction for {total} conversations with {delay_between_requests}s delay between requests")
+        logger.info(f"Estimated time: ~{total * delay_between_requests / 60:.1f} minutes (plus API call time)")
         
         for idx, (conversation_id, items) in enumerate(conversations.items(), 1):
             try:
@@ -183,7 +188,19 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                 topic = self.extract_conversation_topic(items)
                 results[conversation_id] = topic
                 success_count += 1
-                logger.debug(f"Extracted topic '{topic}' for conversation {conversation_id} ({idx}/{total})")
+                
+                # Log progress every 10 conversations or at milestones
+                if idx % 10 == 0 or idx == total:
+                    logger.info(f"Progress: {idx}/{total} conversations processed ({success_count} succeeded, {failed_count} failed) - {idx*100//total}%")
+                else:
+                    logger.debug(f"Extracted topic '{topic}' for conversation {conversation_id} ({idx}/{total})")
+                
+                # Incremental save callback (for saving progress as we go)
+                if incremental_save_callback:
+                    incremental_save_callback(conversation_id, topic)
+                    # Save periodically to avoid too many writes
+                    if idx % save_every == 0:
+                        logger.debug(f"Incremental save checkpoint: {idx} conversations processed")
                 
                 # Call progress callback if provided
                 if progress_callback:
@@ -197,11 +214,18 @@ If the conversation doesn't clearly fit any category, use "Other"."""
                 # If it's a rate limit error, we should stop and let the user know
                 if '429' in error_msg or 'rate_limit' in error_msg.lower() or 'Too Many Requests' in error_msg:
                     logger.error(f"Rate limit exceeded. Stopping batch extraction. Processed {success_count}/{total} conversations.")
+                    # Save what we have so far
+                    if incremental_save_callback:
+                        logger.info(f"Saving {success_count} extracted topics before stopping...")
                     raise Exception(f"Rate limit exceeded after processing {success_count} of {total} conversations. "
-                                  f"Please wait a minute and try again. Error: {error_msg}")
+                                  f"Please wait 1-2 minutes and try again. Partial progress has been saved. Error: {error_msg}")
                 
                 # For other errors, continue but mark as "Other"
                 results[conversation_id] = "Other"
+                
+                # Incremental save for failed ones too (marked as "Other")
+                if incremental_save_callback:
+                    incremental_save_callback(conversation_id, "Other")
                 
                 # Call progress callback even on failure
                 if progress_callback:

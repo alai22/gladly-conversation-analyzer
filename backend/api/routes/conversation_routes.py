@@ -236,22 +236,51 @@ def extract_topics():
         # Extract topics for all conversations with rate limiting
         # Use 0.5 second delay between requests to avoid rate limits
         # Claude allows 200k input tokens/minute, so we need to pace requests
-        logger.info(f"Extracting topics for {len(conversations_by_id)} conversations with rate limiting...")
+        total_conversations = len(conversations_by_id)
+        logger.info(f"Extracting topics for {total_conversations} conversations with rate limiting...")
+        logger.info(f"Estimated time: ~{total_conversations * 0.5 / 60:.1f} minutes (plus API call time)")
+        
+        # Track results for incremental saving
+        topic_mapping = {}
+        last_save_count = 0
+        
+        def incremental_save(conversation_id: str, topic: str):
+            """Callback to save topics incrementally"""
+            nonlocal topic_mapping, last_save_count
+            topic_mapping[conversation_id] = topic
+            
+            # Save every 10 conversations to avoid too many writes, but ensure progress is saved
+            if len(topic_mapping) - last_save_count >= 10:
+                try:
+                    # Merge with existing topics for this date
+                    existing = topic_storage.get_topics_for_date(date) or {}
+                    existing.update(topic_mapping)
+                    topic_storage.save_topics_for_date(date, existing)
+                    last_save_count = len(topic_mapping)
+                    logger.info(f"Incremental save: {len(topic_mapping)}/{total_conversations} topics saved")
+                except Exception as save_error:
+                    logger.warning(f"Failed incremental save (non-critical): {save_error}")
         
         try:
-            topic_mapping = topic_service.batch_extract_topics(
+            # Extract topics with incremental saving
+            extracted_mapping = topic_service.batch_extract_topics(
                 conversations_by_id,
-                delay_between_requests=0.5  # 0.5 second delay = ~120 requests/minute max
+                delay_between_requests=0.5,  # 0.5 second delay = ~120 requests/minute max
+                incremental_save_callback=incremental_save,
+                save_every=10  # Save every 10 conversations
             )
             
-            processed_count = len(topic_mapping)
+            # Final save (in case there are any remaining)
+            if topic_mapping:
+                existing = topic_storage.get_topics_for_date(date) or {}
+                existing.update(topic_mapping)
+                topic_storage.save_topics_for_date(date, existing)
             
-            # Save topics to storage
-            topic_storage.save_topics_for_date(date, topic_mapping)
+            processed_count = len(extracted_mapping)
             
             # Count topics for summary
             topic_counts = {}
-            for conversation_id, topic in topic_mapping.items():
+            for conversation_id, topic in extracted_mapping.items():
                 topic_counts[topic] = topic_counts.get(topic, 0) + 1
             
             logger.info(f"Topic extraction completed: {processed_count} conversations processed, {len(topic_counts)} unique topics")
@@ -268,27 +297,43 @@ def extract_topics():
             error_msg = str(e)
             logger.error(f"Topic extraction failed: {error_msg}")
             
+            # Save any partial progress before returning error
+            if topic_mapping:
+                try:
+                    existing = topic_storage.get_topics_for_date(date) or {}
+                    existing.update(topic_mapping)
+                    topic_storage.save_topics_for_date(date, existing)
+                    logger.info(f"Saved partial progress: {len(topic_mapping)} topics before error")
+                except Exception as save_error:
+                    logger.warning(f"Failed to save partial progress: {save_error}")
+            
             # Provide more helpful error messages
             if '429' in error_msg or 'rate_limit' in error_msg.lower() or 'Too Many Requests' in error_msg:
+                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Rate limit exceeded',
-                    'details': 'Claude API rate limit reached. Please wait 1-2 minutes and try again. The system processes conversations with delays to avoid rate limits, but large batches may still hit limits.',
-                    'message': error_msg
+                    'details': f'Claude API rate limit reached. Please wait 1-2 minutes and try again. The system processes conversations with delays to avoid rate limits, but large batches may still hit limits.{partial_msg}',
+                    'message': error_msg,
+                    'partial_count': len(topic_mapping) if topic_mapping else 0
                 }), 429
             elif 'timeout' in error_msg.lower() or '504' in error_msg:
+                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved. You can check the Conversation Trends tab to see what was extracted." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Request timeout',
-                    'details': 'The request took too long to complete. This can happen with large batches. Try processing fewer conversations at once or wait and try again.',
-                    'message': error_msg
+                    'details': f'The request took too long to complete. This can happen with large batches.{partial_msg} Try again later - the system will continue from where it left off.',
+                    'message': error_msg,
+                    'partial_count': len(topic_mapping) if topic_mapping else 0
                 }), 504
             else:
+                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Extraction failed',
-                    'details': error_msg,
-                    'message': f'Failed to extract topics: {error_msg}'
+                    'details': f'{error_msg}{partial_msg}',
+                    'message': f'Failed to extract topics: {error_msg}',
+                    'partial_count': len(topic_mapping) if topic_mapping else 0
                 }), 500
     
     except Exception as e:

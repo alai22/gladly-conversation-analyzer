@@ -121,6 +121,21 @@ class TopicStorageService:
         self._save_topics()
         logger.info(f"Saved topics for date {date}: {len(topic_mapping)} conversations")
     
+    def add_topic_for_date(self, date: str, conversation_id: str, topic: str, save_immediately: bool = False):
+        """Add a single topic mapping for a date (for incremental saving)"""
+        if date not in self.topics_by_date:
+            self.topics_by_date[date] = {}
+        self.topics_by_date[date][conversation_id] = topic
+        
+        if save_immediately:
+            self._save_topics()
+    
+    def save_topics_incremental(self, date: str, save_every: int = 10):
+        """Save topics incrementally (call this periodically during batch processing)"""
+        if date in self.topics_by_date:
+            self._save_topics()
+            logger.debug(f"Incrementally saved topics for date {date}: {len(self.topics_by_date[date])} conversations")
+    
     def get_topics_for_date(self, date: str) -> Optional[Dict[str, str]]:
         """Get topic mappings for a specific date"""
         return self.topics_by_date.get(date)
