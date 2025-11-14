@@ -208,21 +208,32 @@ def extract_topics():
                 'details': 'ANTHROPIC_API_KEY environment variable is not set or invalid. Please configure it in your .env file or environment.'
             }), 503
         
-        # Get date parameter from request body
+        # Get date parameters from request body
         data = request.get_json() or {}
-        date = data.get('date', '2025-10-20')
+        date = data.get('date')  # Single date (for backward compatibility)
+        start_date = data.get('start_date', date)
+        end_date = data.get('end_date', date)
         
-        logger.info(f"Extract topics request: date={date}")
+        # Validate date parameters
+        if not start_date or not end_date:
+            return jsonify({
+                'success': False,
+                'error': 'Missing date parameters',
+                'details': 'Please provide either "date" (single date) or both "start_date" and "end_date"'
+            }), 400
         
-        # Get conversations for the date
-        conversations_by_id = conversation_service.get_conversations_by_date(date)
+        logger.info(f"Extract topics request: start_date={start_date}, end_date={end_date}")
+        
+        # Get conversations for the date range
+        conversations_by_id = conversation_service.get_conversations_by_date_range(start_date, end_date)
         
         if not conversations_by_id:
             return jsonify({
                 'success': True,
-                'date': date,
+                'start_date': start_date,
+                'end_date': end_date,
                 'processed_count': 0,
-                'message': f'No conversations found for date {date}'
+                'message': f'No conversations found for date range {start_date} to {end_date}'
             })
         
         # Import services
@@ -244,7 +255,10 @@ def extract_topics():
         topic_mapping = {}
         last_save_count = 0
         
-        def incremental_save(conversation_id: str, topic: str):
+        # Process conversations by date to save topics per date
+        from datetime import datetime, timedelta
+        
+        def incremental_save(conversation_id: str, topic: str, item_date: str = None):
             """Callback to save topics incrementally"""
             nonlocal topic_mapping, last_save_count
             topic_mapping[conversation_id] = topic
@@ -252,29 +266,84 @@ def extract_topics():
             # Save every 10 conversations to avoid too many writes, but ensure progress is saved
             if len(topic_mapping) - last_save_count >= 10:
                 try:
-                    # Merge with existing topics for this date
-                    existing = topic_storage.get_topics_for_date(date) or {}
+                    # If we have item_date, save to that specific date, otherwise use start_date
+                    save_date = item_date or start_date
+                    existing = topic_storage.get_topics_for_date(save_date) or {}
                     existing.update(topic_mapping)
-                    topic_storage.save_topics_for_date(date, existing)
+                    topic_storage.save_topics_for_date(save_date, existing)
                     last_save_count = len(topic_mapping)
-                    logger.info(f"Incremental save: {len(topic_mapping)}/{total_conversations} topics saved")
+                    logger.info(f"Incremental save: {len(topic_mapping)}/{total_conversations} topics saved for {save_date}")
                 except Exception as save_error:
                     logger.warning(f"Failed incremental save (non-critical): {save_error}")
         
+        # Group conversations by date for proper saving
+        conversations_by_date: Dict[str, Dict[str, List[Dict]]] = {}
+        for conv_id, items in conversations_by_id.items():
+            # Get date from first item
+            if items and items[0].get('timestamp'):
+                try:
+                    item_time = datetime.fromisoformat(items[0]['timestamp'].replace('Z', '+00:00'))
+                    item_date_str = item_time.date().isoformat()
+                    if item_date_str not in conversations_by_date:
+                        conversations_by_date[item_date_str] = {}
+                    conversations_by_date[item_date_str][conv_id] = items
+                except (ValueError, KeyError):
+                    # Fallback to start_date if we can't parse
+                    if start_date not in conversations_by_date:
+                        conversations_by_date[start_date] = {}
+                    conversations_by_date[start_date][conv_id] = items
+            else:
+                # Fallback to start_date
+                if start_date not in conversations_by_date:
+                    conversations_by_date[start_date] = {}
+                conversations_by_date[start_date][conv_id] = items
+        
+        # Track overall progress
+        all_extracted_mapping = {}
+        dates_processed = []
+        total_processed_count = 0
+        
         try:
-            # Extract topics with incremental saving
-            extracted_mapping = topic_service.batch_extract_topics(
-                conversations_by_id,
-                delay_between_requests=0.5,  # 0.5 second delay = ~120 requests/minute max
-                incremental_save_callback=incremental_save,
-                save_every=10  # Save every 10 conversations
-            )
+            # Extract topics for all dates in range
+            for date_str, date_conversations in conversations_by_date.items():
+                logger.info(f"Processing {len(date_conversations)} conversations for date {date_str}")
+                date_topic_mapping = {}
+                date_last_save = 0
+                
+                def date_incremental_save(conversation_id: str, topic: str):
+                    nonlocal date_topic_mapping, date_last_save, all_extracted_mapping, total_processed_count
+                    date_topic_mapping[conversation_id] = topic
+                    all_extracted_mapping[conversation_id] = topic
+                    total_processed_count += 1
+                    
+                    # Save every 10 conversations
+                    if len(date_topic_mapping) - date_last_save >= 10:
+                        try:
+                            existing = topic_storage.get_topics_for_date(date_str) or {}
+                            existing.update(date_topic_mapping)
+                            topic_storage.save_topics_for_date(date_str, existing)
+                            date_last_save = len(date_topic_mapping)
+                            logger.info(f"Incremental save for {date_str}: {len(date_topic_mapping)} topics saved")
+                        except Exception as save_error:
+                            logger.warning(f"Failed incremental save for {date_str}: {save_error}")
+                
+                # Extract topics for this date
+                extracted_for_date = topic_service.batch_extract_topics(
+                    date_conversations,
+                    delay_between_requests=0.5,
+                    incremental_save_callback=date_incremental_save,
+                    save_every=10
+                )
+                
+                # Final save for this date
+                if date_topic_mapping:
+                    existing = topic_storage.get_topics_for_date(date_str) or {}
+                    existing.update(date_topic_mapping)
+                    topic_storage.save_topics_for_date(date_str, existing)
+                
+                dates_processed.append(date_str)
             
-            # Final save (in case there are any remaining)
-            if topic_mapping:
-                existing = topic_storage.get_topics_for_date(date) or {}
-                existing.update(topic_mapping)
-                topic_storage.save_topics_for_date(date, existing)
+            extracted_mapping = all_extracted_mapping
             
             processed_count = len(extracted_mapping)
             
@@ -287,10 +356,12 @@ def extract_topics():
             
             return jsonify({
                 'success': True,
-                'date': date,
+                'start_date': start_date,
+                'end_date': end_date,
+                'dates_processed': dates_processed,
                 'processed_count': processed_count,
                 'topic_summary': topic_counts,
-                'message': f'Successfully extracted topics for {processed_count} conversations'
+                'message': f'Successfully extracted topics for {processed_count} conversations across {len(dates_processed)} date(s)'
             })
         
         except Exception as e:
@@ -298,42 +369,35 @@ def extract_topics():
             logger.error(f"Topic extraction failed: {error_msg}")
             
             # Save any partial progress before returning error
-            if topic_mapping:
-                try:
-                    existing = topic_storage.get_topics_for_date(date) or {}
-                    existing.update(topic_mapping)
-                    topic_storage.save_topics_for_date(date, existing)
-                    logger.info(f"Saved partial progress: {len(topic_mapping)} topics before error")
-                except Exception as save_error:
-                    logger.warning(f"Failed to save partial progress: {save_error}")
+            # Note: Partial progress saving is handled in incremental_save callbacks
             
             # Provide more helpful error messages
+            partial_count = total_processed_count if 'total_processed_count' in locals() else 0
+            partial_msg = f" Partial progress ({partial_count} conversations) has been saved." if partial_count > 0 else ""
+            
             if '429' in error_msg or 'rate_limit' in error_msg.lower() or 'Too Many Requests' in error_msg:
-                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Rate limit exceeded',
                     'details': f'Claude API rate limit reached. Please wait 1-2 minutes and try again. The system processes conversations with delays to avoid rate limits, but large batches may still hit limits.{partial_msg}',
                     'message': error_msg,
-                    'partial_count': len(topic_mapping) if topic_mapping else 0
+                    'partial_count': partial_count
                 }), 429
             elif 'timeout' in error_msg.lower() or '504' in error_msg:
-                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved. You can check the Conversation Trends tab to see what was extracted." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Request timeout',
                     'details': f'The request took too long to complete. This can happen with large batches.{partial_msg} Try again later - the system will continue from where it left off.',
                     'message': error_msg,
-                    'partial_count': len(topic_mapping) if topic_mapping else 0
+                    'partial_count': partial_count
                 }), 504
             else:
-                partial_msg = f" Partial progress ({len(topic_mapping)} conversations) has been saved." if topic_mapping else ""
                 return jsonify({
                     'success': False,
                     'error': 'Extraction failed',
                     'details': f'{error_msg}{partial_msg}',
                     'message': f'Failed to extract topics: {error_msg}',
-                    'partial_count': len(topic_mapping) if topic_mapping else 0
+                    'partial_count': partial_count
                 }), 500
     
     except Exception as e:
@@ -360,4 +424,138 @@ def get_topic_extraction_status():
     
     except Exception as e:
         logger.error(f"Topic extraction status error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/conversation-count', methods=['GET'])
+def get_conversation_count():
+    """Get count of conversations for a specific date or date range"""
+    try:
+        # Get service from container (injected via Flask's g)
+        service_container = getattr(g, 'service_container', None)
+        if not service_container:
+            logger.error("Service container not available in request context")
+            return jsonify({'error': 'Service container not initialized'}), 500
+        
+        conversation_service = service_container.get_conversation_service()
+        
+        # Get date parameters
+        date = request.args.get('date')
+        start_date = request.args.get('start_date', date)
+        end_date = request.args.get('end_date', date)
+        
+        if not start_date or not end_date:
+            return jsonify({
+                'success': False,
+                'error': 'Missing date parameters',
+                'details': 'Please provide either "date" or both "start_date" and "end_date"'
+            }), 400
+        
+        # Get conversations for the date range
+        conversations_by_id = conversation_service.get_conversations_by_date_range(start_date, end_date)
+        count = len(conversations_by_id)
+        
+        return jsonify({
+            'success': True,
+            'start_date': start_date,
+            'end_date': end_date,
+            'count': count
+        })
+    
+    except Exception as e:
+        logger.error(f"Get conversation count error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/topic-trends-over-time', methods=['GET'])
+def get_topic_trends_over_time():
+    """Get topic trends over a date range (for time-series chart)"""
+    try:
+        from ...services.topic_storage_service import TopicStorageService
+        
+        # Get date range parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not start_date or not end_date:
+            return jsonify({
+                'success': False,
+                'error': 'Missing date parameters',
+                'details': 'Please provide both "start_date" and "end_date"'
+            }), 400
+        
+        topic_storage = TopicStorageService()
+        
+        # Get all dates in range that have extracted topics
+        from datetime import datetime, timedelta
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Get all available dates from storage
+        status = topic_storage.get_extraction_status()
+        all_topics = topic_storage.topics_by_date
+        
+        # Filter dates in range
+        dates_in_range = []
+        current_date = start
+        while current_date <= end:
+            date_str = current_date.isoformat()
+            if date_str in all_topics:
+                dates_in_range.append(date_str)
+            current_date += timedelta(days=1)
+        
+        if not dates_in_range:
+            return jsonify({
+                'success': False,
+                'start_date': start_date,
+                'end_date': end_date,
+                'data': [],
+                'message': f'No topics extracted for date range {start_date} to {end_date}'
+            })
+        
+        # Aggregate topics by date
+        all_topics_set = set()
+        date_topic_data = {}
+        
+        for date_str in dates_in_range:
+            topic_mapping = all_topics.get(date_str, {})
+            topic_counts = {}
+            for conversation_id, topic in topic_mapping.items():
+                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+                all_topics_set.add(topic)
+            
+            date_topic_data[date_str] = topic_counts
+        
+        # Build data structure for stacked bar chart
+        # Format: [{ date: '2025-10-20', 'Topic1': 10, 'Topic2': 5, ... }, ...]
+        chart_data = []
+        sorted_topics = sorted(all_topics_set)
+        
+        for date_str in sorted(dates_in_range):
+            date_data = {'date': date_str}
+            topic_counts = date_topic_data.get(date_str, {})
+            total = sum(topic_counts.values())
+            
+            for topic in sorted_topics:
+                count = topic_counts.get(topic, 0)
+                percentage = (count / total * 100) if total > 0 else 0
+                date_data[topic] = count  # Use count for stacked bar
+                date_data[f'{topic}_percentage'] = round(percentage, 2)
+            
+            date_data['total'] = total
+            chart_data.append(date_data)
+        
+        return jsonify({
+            'success': True,
+            'start_date': start_date,
+            'end_date': end_date,
+            'topics': sorted_topics,
+            'data': chart_data,
+            'dates': dates_in_range
+        })
+    
+    except Exception as e:
+        logger.error(f"Topic trends over time error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500

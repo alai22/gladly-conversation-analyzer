@@ -232,20 +232,38 @@ class ConversationService:
         Returns:
             Dict mapping conversation_id -> list of conversation items
         """
+        return self.get_conversations_by_date_range(date, date)
+    
+    def get_conversations_by_date_range(self, start_date: str, end_date: str) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get conversations filtered by date range, grouped by conversation_id
+        
+        Args:
+            start_date: Start date string in format 'YYYY-MM-DD' (e.g., '2025-10-20')
+            end_date: End date string in format 'YYYY-MM-DD' (e.g., '2025-10-25')
+            
+        Returns:
+            Dict mapping conversation_id -> list of conversation items
+        """
         if not self.conversations:
             logger.warning("No conversations available for date filtering")
             return {}
         
         from datetime import datetime
         
-        # Parse target date
+        # Parse date range
         try:
-            target_date = datetime.strptime(date, '%Y-%m-%d').date()
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            if start > end:
+                logger.error(f"Invalid date range: start_date ({start_date}) > end_date ({end_date})")
+                return {}
         except ValueError as e:
-            logger.error(f"Invalid date format '{date}': {e}")
+            logger.error(f"Invalid date format: {e}")
             return {}
         
-        # Group items by conversation_id and filter by date
+        # Group items by conversation_id and filter by date range
         conversations_by_id: Dict[str, List[Dict[str, Any]]] = {}
         
         for item in self.conversations:
@@ -257,8 +275,8 @@ class ConversationService:
                 item_time = datetime.fromisoformat(item.timestamp.replace('Z', '+00:00'))
                 item_date = item_time.date()
                 
-                # Check if date matches
-                if item_date == target_date:
+                # Check if date is within range (inclusive)
+                if start <= item_date <= end:
                     conv_id = item.conversation_id
                     if conv_id not in conversations_by_id:
                         conversations_by_id[conv_id] = []

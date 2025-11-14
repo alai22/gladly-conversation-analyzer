@@ -13,6 +13,14 @@ const ConversationTrendsChart = () => {
   const [chartType, setChartType] = useState('bar'); // 'bar' or 'pie'
   const [extractionStatus, setExtractionStatus] = useState({});
   const [statusLoading, setStatusLoading] = useState(true);
+  
+  // Time-series chart state
+  const [timeSeriesData, setTimeSeriesData] = useState([]);
+  const [timeSeriesTopics, setTimeSeriesTopics] = useState([]);
+  const [timeSeriesLoading, setTimeSeriesLoading] = useState(false);
+  const [timeSeriesError, setTimeSeriesError] = useState(null);
+  const [timeSeriesStartDate, setTimeSeriesStartDate] = useState('2025-10-20');
+  const [timeSeriesEndDate, setTimeSeriesEndDate] = useState('2025-10-25');
 
   // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
   // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
@@ -91,6 +99,33 @@ const ConversationTrendsChart = () => {
   useEffect(() => {
     fetchTopicTrends();
   }, [date]);
+
+  const fetchTopicTrendsOverTime = async () => {
+    setTimeSeriesLoading(true);
+    setTimeSeriesError(null);
+    try {
+      const response = await axios.get(`/api/conversations/topic-trends-over-time?start_date=${timeSeriesStartDate}&end_date=${timeSeriesEndDate}`);
+      if (response.data.success) {
+        setTimeSeriesData(response.data.data);
+        setTimeSeriesTopics(response.data.topics || []);
+      } else {
+        setTimeSeriesData([]);
+        setTimeSeriesTopics([]);
+        setTimeSeriesError(response.data.message || 'No topics found for date range');
+      }
+    } catch (err) {
+      setTimeSeriesError(err.response?.data?.error || err.message || 'Failed to load topic trends over time');
+      console.error('Error fetching topic trends over time:', err);
+    } finally {
+      setTimeSeriesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (timeSeriesStartDate && timeSeriesEndDate && timeSeriesStartDate <= timeSeriesEndDate) {
+      fetchTopicTrendsOverTime();
+    }
+  }, [timeSeriesStartDate, timeSeriesEndDate]);
 
   const formatDate = (dateStr) => {
     try {
@@ -435,6 +470,140 @@ const ConversationTrendsChart = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Time-Series Chart: Topics Over Time */}
+      <div className="mt-12 pt-12 border-t border-gray-300 flex-shrink-0">
+        <div className="mb-6">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Topics Over Time</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            View how conversation topics change over a date range
+          </p>
+          <div className="flex items-center space-x-4 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={timeSeriesStartDate}
+                onChange={(e) => setTimeSeriesStartDate(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
+              <input
+                type="date"
+                value={timeSeriesEndDate}
+                onChange={(e) => setTimeSeriesEndDate(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchTopicTrendsOverTime}
+                disabled={timeSeriesLoading}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-4 w-4 ${timeSeriesLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {timeSeriesLoading ? (
+          <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-4" />
+              <p className="text-gray-600">Loading time-series data...</p>
+            </div>
+          </div>
+        ) : timeSeriesError ? (
+          <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+            <div className="text-center max-w-md">
+              <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+              <p className="text-red-600 mb-2 font-semibold">Error loading data</p>
+              <p className="text-gray-600 text-sm mb-4">{timeSeriesError}</p>
+              <button
+                onClick={fetchTopicTrendsOverTime}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : timeSeriesData.length === 0 ? (
+          <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+            <div className="text-center">
+              <AlertCircle className="h-8 w-8 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 font-medium">No topics found for date range</p>
+              <p className="text-gray-500 text-sm mt-2">
+                Please extract topics for dates in this range in Settings → Admin Tools
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ height: '600px', flexShrink: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={timeSeriesData}
+                margin={{ top: 10, right: 30, left: 20, bottom: 100 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis 
+                  dataKey="date" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={120}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => formatDate(value)}
+                />
+                <YAxis 
+                  label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                  tick={{ fontSize: 12 }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                  }}
+                  formatter={(value, name, props) => {
+                    if (name === 'total') {
+                      return [value, 'Total'];
+                    }
+                    // Find the data point for this date
+                    const dataPoint = props.payload;
+                    const percentage = dataPoint?.[`${name}_percentage`] || 0;
+                    return [`${value} conversations (${percentage.toFixed(1)}%)`, name];
+                  }}
+                />
+                <Legend 
+                  wrapperStyle={{ 
+                    paddingTop: '10px',
+                    paddingBottom: '5px'
+                  }}
+                  iconType="rect"
+                  iconSize={14}
+                  formatter={(value) => {
+                    return value.length > 30 ? value.substring(0, 27) + '...' : value;
+                  }}
+                />
+                {timeSeriesTopics.map((topic, index) => (
+                  <Bar
+                    key={topic}
+                    dataKey={topic}
+                    stackId="topics"
+                    fill={colors[index % colors.length]}
+                    name={topic}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   );

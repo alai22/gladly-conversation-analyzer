@@ -30,8 +30,47 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
     error: null,
     success: null
   });
+  const [extractStartDate, setExtractStartDate] = useState('2025-10-20');
+  const [extractEndDate, setExtractEndDate] = useState('2025-10-20');
 
   const handleExtractTopics = async () => {
+    const startTime = Date.now();
+    let progressInterval = null;
+    const startDate = extractStartDate;
+    const endDate = extractEndDate;
+    
+    // Validate date range
+    if (!startDate || !endDate) {
+      setTopicExtractionStatus({
+        isRunning: false,
+        progress: null,
+        error: 'Please select both start and end dates',
+        success: null
+      });
+      return;
+    }
+    
+    if (startDate > endDate) {
+      setTopicExtractionStatus({
+        isRunning: false,
+        progress: null,
+        error: 'Start date must be before or equal to end date',
+        success: null
+      });
+      return;
+    }
+    
+    // Log start
+    const getTimestamp = () => new Date().toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit'
+    });
+    
+    const dateRangeStr = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+    console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] Starting topic extraction for ${dateRangeStr}...`);
+    
     setTopicExtractionStatus({
       isRunning: true,
       progress: 'Starting topic extraction... This may take several minutes for large batches. Progress is saved incrementally every 10 conversations.',
@@ -39,21 +78,83 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
       success: null
     });
 
+    // Get conversation count first for accurate progress tracking
+    let totalConversations = 0;
     try {
-      // For prototype, extract topics for Oct 20, 2025
-      // In future, this could accept date range parameters
+      const countResponse = await axios.get(`/api/conversations/conversation-count?start_date=${startDate}&end_date=${endDate}`);
+      if (countResponse.data.success) {
+        totalConversations = countResponse.data.count || 0;
+        const estimatedBatches = Math.ceil(totalConversations / 10);
+        const estimatedMinutes = Math.ceil((totalConversations * 0.5) / 60);
+        console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] Found ${totalConversations} conversations (${estimatedBatches} batches of 10)`);
+        console.log(`[${getTimestamp()}] [TOPIC EXTRACTION] Estimated time: ~${estimatedMinutes} minutes`);
+      }
+    } catch (e) {
+      console.warn(`[${getTimestamp()}] [TOPIC EXTRACTION] Could not get conversation count, will estimate progress`);
+    }
+
+    // Set up progress logging interval (logs every 10 seconds, matching backend's 10-conversation batches)
+    // Backend processes ~1 conversation per second (0.5s delay + API time), so every 10 seconds = ~10 conversations
+    let lastLoggedBatch = 0;
+    progressInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      const timeStr = `${minutes}m ${seconds}s`;
+      
+      // Estimate: ~1 conversation per second (0.5s delay + ~0.5s API call)
+      // Every 10 seconds = ~10 conversations processed (matching backend's batch logging)
+      const estimatedBatch = Math.floor(elapsed / 10); // Every 10 seconds = 1 batch of 10
+      const estimatedProcessed = estimatedBatch * 10;
+      
+      if (estimatedBatch > lastLoggedBatch) {
+        lastLoggedBatch = estimatedBatch;
+        if (totalConversations > 0) {
+          const estimatedPercent = Math.min(100, Math.floor((estimatedProcessed / totalConversations) * 100));
+          console.log(`[${getTimestamp()}] [TOPIC EXTRACTION PROGRESS] Batch ${estimatedBatch}: ~${estimatedProcessed}/${totalConversations} conversations (~${estimatedPercent}%) - Elapsed: ${timeStr}`);
+        } else {
+          console.log(`[${getTimestamp()}] [TOPIC EXTRACTION PROGRESS] Batch ${estimatedBatch}: ~${estimatedProcessed} conversations processed - Elapsed: ${timeStr}`);
+        }
+      }
+    }, 10000); // Check every 10 seconds (matches backend's 10-conversation batch interval)
+
+    try {
       const response = await axios.post('/api/conversations/extract-topics', {
-        date: '2025-10-20'
+        start_date: startDate,
+        end_date: endDate
       }, {
         timeout: 1800000 // 30 minute timeout for very large batches (allows ~3600 conversations at 0.5s delay)
       });
 
+      // Clear progress interval
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      const endTime = Date.now();
+      const elapsedSeconds = Math.floor((endTime - startTime) / 1000);
+      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+      const elapsedSecs = elapsedSeconds % 60;
+      const elapsedTimeStr = `${elapsedMinutes}m ${elapsedSecs}s`;
+      
       if (response.data.success) {
+        const processedCount = response.data.processed_count || 0;
+        const timestamp = getTimestamp();
+        const totalBatches = Math.ceil(processedCount / 10);
+        
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] ✅ Completed successfully!`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Total batches processed: ${totalBatches} (${processedCount} conversations)`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Average time per conversation: ${(elapsedSeconds / processedCount).toFixed(2)}s`);
+        if (response.data.topic_summary) {
+          console.log(`[${timestamp}] [TOPIC EXTRACTION] Topic summary:`, response.data.topic_summary);
+        }
+        
         setTopicExtractionStatus({
           isRunning: false,
           progress: null,
           error: null,
-          success: `Successfully extracted topics for ${response.data.processed_count || 0} conversations`
+          success: `Successfully extracted topics for ${processedCount} conversations`
         });
       } else {
         const errorDetails = response.data.details || response.data.message || response.data.error || 'Failed to extract topics';
@@ -97,6 +198,36 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
       } else {
         errorMessage = 'Error';
         errorDetails = err.message || 'An unexpected error occurred';
+      }
+      
+      // Clear progress interval
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      const endTime = Date.now();
+      const elapsedSeconds = Math.floor((endTime - startTime) / 1000);
+      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+      const elapsedSecs = elapsedSeconds % 60;
+      const elapsedTimeStr = `${elapsedMinutes}m ${elapsedSecs}s`;
+      
+      const timestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit'
+      });
+      
+      if (err.response?.data?.partial_count > 0) {
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] ⚠️ Partial completion`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Processed: ${err.response.data.partial_count} conversations before ${errorMessage.toLowerCase()}`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
+        console.log(`[${timestamp}] [TOPIC EXTRACTION] Partial progress has been saved. Check Conversation Trends tab.`);
+      } else {
+        console.error(`[${timestamp}] [TOPIC EXTRACTION] ❌ Failed`);
+        console.error(`[${timestamp}] [TOPIC EXTRACTION] Error: ${errorMessage}`);
+        console.error(`[${timestamp}] [TOPIC EXTRACTION] Details: ${errorDetails}`);
+        console.error(`[${timestamp}] [TOPIC EXTRACTION] Time elapsed: ${elapsedTimeStr}`);
       }
       
       setTopicExtractionStatus({
@@ -198,6 +329,28 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
                 <p className="text-xs text-gray-600 mb-3">
                   Pre-process conversations to extract topics for trend analysis. This uses Claude AI to analyze conversation transcripts.
                 </p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={extractStartDate}
+                      onChange={(e) => setExtractStartDate(e.target.value)}
+                      disabled={topicExtractionStatus.isRunning}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={extractEndDate}
+                      onChange={(e) => setExtractEndDate(e.target.value)}
+                      disabled={topicExtractionStatus.isRunning}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
                 <button
                   onClick={handleExtractTopics}
                   disabled={topicExtractionStatus.isRunning}
@@ -215,7 +368,7 @@ const SettingsPanel = ({ settings, setSettings, adminMode, setAdminMode, setCurr
                   ) : (
                     <>
                       <TrendingUp className="h-4 w-4" />
-                      <span>Extract Topics for Oct 20, 2025</span>
+                      <span>Extract Topics</span>
                     </>
                   )}
                 </button>
