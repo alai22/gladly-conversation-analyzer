@@ -14,6 +14,12 @@ const ConversationTrendsChart = () => {
   const [extractionStatus, setExtractionStatus] = useState({});
   const [statusLoading, setStatusLoading] = useState(true);
   
+  // Sentiment data state
+  const [sentimentBreakdown, setSentimentBreakdown] = useState({});
+  const [customerSentimentBreakdown, setCustomerSentimentBreakdown] = useState({});
+  const [topKeyPhrases, setTopKeyPhrases] = useState({});
+  const [productVersions, setProductVersions] = useState({});
+  
   // Time-series chart state
   const [timeSeriesData, setTimeSeriesData] = useState([]);
   const [timeSeriesTopics, setTimeSeriesTopics] = useState([]);
@@ -78,11 +84,20 @@ const ConversationTrendsChart = () => {
         setData(response.data.data);
         setTopics(response.data.topics);
         setTotal(response.data.total || 0);
+        // Extract sentiment breakdowns and metadata if available
+        setSentimentBreakdown(response.data.sentiment_breakdown || {});
+        setCustomerSentimentBreakdown(response.data.customer_sentiment_breakdown || {});
+        setTopKeyPhrases(response.data.top_key_phrases || {});
+        setProductVersions(response.data.product_versions || {});
       } else {
         // No topics extracted for this date
         setData([]);
         setTopics([]);
         setTotal(0);
+        setSentimentBreakdown({});
+        setCustomerSentimentBreakdown({});
+        setTopKeyPhrases({});
+        setProductVersions({});
         setError(response.data.message || 'No topics extracted for this date');
       }
     } catch (err) {
@@ -500,6 +515,330 @@ const ConversationTrendsChart = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sentiment Charts Section */}
+      {(Object.keys(sentimentBreakdown).length > 0 || Object.keys(customerSentimentBreakdown).length > 0) && (
+        <div className="mt-12 pt-12 border-t border-gray-300 flex-shrink-0">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Sentiment Analysis</h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* Overall Sentiment Chart */}
+            {Object.keys(sentimentBreakdown).length > 0 && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-800 mb-4">Overall Sentiment</h4>
+                <div style={{ height: '400px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(sentimentBreakdown).map(([name, value]) => ({ name, value }))}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {Object.entries(sentimentBreakdown).map((entry, index) => {
+                          const sentimentColors = {
+                            'Positive': '#34A853',  // Green
+                            'Negative': '#EA4335',  // Red
+                            'Neutral': '#9AA0A6'    // Gray
+                          };
+                          return (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={sentimentColors[entry[0]] || colors[index % colors.length]} 
+                            />
+                          );
+                        })}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                        }}
+                        formatter={(value, name, props) => {
+                          const total = Object.values(sentimentBreakdown).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                          return [`${value} conversations (${percentage}%)`, props.payload.name];
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ 
+                          paddingTop: '10px',
+                          paddingBottom: '5px'
+                        }}
+                        iconType="rect"
+                        iconSize={14}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Sentiment breakdown table */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sentiment</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {Object.entries(sentimentBreakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([sentiment, count]) => {
+                          const total = Object.values(sentimentBreakdown).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                          return (
+                            <tr key={sentiment}>
+                              <td className="px-4 py-2 text-sm text-gray-900">{sentiment}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Customer Sentiment Chart */}
+            {Object.keys(customerSentimentBreakdown).length > 0 && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-800 mb-4">Customer Sentiment</h4>
+                <div style={{ height: '400px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={Object.entries(customerSentimentBreakdown)
+                        .map(([name, value]) => ({ name, value }))
+                        .sort((a, b) => b.value - a.value)}
+                      margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                        }}
+                        formatter={(value, name, props) => {
+                          const total = Object.values(customerSentimentBreakdown).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                          return [`${value} conversations (${percentage}%)`, 'Count'];
+                        }}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        fill="#4285F4"
+                        name="Conversations"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Customer sentiment breakdown table */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer Sentiment</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {Object.entries(customerSentimentBreakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([sentiment, count]) => {
+                          const total = Object.values(customerSentimentBreakdown).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                          return (
+                            <tr key={sentiment}>
+                              <td className="px-4 py-2 text-sm text-gray-900">{sentiment}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Key Phrases and Product Versions Section */}
+      {(Object.keys(topKeyPhrases).length > 0 || Object.keys(productVersions).length > 0) && (
+        <div className="mt-12 pt-12 border-t border-gray-300 flex-shrink-0">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Key Insights</h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* Top Key Phrases Chart */}
+            {Object.keys(topKeyPhrases).length > 0 && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-800 mb-4">Top Key Phrases</h4>
+                <div style={{ height: '400px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={Object.entries(topKeyPhrases)
+                        .map(([name, value]) => ({ name, value }))
+                        .sort((a, b) => b.value - a.value)
+                        .slice(0, 15)} // Show top 15
+                      margin={{ top: 10, right: 30, left: 20, bottom: 100 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={120}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <YAxis 
+                        label={{ value: 'Frequency', angle: -90, position: 'insideLeft' }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                        }}
+                        formatter={(value) => [`${value} conversations`, 'Frequency']}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        fill="#9334E6"
+                        name="Frequency"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Key phrases table */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Key Phrase</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {Object.entries(topKeyPhrases)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 10)
+                        .map(([phrase, count]) => (
+                          <tr key={phrase}>
+                            <td className="px-4 py-2 text-sm text-gray-900 capitalize">{phrase}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Product Versions Chart */}
+            {Object.keys(productVersions).length > 0 && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-800 mb-4">Product Versions</h4>
+                <div style={{ height: '400px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={Object.entries(productVersions)
+                        .map(([name, value]) => ({ name, value }))
+                        .sort((a, b) => b.value - a.value)}
+                      margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                        }}
+                        formatter={(value, name, props) => {
+                          const total = Object.values(productVersions).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                          return [`${value} conversations (${percentage}%)`, 'Count'];
+                        }}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        fill="#00ACC1"
+                        name="Conversations"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Product versions table */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product Version</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {Object.entries(productVersions)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([version, count]) => {
+                          const total = Object.values(productVersions).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                          return (
+                            <tr key={version}>
+                              <td className="px-4 py-2 text-sm text-gray-900">{version}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

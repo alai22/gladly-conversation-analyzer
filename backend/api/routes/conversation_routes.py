@@ -222,6 +222,32 @@ def get_topic_trends():
         unknown_timestamp_count = sum(1 for v in topic_mapping.values() 
                                      if isinstance(v, dict) and v.get('extracted_at') is None)
         
+        # Aggregate key phrases and product versions
+        key_phrases_count = {}
+        product_versions_count = {}
+        
+        for conversation_id, value in topic_mapping.items():
+            if isinstance(value, dict):
+                # Aggregate key phrases
+                key_phrases = value.get('key_phrases', [])
+                if isinstance(key_phrases, list):
+                    for phrase in key_phrases:
+                        if phrase and phrase.strip():
+                            phrase_lower = phrase.strip().lower()
+                            key_phrases_count[phrase_lower] = key_phrases_count.get(phrase_lower, 0) + 1
+                
+                # Aggregate product versions
+                product_version = value.get('product_version')
+                if product_version:
+                    product_versions_count[product_version] = product_versions_count.get(product_version, 0) + 1
+        
+        # Get top key phrases (limit to top 20)
+        top_key_phrases = sorted(
+            key_phrases_count.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:20]
+        
         return jsonify({
             'success': True,
             'date': date,
@@ -230,6 +256,8 @@ def get_topic_trends():
             'total': total_conversations,
             'sentiment_breakdown': sentiment_counts,
             'customer_sentiment_breakdown': customer_sentiment_counts,
+            'top_key_phrases': dict(top_key_phrases),
+            'product_versions': product_versions_count,
             'extraction_info': {
                 'oldest_extraction': oldest_extraction,
                 'newest_extraction': newest_extraction,
