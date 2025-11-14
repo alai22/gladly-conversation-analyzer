@@ -21,6 +21,7 @@ const ConversationTrendsChart = () => {
   const [timeSeriesError, setTimeSeriesError] = useState(null);
   const [timeSeriesStartDate, setTimeSeriesStartDate] = useState('2025-10-20');
   const [timeSeriesEndDate, setTimeSeriesEndDate] = useState('2025-10-25');
+  const [timeSeriesMode, setTimeSeriesMode] = useState('count'); // 'count' or 'percentage'
 
   // Google Sheets style: Fixed hue sequence repeated at progressively lower saturation levels
   // Sequence: Blue, Red, Yellow, Green, Orange, Purple, Teal (repeated 3 times with decreasing saturation)
@@ -96,6 +97,21 @@ const ConversationTrendsChart = () => {
     fetchExtractionStatus();
   }, []);
 
+  // Set default date range when extraction status is loaded
+  useEffect(() => {
+    const statusEntries = Object.keys(extractionStatus).sort();
+    if (statusEntries.length > 0 && timeSeriesStartDate === '2025-10-20' && timeSeriesEndDate === '2025-10-25') {
+      const firstDate = statusEntries[0];
+      const lastDate = statusEntries[statusEntries.length - 1];
+      setTimeSeriesStartDate(firstDate);
+      setTimeSeriesEndDate(lastDate);
+      // Also set the single date picker to the first available date
+      if (date === '2025-10-20') {
+        setDate(firstDate);
+      }
+    }
+  }, [extractionStatus]);
+
   useEffect(() => {
     fetchTopicTrends();
   }, [date]);
@@ -106,8 +122,37 @@ const ConversationTrendsChart = () => {
     try {
       const response = await axios.get(`/api/conversations/topic-trends-over-time?start_date=${timeSeriesStartDate}&end_date=${timeSeriesEndDate}`);
       if (response.data.success) {
-        setTimeSeriesData(response.data.data);
-        setTimeSeriesTopics(response.data.topics || []);
+        let chartData = response.data.data || [];
+        const topics = response.data.topics || [];
+        
+        // Calculate total column (aggregate across all dates)
+        if (chartData.length > 0) {
+          const totalData = { date: 'Total' };
+          let grandTotal = 0;
+          
+          // Sum up all topics across all dates
+          topics.forEach(topic => {
+            let topicTotal = 0;
+            chartData.forEach(day => {
+              topicTotal += day[topic] || 0;
+            });
+            totalData[topic] = topicTotal;
+            grandTotal += topicTotal;
+          });
+          
+          // Calculate percentages for total
+          topics.forEach(topic => {
+            const count = totalData[topic] || 0;
+            const percentage = grandTotal > 0 ? (count / grandTotal * 100) : 0;
+            totalData[`${topic}_percentage`] = Math.round(percentage * 100) / 100;
+          });
+          
+          totalData.total = grandTotal;
+          chartData = [...chartData, totalData];
+        }
+        
+        setTimeSeriesData(chartData);
+        setTimeSeriesTopics(topics);
       } else {
         setTimeSeriesData([]);
         setTimeSeriesTopics([]);
@@ -129,11 +174,29 @@ const ConversationTrendsChart = () => {
 
   const formatDate = (dateStr) => {
     try {
+      if (dateStr === 'Total') return 'Total';
       const date = new Date(dateStr + 'T00:00:00');
       return date.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
     } catch {
       return dateStr;
     }
+  };
+  
+  // Prepare chart data based on mode (count or percentage)
+  const prepareChartData = () => {
+    if (timeSeriesMode === 'percentage') {
+      return timeSeriesData.map(day => {
+        const newDay = { ...day };
+        timeSeriesTopics.forEach(topic => {
+          // Use percentage instead of count
+          const percentage = day[`${topic}_percentage`] || 0;
+          newDay[topic] = percentage;
+        });
+        // Keep total for reference but don't use it in the chart
+        return newDay;
+      });
+    }
+    return timeSeriesData;
   };
 
   if (statusLoading) {
@@ -498,7 +561,17 @@ const ConversationTrendsChart = () => {
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end space-x-2">
+              <button
+                onClick={() => setTimeSeriesMode(timeSeriesMode === 'count' ? 'percentage' : 'count')}
+                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                  timeSeriesMode === 'count'
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {timeSeriesMode === 'count' ? 'Count' : 'Percentage'}
+              </button>
               <button
                 onClick={fetchTopicTrendsOverTime}
                 disabled={timeSeriesLoading}
@@ -546,7 +619,7 @@ const ConversationTrendsChart = () => {
           <div style={{ height: '600px', flexShrink: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={timeSeriesData}
+                data={prepareChartData()}
                 margin={{ top: 10, right: 30, left: 20, bottom: 100 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -559,8 +632,14 @@ const ConversationTrendsChart = () => {
                   tickFormatter={(value) => formatDate(value)}
                 />
                 <YAxis 
-                  label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                  label={{ 
+                    value: timeSeriesMode === 'count' ? 'Number of Conversations' : 'Percentage (%)', 
+                    angle: -90, 
+                    position: 'insideLeft' 
+                  }}
                   tick={{ fontSize: 12 }}
+                  domain={timeSeriesMode === 'percentage' ? [0, 100] : [0, 'auto']}
+                  tickFormatter={timeSeriesMode === 'percentage' ? (value) => `${value}%` : undefined}
                 />
                 <Tooltip 
                   contentStyle={{ 
@@ -572,12 +651,23 @@ const ConversationTrendsChart = () => {
                   }}
                   formatter={(value, name, props) => {
                     if (name === 'total') {
+                      const dataPoint = props.payload;
+                      if (dataPoint.date === 'Total') {
+                        return [value, 'Grand Total'];
+                      }
                       return [value, 'Total'];
                     }
-                    // Find the data point for this date
                     const dataPoint = props.payload;
-                    const percentage = dataPoint?.[`${name}_percentage`] || 0;
-                    return [`${value} conversations (${percentage.toFixed(1)}%)`, name];
+                    if (timeSeriesMode === 'percentage') {
+                      // In percentage mode, show percentage and count
+                      const originalData = timeSeriesData.find(d => d.date === dataPoint.date);
+                      const count = originalData?.[name] || 0;
+                      return [`${value.toFixed(1)}% (${count} conversations)`, name];
+                    } else {
+                      // In count mode, show count and percentage
+                      const percentage = dataPoint?.[`${name}_percentage`] || 0;
+                      return [`${value} conversations (${percentage.toFixed(1)}%)`, name];
+                    }
                   }}
                 />
                 <Legend 
