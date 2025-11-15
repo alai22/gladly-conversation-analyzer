@@ -505,9 +505,7 @@ const ConversationTrendsChart = () => {
                 tick={{ fontSize: 12 }}
               />
               <YAxis 
-                label={{ value: 'Percentage of Conversations (%)', angle: -90, position: 'insideLeft' }}
-                domain={[0, 100]}
-                ticks={[0, 20, 40, 60, 80, 100]}
+                domain={[0, 'auto']}
                 tickFormatter={(value) => `${value}%`}
                 tick={{ fontSize: 12 }}
               />
@@ -524,7 +522,7 @@ const ConversationTrendsChart = () => {
                     const item = chartData.find(d => d.percentage === value);
                     return [
                       `${value.toFixed(2)}% (${item?.count || 0} conversations)`,
-                      'Percentage'
+                      ''
                     ];
                   }
                   return [value, name];
@@ -541,7 +539,6 @@ const ConversationTrendsChart = () => {
               <Bar
                 dataKey="percentage"
                 fill={colors[0]}
-                name="Percentage"
               />
             </BarChart>
           ) : (
