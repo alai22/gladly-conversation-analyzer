@@ -222,9 +222,12 @@ def get_topic_trends():
         unknown_timestamp_count = sum(1 for v in topic_mapping.values() 
                                      if isinstance(v, dict) and v.get('extracted_at') is None)
         
-        # Aggregate key phrases and product versions
+        # Aggregate key phrases and collar/app version information
         key_phrases_count = {}
-        product_versions_count = {}
+        collar_firmware_versions_count = {}
+        collar_models_count = {}
+        collar_serial_numbers_count = {}
+        mobile_app_versions_count = {}
         
         for conversation_id, value in topic_mapping.items():
             if isinstance(value, dict):
@@ -236,10 +239,25 @@ def get_topic_trends():
                             phrase_lower = phrase.strip().lower()
                             key_phrases_count[phrase_lower] = key_phrases_count.get(phrase_lower, 0) + 1
                 
-                # Aggregate product versions
-                product_version = value.get('product_version')
-                if product_version:
-                    product_versions_count[product_version] = product_versions_count.get(product_version, 0) + 1
+                # Aggregate collar firmware versions
+                collar_firmware_version = value.get('collar_firmware_version')
+                if collar_firmware_version:
+                    collar_firmware_versions_count[collar_firmware_version] = collar_firmware_versions_count.get(collar_firmware_version, 0) + 1
+                
+                # Aggregate collar models
+                collar_model = value.get('collar_model')
+                if collar_model:
+                    collar_models_count[collar_model] = collar_models_count.get(collar_model, 0) + 1
+                
+                # Aggregate collar serial numbers (for tracking, but might want to limit display)
+                collar_serial_number = value.get('collar_serial_number')
+                if collar_serial_number:
+                    collar_serial_numbers_count[collar_serial_number] = collar_serial_numbers_count.get(collar_serial_number, 0) + 1
+                
+                # Aggregate mobile app versions
+                mobile_app_version = value.get('mobile_app_version')
+                if mobile_app_version:
+                    mobile_app_versions_count[mobile_app_version] = mobile_app_versions_count.get(mobile_app_version, 0) + 1
         
         # Get top key phrases (limit to top 20)
         top_key_phrases = sorted(
@@ -257,7 +275,10 @@ def get_topic_trends():
             'sentiment_breakdown': sentiment_counts,
             'customer_sentiment_breakdown': customer_sentiment_counts,
             'top_key_phrases': dict(top_key_phrases),
-            'product_versions': product_versions_count,
+            'collar_firmware_versions': collar_firmware_versions_count,
+            'collar_models': collar_models_count,
+            'collar_serial_numbers': collar_serial_numbers_count,
+            'mobile_app_versions': mobile_app_versions_count,
             'extraction_info': {
                 'oldest_extraction': oldest_extraction,
                 'newest_extraction': newest_extraction,
@@ -699,6 +720,173 @@ def get_topic_trends_over_time():
     
     except Exception as e:
         logger.error(f"Topic trends over time error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+@conversation_bp.route('/sentiment-trends-over-time', methods=['GET'])
+def get_sentiment_trends_over_time():
+    """Get sentiment trends over a date range (for time-series chart)"""
+    try:
+        from ...services.topic_storage_service import TopicStorageService
+        
+        # Get date range parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not start_date or not end_date:
+            return jsonify({
+                'success': False,
+                'error': 'Missing date parameters',
+                'details': 'Please provide both "start_date" and "end_date"'
+            }), 400
+        
+        topic_storage = TopicStorageService()
+        
+        # Get all dates in range that have extracted topics
+        from datetime import datetime, timedelta
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Get all available dates from storage
+        status = topic_storage.get_extraction_status()
+        all_topics = topic_storage.topics_by_date
+        
+        # Filter dates in range
+        dates_in_range = []
+        current_date = start
+        while current_date <= end:
+            date_str = current_date.isoformat()
+            if date_str in all_topics:
+                dates_in_range.append(date_str)
+            current_date += timedelta(days=1)
+        
+        if not dates_in_range:
+            return jsonify({
+                'success': False,
+                'start_date': start_date,
+                'end_date': end_date,
+                'data': [],
+                'message': f'No topics extracted for date range {start_date} to {end_date}'
+            })
+        
+        # Aggregate sentiment and customer sentiment by date
+        sentiment_by_date = {}
+        customer_sentiment_by_date = {}
+        
+        # Get all unique sentiment values
+        all_sentiments = set()
+        all_customer_sentiments = set()
+        
+        for date_str in dates_in_range:
+            topic_mapping = all_topics.get(date_str, {})
+            sentiment_counts = {}
+            customer_sentiment_counts = {}
+            
+            for conversation_id, value in topic_mapping.items():
+                if isinstance(value, dict):
+                    sentiment = value.get('sentiment', 'Neutral')
+                    customer_sentiment = value.get('customer_sentiment', 'Neutral')
+                else:
+                    sentiment = 'Neutral'
+                    customer_sentiment = 'Neutral'
+                
+                sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+                customer_sentiment_counts[customer_sentiment] = customer_sentiment_counts.get(customer_sentiment, 0) + 1
+                all_sentiments.add(sentiment)
+                all_customer_sentiments.add(customer_sentiment)
+            
+            sentiment_by_date[date_str] = sentiment_counts
+            customer_sentiment_by_date[date_str] = customer_sentiment_counts
+        
+        # Build data structure for stacked bar charts
+        sentiment_chart_data = []
+        customer_sentiment_chart_data = []
+        sorted_sentiments = sorted(all_sentiments)
+        sorted_customer_sentiments = sorted(all_customer_sentiments)
+        
+        for date_str in sorted(dates_in_range):
+            # Overall sentiment data
+            sentiment_data = {'date': date_str}
+            sentiment_counts = sentiment_by_date.get(date_str, {})
+            sentiment_total = sum(sentiment_counts.values())
+            
+            for sentiment in sorted_sentiments:
+                count = sentiment_counts.get(sentiment, 0)
+                percentage = (count / sentiment_total * 100) if sentiment_total > 0 else 0
+                sentiment_data[sentiment] = count
+                sentiment_data[f'{sentiment}_percentage'] = round(percentage, 2)
+            
+            sentiment_data['total'] = sentiment_total
+            sentiment_chart_data.append(sentiment_data)
+            
+            # Customer sentiment data
+            customer_sentiment_data = {'date': date_str}
+            customer_sentiment_counts = customer_sentiment_by_date.get(date_str, {})
+            customer_sentiment_total = sum(customer_sentiment_counts.values())
+            
+            for customer_sentiment in sorted_customer_sentiments:
+                count = customer_sentiment_counts.get(customer_sentiment, 0)
+                percentage = (count / customer_sentiment_total * 100) if customer_sentiment_total > 0 else 0
+                customer_sentiment_data[customer_sentiment] = count
+                customer_sentiment_data[f'{customer_sentiment}_percentage'] = round(percentage, 2)
+            
+            customer_sentiment_data['total'] = customer_sentiment_total
+            customer_sentiment_chart_data.append(customer_sentiment_data)
+        
+        # Add "Total" column aggregating all dates
+        if sentiment_chart_data:
+            total_sentiment_data = {'date': 'Total'}
+            sentiment_grand_total = 0
+            sentiment_totals = {}
+            
+            for sentiment in sorted_sentiments:
+                sentiment_total = sum(day.get(sentiment, 0) for day in sentiment_chart_data)
+                sentiment_totals[sentiment] = sentiment_total
+                total_sentiment_data[sentiment] = sentiment_total
+                sentiment_grand_total += sentiment_total
+            
+            for sentiment in sorted_sentiments:
+                count = total_sentiment_data.get(sentiment, 0)
+                percentage = (count / sentiment_grand_total * 100) if sentiment_grand_total > 0 else 0
+                total_sentiment_data[f'{sentiment}_percentage'] = round(percentage, 2)
+            
+            total_sentiment_data['total'] = sentiment_grand_total
+            sentiment_chart_data.append(total_sentiment_data)
+        
+        if customer_sentiment_chart_data:
+            total_customer_sentiment_data = {'date': 'Total'}
+            customer_sentiment_grand_total = 0
+            customer_sentiment_totals = {}
+            
+            for customer_sentiment in sorted_customer_sentiments:
+                customer_sentiment_total = sum(day.get(customer_sentiment, 0) for day in customer_sentiment_chart_data)
+                customer_sentiment_totals[customer_sentiment] = customer_sentiment_total
+                total_customer_sentiment_data[customer_sentiment] = customer_sentiment_total
+                customer_sentiment_grand_total += customer_sentiment_total
+            
+            for customer_sentiment in sorted_customer_sentiments:
+                count = total_customer_sentiment_data.get(customer_sentiment, 0)
+                percentage = (count / customer_sentiment_grand_total * 100) if customer_sentiment_grand_total > 0 else 0
+                total_customer_sentiment_data[f'{customer_sentiment}_percentage'] = round(percentage, 2)
+            
+            total_customer_sentiment_data['total'] = customer_sentiment_grand_total
+            customer_sentiment_chart_data.append(total_customer_sentiment_data)
+        
+        return jsonify({
+            'success': True,
+            'start_date': start_date,
+            'end_date': end_date,
+            'sentiments': sorted_sentiments,
+            'customer_sentiments': sorted_customer_sentiments,
+            'sentiment_data': sentiment_chart_data,
+            'customer_sentiment_data': customer_sentiment_chart_data,
+            'dates': dates_in_range
+        })
+    
+    except Exception as e:
+        logger.error(f"Sentiment trends over time error: {str(e)}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500

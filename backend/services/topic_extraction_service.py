@@ -55,7 +55,7 @@ class TopicExtractionService:
             max_retries: Maximum number of retries for rate limit errors
             
         Returns:
-            Dict with keys: topic, sentiment, customer_sentiment, key_phrases, product_version, extracted_at
+            Dict with keys: topic, sentiment, customer_sentiment, key_phrases, collar_firmware_version, collar_model, collar_serial_number, mobile_app_version, extracted_at
         """
         # Get current timestamp in ISO format
         extracted_at = datetime.now(timezone.utc).isoformat()
@@ -66,7 +66,10 @@ class TopicExtractionService:
                 'sentiment': 'Neutral',
                 'customer_sentiment': 'Neutral',
                 'key_phrases': [],
-                'product_version': None,
+                'collar_firmware_version': None,
+                'collar_model': None,
+                'collar_serial_number': None,
+                'mobile_app_version': None,
                 'extracted_at': extracted_at
             }
         
@@ -106,10 +109,31 @@ EXTRACTION REQUIREMENTS:
    - Return as a JSON array of strings
    - Maximum 5 phrases, keep them concise (3-8 words each)
 
-5. PRODUCT VERSION: Extract product model or version if mentioned
-   - Look for: version numbers (v2.1, version 3, etc.), model names, product IDs
+5. COLLAR FIRMWARE VERSION: Extract the collar firmware version if mentioned
+   - Look for: firmware version numbers (e.g., "v2.1", "firmware 3.0", "FW 2.5")
    - Return the exact text mentioned, or null if not found
-   - Examples: "v2.1", "Halo 3", "Model X", null
+   - Examples: "v2.1", "3.0", "FW 2.5", null
+
+6. COLLAR MODEL: Extract the collar model name/number if mentioned
+   - Look for: model names (e.g., "Halo 3", "Halo 2+", "Model X")
+   - Return the exact text mentioned, or null if not found
+   - Examples: "Halo 3", "Halo 2+", "Model X", null
+
+7. COLLAR SERIAL NUMBER: Extract the collar serial number if mentioned
+   - Look for: serial numbers, S/N, serial ID
+   - Return the exact text mentioned, or null if not found
+   - Examples: "SN123456", "123456789", null
+
+8. MOBILE APP VERSION: Extract the mobile app version if mentioned
+   - Look for: app version numbers (e.g., "app version 2.1", "iOS 3.0", "Android 2.5")
+   - Return the exact text mentioned, or null if not found
+   - Examples: "2.1", "iOS 3.0", "Android 2.5", null
+
+IMPORTANT: Do NOT conflate these fields. They are distinct:
+- Collar Firmware Version = software version running on the collar hardware
+- Collar Model = the physical collar model (e.g., Halo 3, Halo 2+)
+- Collar Serial Number = unique identifier for the specific collar unit
+- Mobile App Version = version of the mobile application
 
 RESPONSE FORMAT (JSON only, no other text):
 {{
@@ -117,7 +141,10 @@ RESPONSE FORMAT (JSON only, no other text):
   "sentiment": "Negative",
   "customer_sentiment": "Frustrated",
   "key_phrases": ["GPS not accurate", "location wrong", "pin placement off"],
-  "product_version": "v2.1"
+  "collar_firmware_version": "v2.1",
+  "collar_model": "Halo 3",
+  "collar_serial_number": null,
+  "mobile_app_version": "2.1"
 }}"""
         
         for attempt in range(max_retries):
@@ -147,7 +174,10 @@ RESPONSE FORMAT (JSON only, no other text):
                     'sentiment': self._validate_sentiment(metadata.get('sentiment', 'Neutral')),
                     'customer_sentiment': self._validate_customer_sentiment(metadata.get('customer_sentiment', 'Neutral')),
                     'key_phrases': self._validate_key_phrases(metadata.get('key_phrases', [])),
-                    'product_version': metadata.get('product_version') or None,
+                    'collar_firmware_version': metadata.get('collar_firmware_version') or None,
+                    'collar_model': metadata.get('collar_model') or None,
+                    'collar_serial_number': metadata.get('collar_serial_number') or None,
+                    'mobile_app_version': metadata.get('mobile_app_version') or None,
                     'extracted_at': extracted_at
                 }
                 
@@ -166,7 +196,10 @@ RESPONSE FORMAT (JSON only, no other text):
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None,
+                    'collar_firmware_version': None,
+                    'collar_model': None,
+                    'collar_serial_number': None,
+                    'mobile_app_version': None,
                     'extracted_at': extracted_at
                 }
             except (HTTPError, RequestException) as e:
@@ -225,7 +258,10 @@ RESPONSE FORMAT (JSON only, no other text):
             'sentiment': 'Neutral',
             'customer_sentiment': 'Neutral',
             'key_phrases': [],
-            'product_version': None,
+            'collar_firmware_version': None,
+            'collar_model': None,
+            'collar_serial_number': None,
+            'mobile_app_version': None,
             'extracted_at': extracted_at
         }
     
@@ -343,7 +379,7 @@ Return ONLY the category name, nothing else."""
             save_every: Save incrementally every N conversations (default 10)
             
         Returns:
-            Dict mapping conversation_id -> metadata dict (topic, sentiment, customer_sentiment, key_phrases, product_version)
+            Dict mapping conversation_id -> metadata dict (topic, sentiment, customer_sentiment, key_phrases, collar_firmware_version, collar_model, collar_serial_number, mobile_app_version)
         """
         results = {}
         total = len(conversations)
@@ -401,7 +437,10 @@ Return ONLY the category name, nothing else."""
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None,
+                    'collar_firmware_version': None,
+                    'collar_model': None,
+                    'collar_serial_number': None,
+                    'mobile_app_version': None,
                     'extracted_at': extracted_at
                 }
                 results[conversation_id] = default_metadata

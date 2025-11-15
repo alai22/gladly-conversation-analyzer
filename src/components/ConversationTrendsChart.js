@@ -14,13 +14,33 @@ const ConversationTrendsChart = () => {
   const [extractionStatus, setExtractionStatus] = useState({});
   const [statusLoading, setStatusLoading] = useState(true);
   
-  // Sentiment data state
+  // Sentiment data state (for single date - kept for backward compatibility)
   const [sentimentBreakdown, setSentimentBreakdown] = useState({});
   const [customerSentimentBreakdown, setCustomerSentimentBreakdown] = useState({});
   const [topKeyPhrases, setTopKeyPhrases] = useState({});
-  const [productVersions, setProductVersions] = useState({});
+  const [collarFirmwareVersions, setCollarFirmwareVersions] = useState({});
+  const [collarModels, setCollarModels] = useState({});
+  const [mobileAppVersions, setMobileAppVersions] = useState({});
   
-  // Time-series chart state
+  // Sentiment time-series chart state
+  const [sentimentTimeSeriesData, setSentimentTimeSeriesData] = useState([]);
+  const [sentimentTimeSeriesSentiments, setSentimentTimeSeriesSentiments] = useState([]);
+  const [sentimentTimeSeriesLoading, setSentimentTimeSeriesLoading] = useState(false);
+  const [sentimentTimeSeriesError, setSentimentTimeSeriesError] = useState(null);
+  const [sentimentTimeSeriesStartDate, setSentimentTimeSeriesStartDate] = useState('');
+  const [sentimentTimeSeriesEndDate, setSentimentTimeSeriesEndDate] = useState('');
+  const [sentimentTimeSeriesMode, setSentimentTimeSeriesMode] = useState('percentage'); // 'count' or 'percentage'
+  
+  // Customer sentiment time-series chart state
+  const [customerSentimentTimeSeriesData, setCustomerSentimentTimeSeriesData] = useState([]);
+  const [customerSentimentTimeSeriesSentiments, setCustomerSentimentTimeSeriesSentiments] = useState([]);
+  const [customerSentimentTimeSeriesLoading, setCustomerSentimentTimeSeriesLoading] = useState(false);
+  const [customerSentimentTimeSeriesError, setCustomerSentimentTimeSeriesError] = useState(null);
+  const [customerSentimentTimeSeriesStartDate, setCustomerSentimentTimeSeriesStartDate] = useState('');
+  const [customerSentimentTimeSeriesEndDate, setCustomerSentimentTimeSeriesEndDate] = useState('');
+  const [customerSentimentTimeSeriesMode, setCustomerSentimentTimeSeriesMode] = useState('percentage'); // 'count' or 'percentage'
+  
+  // Time-series chart state (for topics)
   const [timeSeriesData, setTimeSeriesData] = useState([]);
   const [timeSeriesTopics, setTimeSeriesTopics] = useState([]);
   const [timeSeriesLoading, setTimeSeriesLoading] = useState(false);
@@ -88,7 +108,9 @@ const ConversationTrendsChart = () => {
         setSentimentBreakdown(response.data.sentiment_breakdown || {});
         setCustomerSentimentBreakdown(response.data.customer_sentiment_breakdown || {});
         setTopKeyPhrases(response.data.top_key_phrases || {});
-        setProductVersions(response.data.product_versions || {});
+        setCollarFirmwareVersions(response.data.collar_firmware_versions || {});
+        setCollarModels(response.data.collar_models || {});
+        setMobileAppVersions(response.data.mobile_app_versions || {});
       } else {
         // No topics extracted for this date
         setData([]);
@@ -97,7 +119,9 @@ const ConversationTrendsChart = () => {
         setSentimentBreakdown({});
         setCustomerSentimentBreakdown({});
         setTopKeyPhrases({});
-        setProductVersions({});
+        setCollarFirmwareVersions({});
+        setCollarModels({});
+        setMobileAppVersions({});
         setError(response.data.message || 'No topics extracted for this date');
       }
     } catch (err) {
@@ -115,11 +139,28 @@ const ConversationTrendsChart = () => {
   // Set default date range when extraction status is loaded
   useEffect(() => {
     const statusEntries = Object.keys(extractionStatus).sort();
-    if (statusEntries.length > 0 && timeSeriesStartDate === '2025-10-20' && timeSeriesEndDate === '2025-10-25') {
+    if (statusEntries.length > 0) {
       const firstDate = statusEntries[0];
       const lastDate = statusEntries[statusEntries.length - 1];
-      setTimeSeriesStartDate(firstDate);
-      setTimeSeriesEndDate(lastDate);
+      
+      // Set topics time-series default dates
+      if (timeSeriesStartDate === '2025-10-20' && timeSeriesEndDate === '2025-10-25') {
+        setTimeSeriesStartDate(firstDate);
+        setTimeSeriesEndDate(lastDate);
+      }
+      
+      // Set sentiment time-series default dates
+      if (!sentimentTimeSeriesStartDate || !sentimentTimeSeriesEndDate) {
+        setSentimentTimeSeriesStartDate(firstDate);
+        setSentimentTimeSeriesEndDate(lastDate);
+      }
+      
+      // Set customer sentiment time-series default dates
+      if (!customerSentimentTimeSeriesStartDate || !customerSentimentTimeSeriesEndDate) {
+        setCustomerSentimentTimeSeriesStartDate(firstDate);
+        setCustomerSentimentTimeSeriesEndDate(lastDate);
+      }
+      
       // Also set the single date picker to the first available date
       if (date === '2025-10-20') {
         setDate(firstDate);
@@ -198,6 +239,64 @@ const ConversationTrendsChart = () => {
       fetchTopicTrendsOverTime();
     }
   }, [timeSeriesStartDate, timeSeriesEndDate]);
+
+  const fetchSentimentTrendsOverTime = async () => {
+    setSentimentTimeSeriesLoading(true);
+    setSentimentTimeSeriesError(null);
+    setCustomerSentimentTimeSeriesLoading(true);
+    setCustomerSentimentTimeSeriesError(null);
+    
+    try {
+      const response = await axios.get(`/api/conversations/sentiment-trends-over-time?start_date=${sentimentTimeSeriesStartDate}&end_date=${sentimentTimeSeriesEndDate}`);
+      if (response.data.success) {
+        setSentimentTimeSeriesData(response.data.sentiment_data || []);
+        setSentimentTimeSeriesSentiments(response.data.sentiments || []);
+        setCustomerSentimentTimeSeriesData(response.data.customer_sentiment_data || []);
+        setCustomerSentimentTimeSeriesSentiments(response.data.customer_sentiments || []);
+      } else {
+        setSentimentTimeSeriesData([]);
+        setSentimentTimeSeriesSentiments([]);
+        setCustomerSentimentTimeSeriesData([]);
+        setCustomerSentimentTimeSeriesSentiments([]);
+        setSentimentTimeSeriesError(response.data.message || 'No sentiment data found for date range');
+      }
+    } catch (err) {
+      setSentimentTimeSeriesError(err.response?.data?.error || err.message || 'Failed to load sentiment trends over time');
+      setCustomerSentimentTimeSeriesError(err.response?.data?.error || err.message || 'Failed to load sentiment trends over time');
+      console.error('Error fetching sentiment trends over time:', err);
+    } finally {
+      setSentimentTimeSeriesLoading(false);
+      setCustomerSentimentTimeSeriesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (sentimentTimeSeriesStartDate && sentimentTimeSeriesEndDate && sentimentTimeSeriesStartDate <= sentimentTimeSeriesEndDate) {
+      fetchSentimentTrendsOverTime();
+    }
+  }, [sentimentTimeSeriesStartDate, sentimentTimeSeriesEndDate]);
+  
+  // Sync customer sentiment dates with overall sentiment dates
+  useEffect(() => {
+    setCustomerSentimentTimeSeriesStartDate(sentimentTimeSeriesStartDate);
+    setCustomerSentimentTimeSeriesEndDate(sentimentTimeSeriesEndDate);
+  }, [sentimentTimeSeriesStartDate, sentimentTimeSeriesEndDate]);
+  
+  // Prepare sentiment chart data based on mode (count or percentage)
+  const prepareSentimentChartData = (data, sentiments, mode) => {
+    if (mode === 'percentage') {
+      return data.map(day => {
+        const newDay = { ...day };
+        sentiments.forEach(sentiment => {
+          // Use percentage instead of count
+          const percentage = day[`${sentiment}_percentage`] || 0;
+          newDay[sentiment] = percentage;
+        });
+        return newDay;
+      });
+    }
+    return data;
+  };
 
   const formatDate = (dateStr) => {
     try {
@@ -519,179 +618,292 @@ const ConversationTrendsChart = () => {
         </div>
       )}
 
-      {/* Sentiment Charts Section */}
-      {(Object.keys(sentimentBreakdown).length > 0 || Object.keys(customerSentimentBreakdown).length > 0) && (
+      {/* Sentiment Charts Section - Time Series */}
+      {(sentimentTimeSeriesData.length > 0 || customerSentimentTimeSeriesData.length > 0) && (
         <div className="mt-12 pt-12 border-t border-gray-300 flex-shrink-0">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">Sentiment Analysis</h3>
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Sentiment Analysis Over Time</h3>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* Overall Sentiment Chart */}
-            {Object.keys(sentimentBreakdown).length > 0 && (
+          <div className="grid grid-cols-1 gap-12 mb-8">
+            {/* Overall Sentiment Over Time Chart */}
+            {sentimentTimeSeriesData.length > 0 && (
               <div>
-                <h4 className="text-lg font-medium text-gray-800 mb-4">Overall Sentiment</h4>
-                <div style={{ height: '400px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={Object.entries(sentimentBreakdown).map(([name, value]) => ({ name, value }))}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                        outerRadius={120}
-                        fill="#8884d8"
-                        dataKey="value"
+                <div className="mb-4">
+                  <h4 className="text-lg font-medium text-gray-800 mb-4">Overall Sentiment</h4>
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={sentimentTimeSeriesStartDate}
+                        onChange={(e) => setSentimentTimeSeriesStartDate(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={sentimentTimeSeriesEndDate}
+                        onChange={(e) => setSentimentTimeSeriesEndDate(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-end space-x-2">
+                      <button
+                        onClick={() => setSentimentTimeSeriesMode(sentimentTimeSeriesMode === 'count' ? 'percentage' : 'count')}
+                        className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                          sentimentTimeSeriesMode === 'percentage'
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                       >
-                        {Object.entries(sentimentBreakdown).map((entry, index) => {
+                        {sentimentTimeSeriesMode === 'percentage' ? 'Percentage' : 'Count'}
+                      </button>
+                      <button
+                        onClick={fetchSentimentTrendsOverTime}
+                        disabled={sentimentTimeSeriesLoading}
+                        className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${sentimentTimeSeriesLoading ? 'animate-spin' : ''}`} />
+                        <span>Refresh</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {sentimentTimeSeriesLoading ? (
+                  <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="text-center">
+                      <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-4" />
+                      <p className="text-gray-600">Loading sentiment data...</p>
+                    </div>
+                  </div>
+                ) : sentimentTimeSeriesError ? (
+                  <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="text-center max-w-md">
+                      <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+                      <p className="text-red-600 mb-2 font-semibold">Error loading data</p>
+                      <p className="text-gray-600 text-sm mb-4">{sentimentTimeSeriesError}</p>
+                      <button
+                        onClick={fetchSentimentTrendsOverTime}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ height: '500px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={prepareSentimentChartData(sentimentTimeSeriesData, sentimentTimeSeriesSentiments, sentimentTimeSeriesMode)}
+                        margin={{ top: 10, right: 30, left: 20, bottom: 100 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="date" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={120}
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={(value) => formatDate(value)}
+                        />
+                        <YAxis 
+                          label={{ 
+                            value: sentimentTimeSeriesMode === 'count' ? 'Number of Conversations' : 'Percentage (%)', 
+                            angle: -90, 
+                            position: 'insideLeft' 
+                          }}
+                          tick={{ fontSize: 12 }}
+                          domain={sentimentTimeSeriesMode === 'percentage' ? [0, 100] : [0, 'auto']}
+                          tickFormatter={sentimentTimeSeriesMode === 'percentage' ? (value) => `${value}%` : undefined}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            padding: '12px',
+                            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                          }}
+                          formatter={(value, name, props) => {
+                            if (name === 'total') {
+                              const dataPoint = props.payload;
+                              if (dataPoint.date === 'Total') {
+                                return [value, 'Grand Total'];
+                              }
+                              return [value, 'Total'];
+                            }
+                            const dataPoint = props.payload;
+                            if (sentimentTimeSeriesMode === 'percentage') {
+                              const originalData = sentimentTimeSeriesData.find(d => d.date === dataPoint.date);
+                              const count = originalData?.[name] || 0;
+                              return [`${value.toFixed(1)}% (${count} conversations)`, name];
+                            } else {
+                              const percentage = dataPoint?.[`${name}_percentage`] || 0;
+                              return [`${value} conversations (${percentage.toFixed(1)}%)`, name];
+                            }
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ 
+                            paddingTop: '10px',
+                            paddingBottom: '5px'
+                          }}
+                          iconType="rect"
+                          iconSize={14}
+                        />
+                        {sentimentTimeSeriesSentiments.map((sentiment, index) => {
                           const sentimentColors = {
                             'Positive': '#34A853',  // Green
                             'Negative': '#EA4335',  // Red
                             'Neutral': '#9AA0A6'    // Gray
                           };
                           return (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={sentimentColors[entry[0]] || colors[index % colors.length]} 
+                            <Bar
+                              key={sentiment}
+                              dataKey={sentiment}
+                              stackId="sentiment"
+                              fill={sentimentColors[sentiment] || colors[index % colors.length]}
+                              name={sentiment}
                             />
                           );
                         })}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '12px',
-                          padding: '12px',
-                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
-                        }}
-                        formatter={(value, name, props) => {
-                          const total = Object.values(sentimentBreakdown).reduce((a, b) => a + b, 0);
-                          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                          return [`${value} conversations (${percentage}%)`, props.payload.name];
-                        }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ 
-                          paddingTop: '10px',
-                          paddingBottom: '5px'
-                        }}
-                        iconType="rect"
-                        iconSize={14}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                {/* Sentiment breakdown table */}
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sentiment</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {Object.entries(sentimentBreakdown)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([sentiment, count]) => {
-                          const total = Object.values(sentimentBreakdown).reduce((a, b) => a + b, 0);
-                          const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
-                          return (
-                            <tr key={sentiment}>
-                              <td className="px-4 py-2 text-sm text-gray-900">{sentiment}</td>
-                              <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
-                              <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Customer Sentiment Chart */}
-            {Object.keys(customerSentimentBreakdown).length > 0 && (
+            {/* Customer Sentiment Over Time Chart */}
+            {customerSentimentTimeSeriesData.length > 0 && (
               <div>
-                <h4 className="text-lg font-medium text-gray-800 mb-4">Customer Sentiment</h4>
-                <div style={{ height: '400px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={Object.entries(customerSentimentBreakdown)
-                        .map(([name, value]) => ({ name, value }))
-                        .sort((a, b) => b.value - a.value)}
-                      margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="name" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={80}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis 
-                        label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '12px',
-                          padding: '12px',
-                          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
-                        }}
-                        formatter={(value, name, props) => {
-                          const total = Object.values(customerSentimentBreakdown).reduce((a, b) => a + b, 0);
-                          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                          return [`${value} conversations (${percentage}%)`, 'Count'];
-                        }}
-                      />
-                      <Bar 
-                        dataKey="value" 
-                        fill="#4285F4"
-                        name="Conversations"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="mb-4">
+                  <h4 className="text-lg font-medium text-gray-800 mb-4">Customer Sentiment</h4>
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div className="flex items-end space-x-2">
+                      <button
+                        onClick={() => setCustomerSentimentTimeSeriesMode(customerSentimentTimeSeriesMode === 'count' ? 'percentage' : 'count')}
+                        className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                          customerSentimentTimeSeriesMode === 'percentage'
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {customerSentimentTimeSeriesMode === 'percentage' ? 'Percentage' : 'Count'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {/* Customer sentiment breakdown table */}
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer Sentiment</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {Object.entries(customerSentimentBreakdown)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([sentiment, count]) => {
-                          const total = Object.values(customerSentimentBreakdown).reduce((a, b) => a + b, 0);
-                          const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
-                          return (
-                            <tr key={sentiment}>
-                              <td className="px-4 py-2 text-sm text-gray-900">{sentiment}</td>
-                              <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
-                              <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                
+                {customerSentimentTimeSeriesLoading ? (
+                  <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="text-center">
+                      <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-4" />
+                      <p className="text-gray-600">Loading customer sentiment data...</p>
+                    </div>
+                  </div>
+                ) : customerSentimentTimeSeriesError ? (
+                  <div className="flex items-center justify-center h-96 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="text-center max-w-md">
+                      <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+                      <p className="text-red-600 mb-2 font-semibold">Error loading data</p>
+                      <p className="text-gray-600 text-sm mb-4">{customerSentimentTimeSeriesError}</p>
+                      <button
+                        onClick={fetchSentimentTrendsOverTime}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ height: '500px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={prepareSentimentChartData(customerSentimentTimeSeriesData, customerSentimentTimeSeriesSentiments, customerSentimentTimeSeriesMode)}
+                        margin={{ top: 10, right: 30, left: 20, bottom: 100 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="date" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={120}
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={(value) => formatDate(value)}
+                        />
+                        <YAxis 
+                          label={{ 
+                            value: customerSentimentTimeSeriesMode === 'count' ? 'Number of Conversations' : 'Percentage (%)', 
+                            angle: -90, 
+                            position: 'insideLeft' 
+                          }}
+                          tick={{ fontSize: 12 }}
+                          domain={customerSentimentTimeSeriesMode === 'percentage' ? [0, 100] : [0, 'auto']}
+                          tickFormatter={customerSentimentTimeSeriesMode === 'percentage' ? (value) => `${value}%` : undefined}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            padding: '12px',
+                            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                          }}
+                          formatter={(value, name, props) => {
+                            if (name === 'total') {
+                              const dataPoint = props.payload;
+                              if (dataPoint.date === 'Total') {
+                                return [value, 'Grand Total'];
+                              }
+                              return [value, 'Total'];
+                            }
+                            const dataPoint = props.payload;
+                            if (customerSentimentTimeSeriesMode === 'percentage') {
+                              const originalData = customerSentimentTimeSeriesData.find(d => d.date === dataPoint.date);
+                              const count = originalData?.[name] || 0;
+                              return [`${value.toFixed(1)}% (${count} conversations)`, name];
+                            } else {
+                              const percentage = dataPoint?.[`${name}_percentage`] || 0;
+                              return [`${value} conversations (${percentage.toFixed(1)}%)`, name];
+                            }
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ 
+                            paddingTop: '10px',
+                            paddingBottom: '5px'
+                          }}
+                          iconType="rect"
+                          iconSize={14}
+                          formatter={(value) => {
+                            return value.length > 30 ? value.substring(0, 27) + '...' : value;
+                          }}
+                        />
+                        {customerSentimentTimeSeriesSentiments.map((sentiment, index) => (
+                          <Bar
+                            key={sentiment}
+                            dataKey={sentiment}
+                            stackId="customer_sentiment"
+                            fill={colors[index % colors.length]}
+                            name={sentiment}
+                          />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Key Phrases and Product Versions Section */}
-      {(Object.keys(topKeyPhrases).length > 0 || Object.keys(productVersions).length > 0) && (
+      {/* Key Phrases and Version Information Section */}
+      {(Object.keys(topKeyPhrases).length > 0 || Object.keys(collarFirmwareVersions).length > 0 || 
+        Object.keys(collarModels).length > 0 || Object.keys(mobileAppVersions).length > 0) && (
         <div className="mt-12 pt-12 border-t border-gray-300 flex-shrink-0">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">Key Insights</h3>
           
@@ -764,14 +976,14 @@ const ConversationTrendsChart = () => {
               </div>
             )}
 
-            {/* Product Versions Chart */}
-            {Object.keys(productVersions).length > 0 && (
+            {/* Collar Firmware Versions Chart */}
+            {Object.keys(collarFirmwareVersions).length > 0 && (
               <div>
-                <h4 className="text-lg font-medium text-gray-800 mb-4">Product Versions</h4>
+                <h4 className="text-lg font-medium text-gray-800 mb-4">Collar Firmware Versions</h4>
                 <div style={{ height: '400px' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={Object.entries(productVersions)
+                      data={Object.entries(collarFirmwareVersions)
                         .map(([name, value]) => ({ name, value }))
                         .sort((a, b) => b.value - a.value)}
                       margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
@@ -797,7 +1009,7 @@ const ConversationTrendsChart = () => {
                           boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
                         }}
                         formatter={(value, name, props) => {
-                          const total = Object.values(productVersions).reduce((a, b) => a + b, 0);
+                          const total = Object.values(collarFirmwareVersions).reduce((a, b) => a + b, 0);
                           const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                           return [`${value} conversations (${percentage}%)`, 'Count'];
                         }}
@@ -810,21 +1022,21 @@ const ConversationTrendsChart = () => {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                {/* Product versions table */}
+                {/* Firmware versions table */}
                 <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product Version</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Firmware Version</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {Object.entries(productVersions)
+                      {Object.entries(collarFirmwareVersions)
                         .sort((a, b) => b[1] - a[1])
                         .map(([version, count]) => {
-                          const total = Object.values(productVersions).reduce((a, b) => a + b, 0);
+                          const total = Object.values(collarFirmwareVersions).reduce((a, b) => a + b, 0);
                           const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
                           return (
                             <tr key={version}>
@@ -840,6 +1052,163 @@ const ConversationTrendsChart = () => {
               </div>
             )}
           </div>
+
+          {/* Additional Version Information Row */}
+          {(Object.keys(collarModels).length > 0 || Object.keys(mobileAppVersions).length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+              {/* Collar Models Chart */}
+              {Object.keys(collarModels).length > 0 && (
+                <div>
+                  <h4 className="text-lg font-medium text-gray-800 mb-4">Collar Models</h4>
+                  <div style={{ height: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={Object.entries(collarModels)
+                          .map(([name, value]) => ({ name, value }))
+                          .sort((a, b) => b.value - a.value)}
+                        margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="name" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            padding: '12px',
+                            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                          }}
+                          formatter={(value, name, props) => {
+                            const total = Object.values(collarModels).reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return [`${value} conversations (${percentage}%)`, 'Count'];
+                          }}
+                        />
+                        <Bar 
+                          dataKey="value" 
+                          fill="#34A853"
+                          name="Conversations"
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Collar models table */}
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Collar Model</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {Object.entries(collarModels)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([model, count]) => {
+                            const total = Object.values(collarModels).reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                            return (
+                              <tr key={model}>
+                                <td className="px-4 py-2 text-sm text-gray-900">{model}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Mobile App Versions Chart */}
+              {Object.keys(mobileAppVersions).length > 0 && (
+                <div>
+                  <h4 className="text-lg font-medium text-gray-800 mb-4">Mobile App Versions</h4>
+                  <div style={{ height: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={Object.entries(mobileAppVersions)
+                          .map(([name, value]) => ({ name, value }))
+                          .sort((a, b) => b.value - a.value)}
+                        margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="name" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Number of Conversations', angle: -90, position: 'insideLeft' }}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            padding: '12px',
+                            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.12)'
+                          }}
+                          formatter={(value, name, props) => {
+                            const total = Object.values(mobileAppVersions).reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return [`${value} conversations (${percentage}%)`, 'Count'];
+                          }}
+                        />
+                        <Bar 
+                          dataKey="value" 
+                          fill="#FBBC04"
+                          name="Conversations"
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Mobile app versions table */}
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">App Version</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {Object.entries(mobileAppVersions)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([version, count]) => {
+                            const total = Object.values(mobileAppVersions).reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                            return (
+                              <tr key={version}>
+                                <td className="px-4 py-2 text-sm text-gray-900">{version}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900">{count.toLocaleString()}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900">{percentage}%</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

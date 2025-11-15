@@ -132,14 +132,36 @@ class TopicStorageService:
                     'sentiment': 'Neutral',
                     'customer_sentiment': 'Neutral',
                     'key_phrases': [],
-                    'product_version': None,
+                    'collar_firmware_version': None,
+                    'collar_model': None,
+                    'collar_serial_number': None,
+                    'mobile_app_version': None,
                     'extracted_at': None  # Unknown timestamp for old data
                 }
             elif isinstance(value, dict):
-                # New format: metadata dict - ensure extracted_at exists
+                # New format: metadata dict - ensure extracted_at exists and migrate old product_version if present
                 if 'extracted_at' not in value:
                     # If missing timestamp, mark as unknown
                     value['extracted_at'] = None
+                
+                # Migrate old product_version field to new fields if present
+                if 'product_version' in value and value['product_version']:
+                    # Try to intelligently assign to collar_model (most common case)
+                    if 'collar_model' not in value or not value.get('collar_model'):
+                        value['collar_model'] = value['product_version']
+                    # Remove old field
+                    del value['product_version']
+                
+                # Ensure new fields exist
+                if 'collar_firmware_version' not in value:
+                    value['collar_firmware_version'] = None
+                if 'collar_model' not in value:
+                    value['collar_model'] = None
+                if 'collar_serial_number' not in value:
+                    value['collar_serial_number'] = None
+                if 'mobile_app_version' not in value:
+                    value['mobile_app_version'] = None
+                
                 normalized_mapping[conv_id] = value
             else:
                 logger.warning(f"Unexpected topic format for {conv_id}: {type(value)}")
@@ -170,13 +192,35 @@ class TopicStorageService:
                 'sentiment': 'Neutral',
                 'customer_sentiment': 'Neutral',
                 'key_phrases': [],
-                'product_version': None,
+                'collar_firmware_version': None,
+                'collar_model': None,
+                'collar_serial_number': None,
+                'mobile_app_version': None,
                 'extracted_at': None  # Unknown timestamp for old data
             }
         elif isinstance(topic_or_metadata, dict):
             # Ensure extracted_at exists in metadata dict
             if 'extracted_at' not in topic_or_metadata:
                 topic_or_metadata['extracted_at'] = None
+            
+            # Migrate old product_version field to new fields if present
+            if 'product_version' in topic_or_metadata and topic_or_metadata['product_version']:
+                # Try to intelligently assign to collar_model (most common case)
+                if 'collar_model' not in topic_or_metadata or not topic_or_metadata.get('collar_model'):
+                    topic_or_metadata['collar_model'] = topic_or_metadata['product_version']
+                # Remove old field
+                del topic_or_metadata['product_version']
+            
+            # Ensure new fields exist
+            if 'collar_firmware_version' not in topic_or_metadata:
+                topic_or_metadata['collar_firmware_version'] = None
+            if 'collar_model' not in topic_or_metadata:
+                topic_or_metadata['collar_model'] = None
+            if 'collar_serial_number' not in topic_or_metadata:
+                topic_or_metadata['collar_serial_number'] = None
+            if 'mobile_app_version' not in topic_or_metadata:
+                topic_or_metadata['mobile_app_version'] = None
+            
             self.topics_by_date[date][conversation_id] = topic_or_metadata
         else:
             logger.warning(f"Unexpected topic format for {conversation_id}: {type(topic_or_metadata)}")
