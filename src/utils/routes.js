@@ -5,6 +5,7 @@
 
 export const PATH_TO_MODE = {
   '/churn': 'churn-trends',
+  '/churn/ask': 'survicate',
   '/survicate': 'survey-manager',
   '/gladly': 'conversation-trends',
   '/tools': 'tools',
@@ -13,6 +14,7 @@ export const PATH_TO_MODE = {
 
 export const MODE_TO_PATH = {
   'churn-trends': '/churn',
+  'survicate': '/churn/ask',
   'survey-manager': '/survicate',
   'conversation-trends': '/gladly',
   'tools': '/tools',

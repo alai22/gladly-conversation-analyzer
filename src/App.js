@@ -112,6 +112,10 @@ function App() {
   // Sync URL when currentMode changes: use path for path-based modes, else query
   useEffect(() => {
     if (isSyncingRef.current) return;
+    // Legacy /churn?mode=survicate: do not strip query here; URL→mode effect migrates to /churn/ask
+    if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
+      return;
+    }
     const path = getPathFromMode(currentMode);
     const pathMatches = path && location.pathname === path;
     const queryMode = searchParams.get('mode');
@@ -155,6 +159,20 @@ function App() {
       if (currentMode !== 'churn-trends') setCurrentMode('churn-trends');
       setTimeout(() => { isSyncingRef.current = false; }, 0);
       return;
+    }
+
+    // Legacy: /churn?mode=survicate conflicted with pathname → churn-trends; move to canonical path
+    if (location.pathname === '/churn' && queryMode === 'survicate') {
+      const canonicalAskPath = getPathFromMode('survicate');
+      if (canonicalAskPath) {
+        isSyncingRef.current = true;
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('mode');
+        navigate({ pathname: canonicalAskPath, search: nextParams.toString() }, { replace: true });
+        setCurrentMode('survicate');
+        setTimeout(() => { isSyncingRef.current = false; }, 0);
+        return;
+      }
     }
 
     if (pathMode && pathMode !== currentMode) {
