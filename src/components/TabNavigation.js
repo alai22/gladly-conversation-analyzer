@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Wrench, List, Bug } from 'lucide-react';
+import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Wrench, Bug, Users } from 'lucide-react';
 import { getPathFromMode, isPathBasedMode } from '../utils/routes';
 
 const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
@@ -23,6 +23,9 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
     if (currentMode === 'bug-triage') {
       return 'bug-triage';
     }
+    if (currentMode === 'text-interview') {
+      return 'interviews';
+    }
     if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       return 'gladly';
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
@@ -40,6 +43,8 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
   useEffect(() => {
     if (currentMode === 'bug-triage') {
       setActiveTab('bug-triage');
+    } else if (currentMode === 'text-interview') {
+      setActiveTab('interviews');
     } else if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       setActiveTab('gladly');
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
@@ -157,6 +162,19 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
         </button>
         <button
           onClick={() => {
+            setActiveTab('interviews');
+            if (currentMode !== 'text-interview') {
+              setModeAndUrl('text-interview');
+            }
+          }}
+          className={tabBtn(activeTab === 'interviews')}
+        >
+          <Users className="h-4 w-4 shrink-0 hidden sm:block" />
+          <span className="md:hidden whitespace-nowrap">Interviews</span>
+          <span className="hidden md:inline whitespace-nowrap">Text Interviews</span>
+        </button>
+        <button
+          onClick={() => {
             setActiveTab('tools');
             if (!['api-data-manager', 'tools', 'analytics'].includes(currentMode) && adminMode !== 'download' && adminMode !== 'claude') {
               setModeAndUrl('tools');
@@ -183,7 +201,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       </div>
 
       {/* Sub-options for active tab */}
-      {activeTab !== 'tools' && activeTab !== 'surveys' && activeTab !== 'bug-triage' && (
+      {activeTab !== 'tools' && activeTab !== 'surveys' && activeTab !== 'bug-triage' && activeTab !== 'interviews' && (
         <div className="flex gap-2 overflow-x-auto pb-1 min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
           {(activeTab === 'gladly' ? gladlyModes : churnModes).map((mode) => {
             const Icon = mode.icon;

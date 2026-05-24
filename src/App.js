@@ -16,11 +16,13 @@ import Tools from './components/Tools';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import BugTriageCopilot from './components/BugTriageCopilot';
 import JiraStatusView from './components/JiraStatusView';
+import TextInterviewHub from './components/interview/TextInterviewHub';
+import InterviewParticipantPage from './components/interview/InterviewParticipantPage';
 import { useAnalytics } from './hooks/useAnalytics';
 import axios from 'axios';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { getSurvicateDataSource } from './utils/constants';
-import { getModeFromPath, getPathFromMode, isPathBasedMode } from './utils/routes';
+import { getModeFromPath, getPathFromMode, isPathBasedMode, isInterviewParticipantPath } from './utils/routes';
 
 // Configure axios to send credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
@@ -112,6 +114,7 @@ function App() {
   // Sync URL when currentMode changes: use path for path-based modes, else query
   useEffect(() => {
     if (isSyncingRef.current) return;
+    if (isInterviewParticipantPath(location.pathname)) return;
     // Legacy /churn?mode=survicate: do not strip query here; URL→mode effect migrates to /churn/ask
     if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
       return;
@@ -137,6 +140,7 @@ function App() {
   // Sync currentMode when URL changes (path first, then query; redirect old ?mode= to path)
   useEffect(() => {
     if (isSyncingRef.current) return;
+    if (isInterviewParticipantPath(location.pathname)) return;
     const pathMode = getModeFromPath(location.pathname);
     const queryMode = searchParams.get('mode');
 
@@ -438,6 +442,11 @@ function App() {
       }
     }
   }, [adminMode, currentMode, isAuthenticated]);
+
+  // Public participant interview — no Halo login required
+  if (isInterviewParticipantPath(location.pathname)) {
+    return <InterviewParticipantPage />;
+  }
 
   // If not authenticated, show login screen
   if (!isAuthenticated) {
@@ -840,7 +849,7 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {/* Show actual tool components when active */}
           {currentMode === 'bug-triage' ? (
             <BugTriageCopilot />
@@ -869,6 +878,8 @@ function App() {
               adminMode={adminMode}
               setAdminMode={setAdminMode}
             />
+          ) : currentMode === 'text-interview' ? (
+            <TextInterviewHub />
           ) : currentMode === 'churn-trends' ? (
             <ChurnTrendsChart />
           ) : currentMode === 'conversation-trends' ? (
@@ -883,7 +894,7 @@ function App() {
         </div>
 
         {/* Prompt Input */}
-        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && (
           <div className="bg-white border-t border-gray-200 p-6">
             {/* Clear Conversation Button for Survicate Mode */}
             {currentMode === 'survicate' && conversations.survicate && conversations.survicate.length > 0 && (

@@ -1,0 +1,11 @@
+{
+  "topic": "GPS accuracy during walks",
+  "audience": "Halo 4 owners who walk their dog daily in suburban neighborhoods",
+  "time_limit_minutes": 15,
+  "max_questions": 12,
+  "banned_topics": ["pricing", "competitors"],
+  "compliance_notes": "Do not ask for home address or account email.",
+  "hypothesis": "Users distrust GPS when the map lags behind real position",
+  "confidence_bar": 4,
+  "allow_follow_up_recruitment": true
+}

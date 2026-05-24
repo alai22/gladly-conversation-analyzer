@@ -1,0 +1,32 @@
+[
+  {
+    "role": "assistant",
+    "text": "Hi! Thanks for taking a few minutes to chat with me. I'm an AI research assistant helping the Halo team learn about GPS accuracy during walks. This should take about 15 minutes. Your responses are used for product research only — we won't ask for personal details like your email or address. Is it okay if we proceed?",
+    "ts": "2026-05-23T14:00:00+00:00"
+  },
+  {
+    "role": "participant",
+    "text": "Yes, that's fine",
+    "ts": "2026-05-23T14:00:45+00:00"
+  },
+  {
+    "role": "assistant",
+    "text": "Great — to get started, how would you describe your role as it relates to GPS accuracy during walks?",
+    "ts": "2026-05-23T14:01:00+00:00"
+  },
+  {
+    "role": "participant",
+    "text": "I walk my dog twice a day and rely on the Halo app map to see where she is. When the dot lags it makes me nervous.",
+    "ts": "2026-05-23T14:01:30+00:00"
+  },
+  {
+    "role": "assistant",
+    "text": "Can you walk me through the last time the map lagged noticeably — what were you doing and how big a deal was it?",
+    "ts": "2026-05-23T14:02:00+00:00"
+  },
+  {
+    "role": "participant",
+    "text": "Yesterday at the park the dot was a full block behind for maybe 30 seconds. I almost turned back because I thought she got out.",
+    "ts": "2026-05-23T14:02:45+00:00"
+  }
+]

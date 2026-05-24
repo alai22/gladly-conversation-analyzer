@@ -1,0 +1,53 @@
+{
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "topic": "GPS accuracy during walks",
+  "audience": "Halo 4 owners who walk their dog daily",
+  "duration_minutes": 8.5,
+  "consent": { "given": true, "timestamp": "2026-05-23T14:00:45+00:00" },
+  "key_takeaways": [
+    "Map lag creates anxiety even when the dog is safe",
+    "Participants judge GPS quality by how quickly the dot catches up after movement"
+  ],
+  "themes": [
+    {
+      "theme": "Lag-induced anxiety",
+      "evidence_quotes": [
+        "I almost turned back because I thought she got out."
+      ],
+      "confidence": "med"
+    },
+    {
+      "theme": "Trust tied to real-time feel",
+      "evidence_quotes": [
+        "When the dot lags it makes me nervous."
+      ],
+      "confidence": "med"
+    }
+  ],
+  "pain_points": [
+    "Map position noticeably behind actual location in open areas"
+  ],
+  "current_workarounds": [
+    "Visually scanning the park instead of trusting the map alone"
+  ],
+  "jobs_to_be_done": [
+    "Know my dog's location confidently during off-leash time"
+  ],
+  "moments_that_matter": [
+    "First few seconds after a sudden direction change"
+  ],
+  "opportunities": [
+    {
+      "opportunity": "Surface GPS freshness indicator on map",
+      "impact": "high",
+      "notes": "Could reduce false-alarm anxiety when signal is stale"
+    }
+  ],
+  "recommended_action": "Prototype a 'last updated' or signal-strength cue on the live map and test with 5 more walkers.",
+  "open_questions": [
+    "Does lag correlate with LTE vs Wi-Fi?",
+    "How often does lag occur vs user noticing it?"
+  ],
+  "risk_flags": [],
+  "full_transcript": []
+}

@@ -10,6 +10,7 @@ export const PATH_TO_MODE = {
   '/gladly': 'conversation-trends',
   '/tools': 'tools',
   '/jira': 'bug-triage',
+  '/interview': 'text-interview',
 };
 
 export const MODE_TO_PATH = {
@@ -19,6 +20,7 @@ export const MODE_TO_PATH = {
   'conversation-trends': '/gladly',
   'tools': '/tools',
   'bug-triage': '/jira',
+  'text-interview': '/interview',
 };
 
 /** Paths that have a canonical mode (for redirects and path-first logic) */
@@ -27,7 +29,14 @@ export const PATH_BASED_PATHS = Object.keys(PATH_TO_MODE);
 /** Modes that use path-based URLs */
 export const PATH_BASED_MODES = Object.keys(MODE_TO_PATH);
 
+export function isInterviewParticipantPath(pathname) {
+  return pathname === '/interview/join' || pathname.startsWith('/interview/join/');
+}
+
 export function getModeFromPath(pathname) {
+  if (isInterviewParticipantPath(pathname)) {
+    return 'interview-participant';
+  }
   return PATH_TO_MODE[pathname] ?? null;
 }
 
