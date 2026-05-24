@@ -177,7 +177,7 @@ class InterviewAgent:
             return msg, session
 
         msg = (
-            "Just to confirm — are you okay to proceed with this short research interview? "
+            "Just to confirm — are you happy to proceed with this short research chat? "
             "A simple yes or no works."
         )
         session.append_transcript("assistant", msg)

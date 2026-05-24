@@ -116,7 +116,7 @@ export default function InterviewParticipantPage() {
     <div className="min-h-screen bg-white flex flex-col">
       <header className="bg-white border-b-4 border-halo-yellow px-4 py-4 shadow-sm">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-lg font-semibold text-halo-black">Halo Research Chat</h1>
+          <h1 className="text-lg font-semibold text-halo-black">Halo Collar Research Chat</h1>
           {session?.topic && (
             <p className="text-sm text-gray-600 mt-0.5">Topic: {session.topic}</p>
           )}

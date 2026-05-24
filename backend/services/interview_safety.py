@@ -12,13 +12,13 @@ logger = get_logger("interview_safety")
 
 HANDOFF_MESSAGE = (
     "Thank you for sharing that — it sounds like you may need help beyond what this "
-    "research chat can provide. Please reach out to Halo support at support@halocollar.com "
-    "or through the Halo app so our team can assist you directly. "
+    "research chat can provide. Please reach out to Halo Collar support at support@halocollar.com "
+    "or through the Halo Collar app so our team can assist you directly. "
     "I'll stop the interview here. Take care."
 )
 
 AI_DISCLOSURE_MESSAGE = (
-    "I'm an AI research assistant conducting this interview on behalf of the Halo product team. "
+    "I'm an AI research assistant conducting this interview on behalf of Halo Collar. "
     "I'm not a human, but I'm here to listen and ask thoughtful questions about your experience."
 )
 

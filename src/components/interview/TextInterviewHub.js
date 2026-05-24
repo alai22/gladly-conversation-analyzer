@@ -6,10 +6,11 @@ import InterviewSetupForm from './InterviewSetupForm';
 import InterviewResultsPanel from './InterviewResultsPanel';
 
 const GUIDELINES_SUMMARY = [
-  'Friendly, neutral tone — no product pitching or leading questions.',
-  'Explicit consent before exploration; participant can decline anytime.',
+  'Friendly, neutral tone — no leading questions.',
+  'Introduces as AI research for Halo Collar; explicit consent before exploration.',
   'One question at a time; adapts depth based on time and signal.',
-  'Support/safety issues trigger empathetic handoff to Halo support.',
+  'Does not promise confidentiality or “won’t sell” commitments to participants.',
+  'Support/safety issues trigger empathetic handoff to Halo Collar support.',
   'AI disclosure if participant asks whether the interviewer is human.',
 ];
 

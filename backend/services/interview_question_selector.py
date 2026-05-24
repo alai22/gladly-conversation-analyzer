@@ -114,7 +114,7 @@ QUESTION_LIBRARY: List[QuestionTemplate] = [
         "consent",
         "consent",
         "Intro and consent request",
-        "Deliver friendly intro, time expectation, data handling summary, and ask for consent.",
+        "Deliver friendly intro: AI assistant for Halo Collar, topic, time expectation, and ask if they are happy to proceed. Do not promise confidentiality or that you will not sell anything.",
         [InterviewPhase.CONSENT],
     ),
 ]
