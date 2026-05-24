@@ -47,7 +47,7 @@ class InterviewSafety:
             r"\burgent\s+support\b",
             r"\bneed\s+(help|support)\s+now\b",
             r"\bharassment\b",
-            r"\bthreat(en(ed|ing))?)\b",
+            r"\bthreat(en(?:ed|ing))?\b",
             r"\b(suicid(e|al)|self[\s-]?harm|hurt\s+myself)\b",
             r"\b(emergency|911|police)\b",
             r"\b(stalk(ed|ing)|abuse[ds]?)\b",
