@@ -9,8 +9,8 @@ import {
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-700',
-  active: 'bg-blue-100 text-blue-800',
-  complete: 'bg-green-100 text-green-800',
+  active: 'bg-halo-blue-light text-halo-blue-dark',
+  complete: 'bg-halo-yellow-light text-halo-black',
   handoff: 'bg-amber-100 text-amber-800',
   declined: 'bg-gray-100 text-gray-600',
 };
@@ -106,7 +106,7 @@ export default function InterviewSessionList({
         </button>
       </div>
 
-      <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-2 p-4 bg-halo-yellow-light border border-halo-yellow/40 rounded-lg">
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Participant label (optional, for your records)
@@ -122,7 +122,7 @@ export default function InterviewSessionList({
         <button
           type="submit"
           disabled={inviting}
-          className="self-end sm:self-auto inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm"
+          className="self-end sm:self-auto inline-flex items-center gap-2 px-4 py-2 bg-halo-yellow text-halo-black rounded-lg hover:bg-halo-yellow-dark disabled:opacity-50 text-sm"
         >
           {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
           Invite participant
@@ -155,7 +155,7 @@ export default function InterviewSessionList({
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-600">
+            <thead className="bg-halo-yellow-light text-left text-halo-black">
               <tr>
                 <th className="px-4 py-3 font-medium">Participant</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -189,7 +189,7 @@ export default function InterviewSessionList({
                         type="button"
                         title="Copy participant link"
                         onClick={() => copyLink(s.join_url)}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                        className="p-1.5 text-gray-500 hover:text-halo-blue hover:bg-halo-yellow-light rounded"
                       >
                         <Copy className="h-4 w-4" />
                       </button>
@@ -197,7 +197,7 @@ export default function InterviewSessionList({
                         href={fullJoinUrl(s.join_url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                        className="p-1.5 text-gray-500 hover:text-halo-blue hover:bg-halo-yellow-light rounded"
                         title="Open participant view"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -205,7 +205,7 @@ export default function InterviewSessionList({
                       <button
                         type="button"
                         onClick={() => onSelectSession?.(s.session_id)}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                        className="p-1.5 text-gray-500 hover:text-halo-blue hover:bg-halo-yellow-light rounded"
                         title="View results"
                       >
                         <Eye className="h-4 w-4" />

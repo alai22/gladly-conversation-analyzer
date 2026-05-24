@@ -108,7 +108,7 @@ export default function InterviewSetupForm({
               setSaved(false);
             }}
             placeholder="e.g. GPS accuracy — Q2 discovery"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-halo-yellow focus:border-halo-yellow"
           />
         </div>
         <div className="sm:col-span-2">
@@ -121,7 +121,7 @@ export default function InterviewSetupForm({
             value={config.topic}
             onChange={(e) => handleChange('topic', e.target.value)}
             placeholder="e.g. Shape Up pitch — GPS accuracy improvements"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-halo-yellow focus:border-halo-yellow"
           />
         </div>
         <div className="sm:col-span-2">
@@ -133,7 +133,7 @@ export default function InterviewSetupForm({
             value={config.audience}
             onChange={(e) => handleChange('audience', e.target.value)}
             placeholder="e.g. Halo 4 owners who use GPS daily"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-halo-yellow focus:border-halo-yellow"
           />
         </div>
         <div>
@@ -238,7 +238,7 @@ export default function InterviewSetupForm({
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 px-4 py-2.5 bg-halo-yellow text-halo-black rounded-lg hover:bg-halo-yellow-dark disabled:opacity-50"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {isEdit ? 'Save project' : 'Create project'}

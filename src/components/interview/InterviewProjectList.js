@@ -4,8 +4,8 @@ import { listInterviewProjects } from '../../utils/interviewApi';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-700',
-  active: 'bg-green-100 text-green-800',
-  archived: 'bg-amber-100 text-amber-800',
+  active: 'bg-halo-yellow-light text-halo-black',
+  archived: 'bg-halo-blue-light text-halo-blue-dark',
 };
 
 export default function InterviewProjectList({ onSelectProject, onCreateProject, refreshKey }) {
@@ -53,7 +53,7 @@ export default function InterviewProjectList({ onSelectProject, onCreateProject,
           <button
             type="button"
             onClick={onCreateProject}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-halo-yellow text-halo-black rounded-lg hover:bg-halo-yellow-dark"
           >
             <Plus className="h-4 w-4" /> New project
           </button>
@@ -71,7 +71,7 @@ export default function InterviewProjectList({ onSelectProject, onCreateProject,
           <button
             type="button"
             onClick={onCreateProject}
-            className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-halo-yellow text-halo-black rounded-lg hover:bg-halo-yellow-dark"
           >
             <Plus className="h-4 w-4" /> Create your first project
           </button>
@@ -83,7 +83,7 @@ export default function InterviewProjectList({ onSelectProject, onCreateProject,
               key={p.project_id}
               type="button"
               onClick={() => onSelectProject?.(p.project_id)}
-              className="text-left p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+              className="text-left p-4 border border-gray-200 rounded-lg hover:border-halo-yellow hover:bg-halo-yellow-light/80 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">

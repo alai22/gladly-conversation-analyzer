@@ -90,7 +90,7 @@ export default function InterviewResultsPanel({ sessionId, onBack }) {
         <button
           type="button"
           onClick={handleExport}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-halo-blue text-white rounded-lg hover:bg-halo-blue-dark"
         >
           <Download className="h-4 w-4" /> Export JSON
         </button>
@@ -167,7 +167,7 @@ export default function InterviewResultsPanel({ sessionId, onBack }) {
               <span
                 className={`inline-block px-3 py-2 rounded-lg max-w-[85%] ${
                   entry.role === 'participant'
-                    ? 'bg-indigo-100 text-indigo-900'
+                    ? 'bg-halo-yellow-light text-halo-black'
                     : 'bg-white border border-gray-200 text-gray-800'
                 }`}
               >

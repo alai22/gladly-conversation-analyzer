@@ -98,30 +98,30 @@ export default function InterviewParticipantPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-halo-yellow" />
       </div>
     );
   }
 
   if (error && !session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+      <div className="min-h-screen flex items-center justify-center bg-white p-6">
         <p className="text-red-600 text-center">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200 px-4 py-4 shadow-sm">
+    <div className="min-h-screen bg-white flex flex-col">
+      <header className="bg-white border-b-4 border-halo-yellow px-4 py-4 shadow-sm">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-lg font-semibold text-gray-900">Halo Research Chat</h1>
+          <h1 className="text-lg font-semibold text-halo-black">Halo Research Chat</h1>
           {session?.topic && (
             <p className="text-sm text-gray-600 mt-0.5">Topic: {session.topic}</p>
           )}
           {session?.resuming && (
-            <p className="text-xs text-indigo-600 mt-1">
+            <p className="text-xs text-halo-blue mt-1">
               Welcome back — you can continue where you left off using this same link.
             </p>
           )}
@@ -144,7 +144,7 @@ export default function InterviewParticipantPage() {
               <div
                 className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm ${
                   msg.role === 'participant'
-                    ? 'bg-indigo-600 text-white rounded-br-md'
+                    ? 'bg-halo-yellow text-halo-black rounded-br-md'
                     : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
                 }`}
               >
@@ -182,12 +182,12 @@ export default function InterviewParticipantPage() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Type your response…"
                   disabled={sending}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full focus:ring-2 focus:ring-halo-yellow focus:border-halo-yellow"
                 />
                 <button
                   type="submit"
                   disabled={sending || !input.trim()}
-                  className="p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50"
+                  className="p-2.5 bg-halo-yellow text-halo-black rounded-full hover:bg-halo-yellow-dark disabled:opacity-50"
                 >
                   <Send className="h-5 w-5" />
                 </button>
