@@ -30,6 +30,14 @@ def build_developer_prompt(
     template_intent: str,
     compliance_notes: str = "",
 ) -> str:
+    topic = (config.topic or "").strip()
+    topic_note = ""
+    if topic.endswith("?"):
+        topic_note = (
+            "\nNote: The research topic is already a question — ask it directly or use a "
+            "natural follow-up. Do not wrap it in phrases like 'your experience with ...'."
+        )
+
     return f"""Research configuration:
 - Topic / decision: {config.topic}
 - Target audience: {config.audience}
@@ -50,7 +58,7 @@ Question intent for this turn: {template_intent}
 
 Generate the next assistant_message for this phase. Follow the question intent.
 For consent phase: explain purpose, approximate time ({config.time_limit_minutes} min), high-level data handling, and ask for consent.
-For wrapup: ask if there's anything else we should have asked; optionally ask permission for follow-up if allowed."""
+For wrapup: ask if there's anything else we should have asked; optionally ask permission for follow-up if allowed.{topic_note}"""
 
 
 INTRO_MOCK = (
