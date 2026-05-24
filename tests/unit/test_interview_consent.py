@@ -18,7 +18,7 @@ def agent():
 @pytest.fixture
 def session():
     config = InterviewConfig(topic="collar setup", audience="new pet owners")
-    s = InterviewSession.create(config)
+    s = InterviewSession.create("test-project", config)
     agent = InterviewAgent(claude_service=None)
     agent.start_session(s)
     return s

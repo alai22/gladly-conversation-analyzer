@@ -1,38 +1,51 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
+import InterviewProjectList from './InterviewProjectList';
+import InterviewProjectDetail from './InterviewProjectDetail';
 import InterviewSetupForm from './InterviewSetupForm';
-import InterviewSessionList from './InterviewSessionList';
 import InterviewResultsPanel from './InterviewResultsPanel';
 
 const GUIDELINES_SUMMARY = [
   'Friendly, neutral tone — no product pitching or leading questions.',
   'Explicit consent before exploration; participant can decline anytime.',
-  'No collection of personal identifiers (email, address, account numbers).',
   'One question at a time; adapts depth based on time and signal.',
   'Support/safety issues trigger empathetic handoff to Halo support.',
   'AI disclosure if participant asks whether the interviewer is human.',
 ];
 
 export default function TextInterviewHub() {
-  const [tab, setTab] = useState('configure');
+  const [view, setView] = useState('projects');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
   const [guidelinesOpen, setGuidelinesOpen] = useState(false);
 
-  const tabs = [
-    { id: 'configure', label: 'Configure' },
-    { id: 'sessions', label: 'Sessions' },
-    { id: 'results', label: 'Results' },
-  ];
+  const handleSelectProject = (projectId) => {
+    setSelectedProjectId(projectId);
+    setView('project');
+  };
 
-  const handleSessionCreated = () => {
+  const handleCreateProject = () => {
+    setSelectedProjectId(null);
+    setView('create');
+  };
+
+  const handleProjectCreated = (project) => {
     setRefreshKey((k) => k + 1);
-    setTab('sessions');
+    setSelectedProjectId(project.project_id);
+    setView('project');
   };
 
   const handleSelectSession = (sessionId) => {
     setSelectedSessionId(sessionId);
-    setTab('results');
+    setView('results');
+  };
+
+  const handleBackToProjects = () => {
+    setSelectedProjectId(null);
+    setSelectedSessionId(null);
+    setView('projects');
+    setRefreshKey((k) => k + 1);
   };
 
   return (
@@ -40,7 +53,7 @@ export default function TextInterviewHub() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">AI Text Interviews</h2>
         <p className="text-sm text-gray-600 mt-1">
-          Conduct adaptive 1:1 research interviews and generate structured insights.
+          Create research projects, invite participants with unique links, and generate structured insights.
         </p>
       </div>
 
@@ -67,48 +80,46 @@ export default function TextInterviewHub() {
         )}
       </div>
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t.id
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'configure' && (
-        <InterviewSetupForm onSessionCreated={handleSessionCreated} />
-      )}
-
-      {tab === 'sessions' && (
-        <InterviewSessionList
+      {view === 'projects' && (
+        <InterviewProjectList
           refreshKey={refreshKey}
-          onSelectSession={handleSelectSession}
+          onSelectProject={handleSelectProject}
+          onCreateProject={handleCreateProject}
         />
       )}
 
-      {tab === 'results' && (
-        selectedSessionId ? (
-          <InterviewResultsPanel
-            sessionId={selectedSessionId}
-            onBack={() => {
-              setSelectedSessionId(null);
-              setTab('sessions');
-            }}
-          />
-        ) : (
-          <p className="text-sm text-gray-500">
-            Select a session from the Sessions tab to view insights.
-          </p>
-        )
+      {view === 'create' && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={handleBackToProjects}
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            ← Back to projects
+          </button>
+          <h3 className="text-lg font-semibold text-gray-900">New research project</h3>
+          <InterviewSetupForm mode="create" onProjectCreated={handleProjectCreated} />
+        </div>
+      )}
+
+      {view === 'project' && selectedProjectId && (
+        <InterviewProjectDetail
+          projectId={selectedProjectId}
+          refreshKey={refreshKey}
+          onBack={handleBackToProjects}
+          onSelectSession={handleSelectSession}
+          onProjectUpdated={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+
+      {view === 'results' && selectedSessionId && (
+        <InterviewResultsPanel
+          sessionId={selectedSessionId}
+          onBack={() => {
+            setSelectedSessionId(null);
+            setView('project');
+          }}
+        />
       )}
     </div>
   );

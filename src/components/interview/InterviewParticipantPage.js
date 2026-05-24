@@ -120,6 +120,11 @@ export default function InterviewParticipantPage() {
           {session?.topic && (
             <p className="text-sm text-gray-600 mt-0.5">Topic: {session.topic}</p>
           )}
+          {session?.resuming && (
+            <p className="text-xs text-indigo-600 mt-1">
+              Welcome back — you can continue where you left off using this same link.
+            </p>
+          )}
           {session?.time_limit_minutes && (
             <p className="text-xs text-gray-500">~{session.time_limit_minutes} minutes</p>
           )}

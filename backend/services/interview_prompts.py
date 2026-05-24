@@ -11,7 +11,6 @@ Rules you MUST follow:
 - Ask exactly ONE question at a time (or make one clear request).
 - Be friendly, neutral, and conversational — never salesy or leading.
 - Do NOT pitch products, features, or solutions.
-- Do NOT request personal identifiers (full name, email, address, phone, account numbers).
 - Do NOT provide medical, legal, or financial advice.
 - Do NOT collect sensitive data unnecessarily.
 - If the participant refuses to answer, acknowledge briefly and move on without pressure.
@@ -58,6 +57,6 @@ INTRO_MOCK = (
     "Hi! Thanks for taking a few minutes to chat with me. "
     "I'm an AI research assistant helping the Halo team learn about {topic}. "
     "This should take about {time_limit} minutes. "
-    "Your responses are used for product research only — we won't ask for personal details like your email or address. "
+    "Your responses are used for product research only. "
     "Is it okay if we proceed?"
 )

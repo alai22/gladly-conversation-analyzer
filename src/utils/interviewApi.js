@@ -8,6 +8,54 @@ const authHeaders = () => {
   return token ? { 'X-Auth-Token': token } : {};
 };
 
+// --- Research projects ---
+
+export async function createInterviewProject(payload) {
+  const res = await axios.post('/api/interviews/projects', payload, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function listInterviewProjects() {
+  const res = await axios.get('/api/interviews/projects', {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function getInterviewProject(projectId) {
+  const res = await axios.get(`/api/interviews/projects/${projectId}`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function updateInterviewProject(projectId, payload) {
+  const res = await axios.patch(`/api/interviews/projects/${projectId}`, payload, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function createParticipantSession(projectId, payload = {}) {
+  const res = await axios.post(
+    `/api/interviews/projects/${projectId}/sessions`,
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function listProjectSessions(projectId) {
+  const res = await axios.get(`/api/interviews/projects/${projectId}/sessions`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+// --- Sessions (legacy + shared) ---
+
 export async function createInterviewSession(config) {
   const res = await axios.post('/api/interviews/sessions', config, {
     headers: authHeaders(),
@@ -15,9 +63,11 @@ export async function createInterviewSession(config) {
   return res.data;
 }
 
-export async function listInterviewSessions() {
+export async function listInterviewSessions(projectId) {
+  const params = projectId ? { project_id: projectId } : {};
   const res = await axios.get('/api/interviews/sessions', {
     headers: authHeaders(),
+    params,
   });
   return res.data;
 }
@@ -52,6 +102,8 @@ export async function exportInterviewInsights(sessionId) {
   });
   return res.data;
 }
+
+// --- Public participant ---
 
 export async function joinInterview(token) {
   const res = await axios.get(`/api/interviews/join/${token}`);

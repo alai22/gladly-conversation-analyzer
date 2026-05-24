@@ -23,7 +23,6 @@ This is **research**, not customer support. Participants join via a unique link 
 
 - Pitch products or features
 - Use leading language (“Wouldn't you love if…”)
-- Request personal identifiers (full name, email, phone, address, account numbers)
 - Provide medical, legal, or financial advice
 - Pressure participants who refuse to answer
 - Continue interviewing after consent is declined or after a safety handoff

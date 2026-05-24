@@ -1,5 +1,5 @@
 """
-Interview session data models for AI 1:1 text interviews.
+Interview data models: ResearchProject (setup) and InterviewSession (participant).
 """
 
 from dataclasses import dataclass, field, asdict
@@ -26,6 +26,12 @@ class SessionStatus(str, Enum):
     COMPLETE = "complete"
     HANDOFF = "handoff"
     DECLINED = "declined"
+
+
+class ProjectStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
 
 
 @dataclass
@@ -56,6 +62,64 @@ class InterviewConfig:
             confidence_bar=int(data.get("confidence_bar", 3)),
             allow_follow_up_recruitment=bool(data.get("allow_follow_up_recruitment", False)),
         )
+
+
+@dataclass
+class ResearchProject:
+    """Editable research setup — one project, many participant sessions."""
+
+    project_id: str
+    name: str
+    config: InterviewConfig
+    status: ProjectStatus = ProjectStatus.ACTIVE
+    created_at: str = ""
+    updated_at: str = ""
+    created_by: str = ""
+
+    @classmethod
+    def create(
+        cls,
+        config: InterviewConfig,
+        name: str = "",
+        created_by: str = "",
+    ) -> "ResearchProject":
+        now = datetime.now(timezone.utc).isoformat()
+        display_name = (name or config.topic or "Untitled project").strip()
+        return cls(
+            project_id=str(uuid.uuid4()),
+            name=display_name,
+            config=config,
+            status=ProjectStatus.ACTIVE,
+            created_at=now,
+            updated_at=now,
+            created_by=created_by,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "project_id": self.project_id,
+            "name": self.name,
+            "config": self.config.to_dict(),
+            "status": self.status.value,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "created_by": self.created_by,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ResearchProject":
+        return cls(
+            project_id=data["project_id"],
+            name=data.get("name", ""),
+            config=InterviewConfig.from_dict(data.get("config") or {}),
+            status=ProjectStatus(data.get("status", ProjectStatus.ACTIVE.value)),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            created_by=data.get("created_by", ""),
+        )
+
+    def touch(self) -> None:
+        self.updated_at = datetime.now(timezone.utc).isoformat()
 
 
 @dataclass
@@ -100,9 +164,13 @@ class InterviewScratchpad:
 
 @dataclass
 class InterviewSession:
+    """One participant's interview — linked to a project; config is frozen at start."""
+
     session_id: str
+    project_id: str
     participant_token: str
     config: InterviewConfig
+    participant_label: str = ""
     phase: InterviewPhase = InterviewPhase.CONSENT
     status: SessionStatus = SessionStatus.PENDING
     consent: Dict[str, Any] = field(default_factory=lambda: {"given": False, "timestamp": None})
@@ -116,7 +184,13 @@ class InterviewSession:
     created_by: str = ""
 
     @classmethod
-    def create(cls, config: InterviewConfig, created_by: str = "") -> "InterviewSession":
+    def create(
+        cls,
+        project_id: str,
+        config: InterviewConfig,
+        created_by: str = "",
+        participant_label: str = "",
+    ) -> "InterviewSession":
         session_id = str(uuid.uuid4())
         token = uuid.uuid4().hex
         scratchpad = InterviewScratchpad(
@@ -129,8 +203,10 @@ class InterviewSession:
         )
         return cls(
             session_id=session_id,
+            project_id=project_id,
             participant_token=token,
             config=config,
+            participant_label=(participant_label or "").strip(),
             scratchpad=scratchpad,
             created_by=created_by,
         )
@@ -138,7 +214,9 @@ class InterviewSession:
     def to_dict(self, include_scratchpad: bool = True) -> Dict[str, Any]:
         data = {
             "session_id": self.session_id,
+            "project_id": self.project_id,
             "participant_token": self.participant_token,
+            "participant_label": self.participant_label,
             "config": self.config.to_dict(),
             "phase": self.phase.value,
             "status": self.status.value,
@@ -159,8 +237,10 @@ class InterviewSession:
     def from_dict(cls, data: Dict[str, Any]) -> "InterviewSession":
         return cls(
             session_id=data["session_id"],
+            project_id=data.get("project_id") or data.get("legacy_project_id") or "",
             participant_token=data["participant_token"],
             config=InterviewConfig.from_dict(data["config"]),
+            participant_label=data.get("participant_label", ""),
             phase=InterviewPhase(data.get("phase", InterviewPhase.CONSENT.value)),
             status=SessionStatus(data.get("status", SessionStatus.PENDING.value)),
             consent=data.get("consent") or {"given": False, "timestamp": None},

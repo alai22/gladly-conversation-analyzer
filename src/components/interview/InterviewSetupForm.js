@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { createInterviewSession, fullJoinUrl } from '../../utils/interviewApi';
+import {
+  createInterviewProject,
+  updateInterviewProject,
+} from '../../utils/interviewApi';
 
 const defaultConfig = {
   topic: '',
@@ -14,54 +17,100 @@ const defaultConfig = {
   allow_follow_up_recruitment: false,
 };
 
-export default function InterviewSetupForm({ onSessionCreated }) {
-  const [config, setConfig] = useState(defaultConfig);
-  const [bannedInput, setBannedInput] = useState('');
+function configFromProject(project) {
+  if (!project?.config) return { ...defaultConfig };
+  return { ...defaultConfig, ...project.config };
+}
+
+export default function InterviewSetupForm({
+  mode = 'create',
+  project = null,
+  onSaved,
+  onProjectCreated,
+}) {
+  const isEdit = mode === 'edit';
+  const [name, setName] = useState(project?.name || '');
+  const [config, setConfig] = useState(() => configFromProject(project));
+  const [bannedInput, setBannedInput] = useState(
+    () => (project?.config?.banned_topics || []).join(', ')
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [createdLink, setCreatedLink] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (project) {
+      setName(project.name || '');
+      setConfig(configFromProject(project));
+      setBannedInput((project.config?.banned_topics || []).join(', '));
+    }
+  }, [project?.project_id]);
 
   const handleChange = (field, value) => {
     setConfig((prev) => ({ ...prev, [field]: value }));
+    setSaved(false);
   };
+
+  const buildPayload = () => ({
+    name: name.trim() || config.topic,
+    ...config,
+    time_limit_minutes: Number(config.time_limit_minutes),
+    max_questions: Number(config.max_questions),
+    confidence_bar: Number(config.confidence_bar),
+    banned_topics: bannedInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setSaved(false);
     try {
-      const payload = {
-        ...config,
-        time_limit_minutes: Number(config.time_limit_minutes),
-        max_questions: Number(config.max_questions),
-        confidence_bar: Number(config.confidence_bar),
-        banned_topics: bannedInput
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      };
-      const data = await createInterviewSession(payload);
-      if (data.success) {
-        const link = fullJoinUrl(data.join_url);
-        setCreatedLink(link);
-        onSessionCreated?.(data.session, link);
+      const payload = buildPayload();
+      if (isEdit && project?.project_id) {
+        const data = await updateInterviewProject(project.project_id, payload);
+        if (data.success) {
+          setSaved(true);
+          onSaved?.(data.project);
+        } else {
+          setError(data.error || 'Failed to save project');
+        }
       } else {
-        setError(data.error || 'Failed to create session');
+        const data = await createInterviewProject(payload);
+        if (data.success) {
+          onProjectCreated?.(data.project);
+        } else {
+          setError(data.error || 'Failed to create project');
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to create session');
+      setError(err.response?.data?.error || err.message || 'Request failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const copyLink = () => {
-    if (createdLink) navigator.clipboard.writeText(createdLink);
-  };
-
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Project name
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setSaved(false);
+            }}
+            placeholder="e.g. GPS accuracy — Q2 discovery"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Topic / decision to inform *
@@ -120,7 +169,10 @@ export default function InterviewSetupForm({ onSessionCreated }) {
           <input
             type="text"
             value={bannedInput}
-            onChange={(e) => setBannedInput(e.target.value)}
+            onChange={(e) => {
+              setBannedInput(e.target.value);
+              setSaved(false);
+            }}
             placeholder="pricing, competitors, legal disputes"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
@@ -177,28 +229,20 @@ export default function InterviewSetupForm({ onSessionCreated }) {
         <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
       )}
 
+      {saved && isEdit && (
+        <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+          Project saved. New invites will use this setup.
+        </p>
+      )}
+
       <button
         type="submit"
         disabled={loading}
         className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        Create interview session
+        {isEdit ? 'Save project' : 'Create project'}
       </button>
-
-      {createdLink && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm font-medium text-green-900 mb-2">Participant link ready</p>
-          <code className="text-xs break-all text-green-800 block mb-2">{createdLink}</code>
-          <button
-            type="button"
-            onClick={copyLink}
-            className="text-sm text-green-700 underline hover:text-green-900"
-          >
-            Copy link
-          </button>
-        </div>
-      )}
     </form>
   );
 }

@@ -19,7 +19,7 @@ def agent():
 @pytest.fixture
 def active_session():
     config = InterviewConfig(topic="app experience", audience="customers")
-    s = InterviewSession.create(config)
+    s = InterviewSession.create("test-project", config)
     s.phase = InterviewPhase.EXPLORATION
     s.status = SessionStatus.ACTIVE
     s.consent = {"given": True, "timestamp": "2026-01-01T00:00:00+00:00"}
