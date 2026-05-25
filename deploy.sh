@@ -31,6 +31,22 @@ print_info() {
     echo -e "${GREEN}ℹ${NC} $1"
 }
 
+# Free Docker disk when root volume is nearly full (common on small EC2 instances)
+maybe_prune_docker_before_build() {
+    local use_pct
+    use_pct=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+    if [ -n "$use_pct" ] && [ "$use_pct" -ge 90 ]; then
+        print_warning "Disk usage at ${use_pct}% — pruning Docker build cache before build..."
+        docker builder prune -af >/dev/null 2>&1 || true
+    fi
+}
+
+prune_docker_after_deploy() {
+    print_status "Cleaning up unused Docker images and build cache..."
+    docker image prune -af >/dev/null 2>&1 || true
+    docker builder prune -af >/dev/null 2>&1 || true
+}
+
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
     print_error "Docker is not running. Please start Docker and try again."
@@ -62,6 +78,9 @@ if [ "$ENVIRONMENT" = "production" ] && [ -f ".env" ]; then
 fi
 
 # Build the Docker image
+if [ "$ENVIRONMENT" = "production" ]; then
+    maybe_prune_docker_before_build
+fi
 print_status "Building Docker image..."
 docker build -t $PROJECT_NAME:$ENVIRONMENT .
 
@@ -168,6 +187,7 @@ case $ENVIRONMENT in
         print_status "Application deployed on localhost:5000 (nginx proxies HTTPS to this)"
         print_status "Access via HTTPS: https://your-ip-or-domain"
         print_status "Check logs with: docker logs gladly-prod"
+        prune_docker_after_deploy
         print_info "Note: Using IAM role for S3 access (no AWS credentials needed)"
         print_info "Note: Nginx handles ports 80/443, Docker runs on localhost:5000"
         ;;
