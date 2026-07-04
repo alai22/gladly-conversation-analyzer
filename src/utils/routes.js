@@ -11,6 +11,7 @@ export const PATH_TO_MODE = {
   '/tools': 'tools',
   '/jira': 'bug-triage',
   '/interview': 'text-interview',
+  '/engineering': 'neck-fit-modeler',
 };
 
 export const MODE_TO_PATH = {
@@ -21,6 +22,7 @@ export const MODE_TO_PATH = {
   'tools': '/tools',
   'bug-triage': '/jira',
   'text-interview': '/interview',
+  'neck-fit-modeler': '/engineering',
 };
 
 /** Paths that have a canonical mode (for redirects and path-first logic) */

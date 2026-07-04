@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Database, Bot, TrendingUp, Wrench, Video, Activity, ExternalLink } from 'lucide-react';
+import { Download, Database, Bot, TrendingUp, Wrench, Video, Activity, ExternalLink, CircleDot } from 'lucide-react';
 
 const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   const [activeSection, setActiveSection] = useState(() => {
     // Determine section based on current mode/adminMode
+    if (currentMode === 'neck-fit-modeler') {
+      return 'engineering';
+    }
     if (adminMode === 'download' || currentMode === 'api-data-manager' || currentMode === 'zoom' || currentMode === 'analytics') {
       return 'data-management';
     }
@@ -15,7 +18,9 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
 
   // Update active section when mode changes
   useEffect(() => {
-    if (adminMode === 'download' || currentMode === 'api-data-manager' || currentMode === 'zoom' || currentMode === 'analytics') {
+    if (currentMode === 'neck-fit-modeler') {
+      setActiveSection('engineering');
+    } else if (adminMode === 'download' || currentMode === 'api-data-manager' || currentMode === 'zoom' || currentMode === 'analytics') {
       setActiveSection('data-management');
     } else if (adminMode === 'claude') {
       setActiveSection('admin-tools');
@@ -90,6 +95,22 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
     }
   ];
 
+  const engineeringTools = [
+    {
+      id: 'neck-fit-modeler',
+      name: 'Halo Collar 6 Neck Fit Modeler',
+      description: 'Model collar component fit around dog neck cross sections',
+      icon: CircleDot,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      borderColor: 'border-indigo-200',
+      action: () => {
+        setCurrentMode('neck-fit-modeler');
+        setAdminMode(null);
+      }
+    }
+  ];
+
   const adminTools = [
     {
       id: 'claude',
@@ -136,6 +157,9 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
     if (tool.id === 'jira-status') {
       return currentMode === 'jira-status';
     }
+    if (tool.id === 'neck-fit-modeler') {
+      return currentMode === 'neck-fit-modeler';
+    }
     if (tool.id === 'claude') {
       return adminMode === 'claude';
     }
@@ -162,6 +186,16 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
           Data Management
         </button>
         <button
+          onClick={() => setActiveSection('engineering')}
+          className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            activeSection === 'engineering'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Engineering
+        </button>
+        <button
           onClick={() => setActiveSection('admin-tools')}
           className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
             activeSection === 'admin-tools'
@@ -185,6 +219,53 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
               const Icon = tool.icon;
               const isActive = isToolActive(tool);
               
+              return (
+                <button
+                  key={tool.id}
+                  onClick={tool.action}
+                  className={`p-6 border-2 rounded-lg text-left transition-all hover:shadow-md ${
+                    isActive
+                      ? `${tool.bgColor} ${tool.borderColor} border-2`
+                      : 'bg-white border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start space-x-4">
+                    <div className={`p-3 rounded-lg ${isActive ? tool.bgColor : 'bg-gray-50'}`}>
+                      <Icon className={`h-6 w-6 ${isActive ? tool.color : 'text-gray-600'}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className={`text-lg font-semibold ${isActive ? tool.color : 'text-gray-900'}`}>
+                          {tool.name}
+                        </h3>
+                        {isActive && (
+                          <span className={`text-xs px-2 py-1 rounded ${tool.bgColor} ${tool.color} font-medium`}>
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{tool.description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Engineering Section */}
+      {activeSection === 'engineering' && (
+        <div className="space-y-4">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Engineering</h2>
+            <p className="text-sm text-gray-600">Mechanical modeling and product design tools</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {engineeringTools.map((tool) => {
+              const Icon = tool.icon;
+              const isActive = isToolActive(tool);
+
               return (
                 <button
                   key={tool.id}

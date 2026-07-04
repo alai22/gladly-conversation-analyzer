@@ -18,6 +18,7 @@ import BugTriageCopilot from './components/BugTriageCopilot';
 import JiraStatusView from './components/JiraStatusView';
 import TextInterviewHub from './components/interview/TextInterviewHub';
 import InterviewParticipantPage from './components/interview/InterviewParticipantPage';
+import NeckFitModelingTool from './components/neckFit/NeckFitModelingTool';
 import { useAnalytics } from './hooks/useAnalytics';
 import axios from 'axios';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
@@ -849,7 +850,7 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || currentMode === 'neck-fit-modeler' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {/* Show actual tool components when active */}
           {currentMode === 'bug-triage' ? (
             <BugTriageCopilot />
@@ -880,6 +881,8 @@ function App() {
             />
           ) : currentMode === 'text-interview' ? (
             <TextInterviewHub />
+          ) : currentMode === 'neck-fit-modeler' ? (
+            <NeckFitModelingTool />
           ) : currentMode === 'churn-trends' ? (
             <ChurnTrendsChart />
           ) : currentMode === 'conversation-trends' ? (
@@ -894,7 +897,7 @@ function App() {
         </div>
 
         {/* Prompt Input */}
-        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && currentMode !== 'neck-fit-modeler' && (
           <div className="bg-white border-t border-gray-200 p-6">
             {/* Clear Conversation Button for Survicate Mode */}
             {currentMode === 'survicate' && conversations.survicate && conversations.survicate.length > 0 && (

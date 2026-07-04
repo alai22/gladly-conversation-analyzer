@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Wrench, Bug, Users } from 'lucide-react';
+import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Wrench, Bug, Users, CircleDot } from 'lucide-react';
 import { getPathFromMode, isPathBasedMode } from '../utils/routes';
 
 const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
@@ -26,6 +26,9 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
     if (currentMode === 'text-interview') {
       return 'interviews';
     }
+    if (currentMode === 'neck-fit-modeler') {
+      return 'engineering';
+    }
     if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       return 'gladly';
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
@@ -45,6 +48,8 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       setActiveTab('bug-triage');
     } else if (currentMode === 'text-interview') {
       setActiveTab('interviews');
+    } else if (currentMode === 'neck-fit-modeler') {
+      setActiveTab('engineering');
     } else if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
       setActiveTab('gladly');
     } else if (['churn-trends', 'survicate'].includes(currentMode)) {
@@ -186,6 +191,19 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
         </button>
         <button
           onClick={() => {
+            setActiveTab('engineering');
+            if (currentMode !== 'neck-fit-modeler') {
+              setModeAndUrl('neck-fit-modeler');
+            }
+          }}
+          className={tabBtn(activeTab === 'engineering')}
+        >
+          <CircleDot className="h-4 w-4 shrink-0 hidden sm:block" />
+          <span className="md:hidden whitespace-nowrap">Engineering</span>
+          <span className="hidden md:inline whitespace-nowrap">Engineering</span>
+        </button>
+        <button
+          onClick={() => {
             setActiveTab('bug-triage');
             if (currentMode !== 'bug-triage') {
               setModeAndUrl('bug-triage');
@@ -201,7 +219,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       </div>
 
       {/* Sub-options for active tab */}
-      {activeTab !== 'tools' && activeTab !== 'surveys' && activeTab !== 'bug-triage' && activeTab !== 'interviews' && (
+      {activeTab !== 'tools' && activeTab !== 'surveys' && activeTab !== 'bug-triage' && activeTab !== 'interviews' && activeTab !== 'engineering' && (
         <div className="flex gap-2 overflow-x-auto pb-1 min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
           {(activeTab === 'gladly' ? gladlyModes : churnModes).map((mode) => {
             const Icon = mode.icon;
