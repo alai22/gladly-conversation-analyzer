@@ -20,6 +20,8 @@ import {
   lerpPoint,
   maxPolylinePolygonPenetration,
   offsetPolygon,
+  pointInPolygon,
+  pointToPolygonBoundary,
   polylineExitTangent,
   polylineLength,
   rigidArcExitTangent,
@@ -95,7 +97,7 @@ export const DEFAULT_FIT_INPUTS = {
   electronicsBendRadius: 200,
   gpsAntennaLength: 55,
   gpsAntennaThickness: 8,
-  gpsAntennaStiffness: 0.5,
+  gpsAntennaStiffness: 0.7,
   gpsAntennaYoungsModulus: 2.5,
   gpsMinBendRadius: 15,
   strapThickness: 4,
@@ -107,20 +109,49 @@ function gpsStiffnessFactor(stiffness) {
 }
 
 /**
+ * True when a centerline point intrudes into the neck or its physical half-thickness.
+ * @param {Point} p
+ * @param {Point[]} neckPoints
+ * @param {number} minStandoff mm from neck skin to centerline
+ * @returns {boolean}
+ */
+function intrudesNeck(p, neckPoints, minStandoff) {
+  return (
+    pointInPolygon(p, neckPoints) ||
+    pointToPolygonBoundary(p, neckPoints) < minStandoff - 0.05
+  );
+}
+
+/**
  * GPS path attached to electronics end, parallel at junction.
  * Stiffness controls how much the rubber section conforms to the neck vs. staying straight.
+ * Points that would pass through the neck are redirected to the collar seating path.
  * @param {Point} attachPoint electronics exit (GPS entry)
  * @param {Point} attachTangent unit tangent — shared with electronics at junction
- * @param {ReturnType<typeof buildArcLengthTable>} table
+ * @param {ReturnType<typeof buildArcLengthTable>} table collar offset path
+ * @param {Point[]} neckPoints neck skin contour
  * @param {number} sIdealStart arc position on neck path where GPS would ideally begin
  * @param {number} length
  * @param {number} stiffness 0-1
+ * @param {number} clearanceOffset mm
+ * @param {number} gpsThickness mm
  * @returns {Point[]}
  */
-function buildGpsPathAttached(attachPoint, attachTangent, table, sIdealStart, length, stiffness) {
+function buildGpsPathAttached(
+  attachPoint,
+  attachTangent,
+  table,
+  neckPoints,
+  sIdealStart,
+  length,
+  stiffness,
+  clearanceOffset,
+  gpsThickness
+) {
   const factor = gpsStiffnessFactor(stiffness);
   if (length <= 0) return [attachPoint];
 
+  const minStandoff = Math.max(clearanceOffset, gpsThickness / 2);
   const samples = Math.max(20, Math.ceil(length / 2));
   const result = [attachPoint];
 
@@ -142,7 +173,11 @@ function buildGpsPathAttached(attachPoint, attachTangent, table, sIdealStart, le
       const u = Math.min(1, (s - tangentRun) / bendLength);
       blend = (1 - factor) * u * u * (3 - 2 * u);
     }
-    result.push(lerpPoint(straightPt, idealPt, blend));
+    let pt = lerpPoint(straightPt, idealPt, blend);
+    if (intrudesNeck(pt, neckPoints, minStandoff)) {
+      pt = { ...idealPt };
+    }
+    result.push(pt);
   }
   return result;
 }
@@ -255,7 +290,17 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   // GPS attached at elecEnd, parallel at junction; rubber may bend toward neck
   const gpsPath =
     gpsLen > 0
-      ? buildGpsPathAttached(elecEnd, elecExitTangent, table, sIdealGpsStart, gpsLen, inputs.gpsAntennaStiffness)
+      ? buildGpsPathAttached(
+          elecEnd,
+          elecExitTangent,
+          table,
+          neckPoints,
+          sIdealGpsStart,
+          gpsLen,
+          inputs.gpsAntennaStiffness,
+          inputs.clearanceOffset,
+          inputs.gpsAntennaThickness
+        )
       : [elecEnd];
   const gpsEnd = gpsPath[gpsPath.length - 1];
 
@@ -293,8 +338,11 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const maxNeckGap = Math.max(maxElectronicsNeckGap, maxGpsNeckGap);
   const gapIndicators = [...elecGaps.indicators, ...gpsGaps.indicators];
 
-  const maxInterferenceDepth =
+  const elecInterference =
     elecLen > 0 ? maxPolylinePolygonPenetration(electronicsPath, neckPoints) : 0;
+  const gpsInterference =
+    gpsLen > 0 ? maxPolylinePolygonPenetration(gpsPath, neckPoints) : 0;
+  const maxInterferenceDepth = Math.max(elecInterference, gpsInterference);
 
   const pressurePoints = [
     ...computeNeckContactPoints(electronicsPath, table, inputs.clearanceOffset),
@@ -354,9 +402,10 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   }
 
   if (maxInterferenceDepth > 0.5) {
-    warnings.push(
-      `Electronics penetrates neck contour by up to ${maxInterferenceDepth.toFixed(1)} mm.`
-    );
+    const parts = [];
+    if (elecInterference > 0.5) parts.push(`electronics (${elecInterference.toFixed(1)} mm)`);
+    if (gpsInterference > 0.5) parts.push(`GPS/antenna (${gpsInterference.toFixed(1)} mm)`);
+    warnings.push(`Hardware penetrates neck contour: ${parts.join(', ')}.`);
   }
 
   if (gpsLen > 0 && minGpsBendRadius < inputs.gpsMinBendRadius) {
