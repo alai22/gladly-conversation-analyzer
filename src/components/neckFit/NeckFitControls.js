@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, ImageIcon } from 'lucide-react';
+import { Upload, ImageIcon, RotateCw } from 'lucide-react';
 import { SAMPLE_PROFILES } from '../../utils/neckFit/sampleProfiles';
 
 const SliderInput = ({ label, value, onChange, min, max, step, unit, hint }) => (
@@ -60,6 +60,8 @@ const NeckFitControls = ({
   onInputChange,
   smoothing,
   onSmoothingChange,
+  onOptimizePlacement,
+  optimizeMessage,
 }) => {
   const fileRef = useRef(null);
 
@@ -181,15 +183,30 @@ const NeckFitControls = ({
           unit="mm"
         />
         <SliderInput
-          label="Placement around neck"
+          label="Rotation from trachea"
           value={inputs.electronicsPlacementS}
           onChange={set('electronicsPlacementS')}
-          min={-150}
-          max={150}
+          min={-200}
+          max={200}
           step={1}
           unit="mm"
-          hint="Offset from trachea (0 = strap end at throat / ground)"
+          hint="Clockwise (+) rotates hardware around neck; 0 = strap end at throat"
         />
+        {onOptimizePlacement && (
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={onOptimizePlacement}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+            >
+              <RotateCw className="h-4 w-4" />
+              Auto-fit rotation
+            </button>
+            {optimizeMessage && (
+              <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section title="GPS / Antenna (Semi-Flexible)">

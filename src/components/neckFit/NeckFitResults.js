@@ -121,6 +121,20 @@ const NeckFitResults = ({
           }
         />
         <MetricRow
+          label="Strap path length (modeled)"
+          value={`${fitResult.strapPathLength.toFixed(1)} mm`}
+        />
+        <MetricRow
+          label="Strap endpoint gap"
+          value={`${fitResult.strapEndpointGap.toFixed(1)} mm`}
+          highlight={fitResult.strapEndpointGap > 8 ? 'bad' : undefined}
+        />
+        <MetricRow
+          label="Max overall neck gap"
+          value={`${fitResult.maxNeckGap.toFixed(1)} mm`}
+          highlight={fitResult.maxNeckGap > 8 ? 'bad' : undefined}
+        />
+        <MetricRow
           label="Max electronics–neck gap"
           value={`${fitResult.maxElectronicsNeckGap.toFixed(1)} mm`}
           highlight={fitResult.maxElectronicsNeckGap > 5 ? 'bad' : undefined}

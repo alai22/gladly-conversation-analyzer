@@ -68,6 +68,8 @@ import {
  * @property {number} maxNeckGap
  * @property {number} maxElectronicsGap @deprecated alias for maxElectronicsNeckGap
  * @property {number} junctionAngleDeg angle at electronics→GPS joint
+ * @property {number} strapEndpointGap GPS exit distance from ideal neck path (extra strap span)
+ * @property {number} strapPathLength modeled strap centerline length including endpoint chords
  * @property {number} maxInterferenceDepth
  * @property {boolean} isValid
  * @property {string[]} warnings
@@ -279,6 +281,10 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
 
   const strapLength = collarPathLength + inputs.slack - elecLen - gpsLen;
 
+  const idealGpsEndPt = getPointAtS(table, sIdealGpsEnd);
+  const strapEndpointGap = Math.hypot(gpsEnd.x - idealGpsEndPt.x, gpsEnd.y - idealGpsEndPt.y);
+  const strapPathLength = polylineLength(strapPath);
+
   // Neck gaps — primary fit unknown
   const elecGaps = analyzeNeckGaps(electronicsPath, table);
   const gpsGaps = analyzeNeckGaps(gpsPath, table);
@@ -385,6 +391,8 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     maxNeckGap,
     maxElectronicsGap: maxElectronicsNeckGap,
     junctionAngleDeg,
+    strapEndpointGap,
+    strapPathLength,
     maxInterferenceDepth,
     isValid,
     warnings,
@@ -397,6 +405,86 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     tracheaPoint: trachea.point,
     skyPoint: sky.point,
     bendingEnergy,
+  };
+}
+
+/**
+ * Score a fit for collar rotation optimization (lower is better).
+ * @param {FitResult} result
+ * @param {FitInputs} inputs
+ * @returns {number}
+ */
+function scoreFitForPlacement(result, inputs) {
+  let score = result.maxNeckGap + 0.5 * result.strapEndpointGap;
+  if (result.minGpsBendRadius < inputs.gpsMinBendRadius) score += 200;
+  if (result.strapLength < MIN_STRAP_LENGTH) score += 100;
+  if (result.maxInterferenceDepth > 1) score += 150;
+  return score;
+}
+
+/**
+ * Normalize placement offset to roughly ±half the collar loop for UI display.
+ * @param {number} offset
+ * @param {number} loopLength
+ * @returns {number}
+ */
+function normalizePlacementOffset(offset, loopLength) {
+  let o = ((offset % loopLength) + loopLength) % loopLength;
+  if (o > loopLength / 2) o -= loopLength;
+  return o;
+}
+
+/**
+ * Search collar rotation (placement offset from trachea) to minimize neck gaps
+ * and strap closure span while respecting bend-radius constraints.
+ *
+ * @param {Point[]} rawNeckPoints
+ * @param {FitInputs} inputs
+ * @param {{ smoothing?: number, coarseStep?: number, fineStep?: number, refineWindow?: number }} [options]
+ * @returns {{ optimalPlacementS: number, fitResult: FitResult, baselineMaxNeckGap: number, baselineStrapEndpointGap: number }}
+ */
+export function optimizeCollarPlacement(rawNeckPoints, inputs, options = {}) {
+  const smoothing = options.smoothing ?? 0;
+  const coarseStep = options.coarseStep ?? 8;
+  const fineStep = options.fineStep ?? 1;
+  const refineWindow = options.refineWindow ?? 24;
+
+  const baseline = computeFit(rawNeckPoints, inputs, { smoothing });
+  const loop = baseline.collarPathLength;
+  const halfLoop = loop / 2;
+
+  let best = {
+    placementS: normalizePlacementOffset(inputs.electronicsPlacementS, loop),
+    score: scoreFitForPlacement(baseline, inputs),
+    result: baseline,
+  };
+
+  const tryOffset = (offset) => {
+    const normalized = normalizePlacementOffset(offset, loop);
+    const result = computeFit(
+      rawNeckPoints,
+      { ...inputs, electronicsPlacementS: normalized },
+      { smoothing }
+    );
+    const score = scoreFitForPlacement(result, inputs);
+    if (score < best.score) {
+      best = { placementS: normalized, score, result };
+    }
+  };
+
+  for (let offset = -halfLoop; offset <= halfLoop; offset += coarseStep) {
+    tryOffset(offset);
+  }
+
+  for (let d = -refineWindow; d <= refineWindow; d += fineStep) {
+    tryOffset(best.placementS + d);
+  }
+
+  return {
+    optimalPlacementS: Math.round(best.placementS * 10) / 10,
+    fitResult: best.result,
+    baselineMaxNeckGap: baseline.maxNeckGap,
+    baselineStrapEndpointGap: baseline.strapEndpointGap,
   };
 }
 
@@ -432,6 +520,8 @@ export function generateFitReport(result, inputs, profileName) {
     `Max electronics–neck gap: ${result.maxElectronicsNeckGap.toFixed(1)} mm`,
     `Max GPS–neck gap: ${result.maxGpsNeckGap.toFixed(1)} mm`,
     `Max overall neck gap: ${result.maxNeckGap.toFixed(1)} mm`,
+    `Strap endpoint gap (GPS exit): ${result.strapEndpointGap.toFixed(1)} mm`,
+    `Modeled strap path length: ${result.strapPathLength.toFixed(1)} mm`,
     `Electronics→GPS junction angle: ${result.junctionAngleDeg.toFixed(1)}°`,
     `Max GPS curvature: ${result.maxGpsCurvature.toFixed(4)} 1/mm`,
     `Min GPS bend radius: ${result.minGpsBendRadius === Infinity ? 'N/A' : result.minGpsBendRadius.toFixed(1) + ' mm'}`,

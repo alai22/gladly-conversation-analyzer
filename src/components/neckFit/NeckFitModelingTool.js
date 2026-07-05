@@ -7,6 +7,7 @@ import {
   DEFAULT_FIT_INPUTS,
   computeFit,
   generateFitReport,
+  optimizeCollarPlacement,
 } from '../../utils/neckFit/mechanicalModel';
 import {
   DEFAULT_SAMPLE_PROFILE_ID,
@@ -25,6 +26,7 @@ const NeckFitModelingTool = () => {
   const [showPressure, setShowPressure] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState(null);
+  const [optimizeMessage, setOptimizeMessage] = useState(null);
 
   const activeProfile = useMemo(() => {
     if (customProfile && profileId === customProfile.id) return customProfile;
@@ -49,6 +51,18 @@ const NeckFitModelingTool = () => {
       setImageLoading(false);
     }
   }, [smoothing]);
+
+  const handleOptimizePlacement = useCallback(() => {
+    if (!activeProfile?.points?.length) return;
+    const { optimalPlacementS, fitResult: optimized, baselineMaxNeckGap, baselineStrapEndpointGap } =
+      optimizeCollarPlacement(activeProfile.points, inputs, { smoothing });
+    setInputs((prev) => ({ ...prev, electronicsPlacementS: optimalPlacementS }));
+    const gapDelta = baselineMaxNeckGap - optimized.maxNeckGap;
+    const strapDelta = baselineStrapEndpointGap - optimized.strapEndpointGap;
+    setOptimizeMessage(
+      `Rotated to ${optimalPlacementS.toFixed(0)} mm from trachea — neck gap ${optimized.maxNeckGap.toFixed(1)} mm (${gapDelta >= 0 ? '−' : '+'}${Math.abs(gapDelta).toFixed(1)}), strap span ${optimized.strapEndpointGap.toFixed(1)} mm (${strapDelta >= 0 ? '−' : '+'}${Math.abs(strapDelta).toFixed(1)})`
+    );
+  }, [activeProfile, inputs, smoothing]);
 
   const handleExportSvg = useCallback(() => {
     if (!fitResult) return;
@@ -102,6 +116,8 @@ const NeckFitModelingTool = () => {
               onInputChange={setInputs}
               smoothing={smoothing}
               onSmoothingChange={setSmoothing}
+              onOptimizePlacement={handleOptimizePlacement}
+              optimizeMessage={optimizeMessage}
             />
           </div>
 
