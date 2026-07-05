@@ -197,6 +197,64 @@ export function extractPathSegment(table, s0, s1, samples = 40) {
 }
 
 /**
+ * Closest point on a closed polyline to p.
+ * @param {Point} p
+ * @param {{ points: Point[], cumulative: number[], total: number }} table
+ * @returns {{ point: Point, distance: number }}
+ */
+export function closestPointOnClosedPath(p, table) {
+  const { points } = table;
+  let bestDist = Infinity;
+  let bestPoint = points[0];
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    let t = 0;
+    if (lenSq > 0) {
+      t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+    }
+    const proj = { x: a.x + t * dx, y: a.y + t * dy };
+    const d = Math.hypot(p.x - proj.x, p.y - proj.y);
+    if (d < bestDist) {
+      bestDist = d;
+      bestPoint = proj;
+    }
+  }
+  return { point: bestPoint, distance: bestDist };
+}
+
+/**
+ * Sample points along a line segment.
+ * @param {Point} a
+ * @param {Point} b
+ * @param {number} count
+ * @returns {Point[]}
+ */
+export function sampleLine(a, b, count) {
+  const pts = [];
+  for (let i = 0; i <= count; i++) {
+    pts.push(lerpPoint(a, b, i / count));
+  }
+  return pts;
+}
+
+/**
+ * Angle between two unit vectors in degrees.
+ * @param {Point} u
+ * @param {Point} v
+ * @returns {number}
+ */
+export function angleBetweenDeg(u, v) {
+  const dot = u.x * v.x + u.y * v.y;
+  const clamped = Math.max(-1, Math.min(1, dot));
+  return (Math.acos(clamped) * 180) / Math.PI;
+}
+
+/**
  * Polyline length.
  * @param {Point[]} points
  * @returns {number}

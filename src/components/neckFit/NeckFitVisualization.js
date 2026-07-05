@@ -30,13 +30,13 @@ const NeckFitVisualization = ({
     );
   }
 
-  const { neckPoints, collarOffsetPoints, segments, gapIndicators, pressurePoints } = fitResult;
+  const { neckPoints, collarOffsetPoints, segments, gapIndicators, pressurePoints, junctionPoint } = fitResult;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden h-full flex flex-col">
       <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
         <h3 className="text-sm font-semibold text-gray-800">Cross-Section View</h3>
-        <p className="text-xs text-gray-500">2D neck profile with collar component overlay</p>
+        <p className="text-xs text-gray-500">Rigid/semi-rigid hardware attached in series; red markers = air gap to neck</p>
       </div>
       <div className="flex-1 p-2 min-h-[420px]">
         <svg
@@ -63,7 +63,7 @@ const NeckFitVisualization = ({
             strokeDasharray="5 4"
           />
 
-          {/* Gap indicators */}
+          {/* Neck air-gap indicators (hardware lifted off seating path) */}
           {showGaps &&
             gapIndicators.map((p, i) => (
               <circle
@@ -72,9 +72,21 @@ const NeckFitVisualization = ({
                 cy={p.y}
                 r={2.5}
                 fill="#ef4444"
-                opacity={0.75}
+                opacity={0.8}
               />
             ))}
+
+          {/* Electronics → GPS junction (always attached, parallel) */}
+          {junctionPoint && (
+            <circle
+              cx={junctionPoint.x}
+              cy={junctionPoint.y}
+              r={4}
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth={1.5}
+            />
+          )}
 
           {/* Collar segments with thickness */}
           {segments.map((seg) => {
@@ -177,13 +189,19 @@ const NeckFitVisualization = ({
         {showGaps && (
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500 opacity-75" />
-            <span className="text-gray-600">Gap</span>
+            <span className="text-gray-600">Neck air gap</span>
+          </div>
+        )}
+        {fitResult.junctionPoint && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full border-2 border-indigo-500" />
+            <span className="text-gray-600">Enclosure–GPS joint</span>
           </div>
         )}
         {showPressure && (
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-amber-500 opacity-75" />
-            <span className="text-gray-600">Pressure</span>
+            <span className="text-gray-600">Neck contact</span>
           </div>
         )}
       </div>

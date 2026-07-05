@@ -112,9 +112,18 @@ const NeckFitResults = ({
           }
         />
         <MetricRow
-          label="Max electronics gap"
-          value={`${fitResult.maxElectronicsGap.toFixed(1)} mm`}
-          highlight={fitResult.maxElectronicsGap > 5 ? 'bad' : undefined}
+          label="Max electronics–neck gap"
+          value={`${fitResult.maxElectronicsNeckGap.toFixed(1)} mm`}
+          highlight={fitResult.maxElectronicsNeckGap > 5 ? 'bad' : undefined}
+        />
+        <MetricRow
+          label="Max GPS–neck gap"
+          value={`${fitResult.maxGpsNeckGap.toFixed(1)} mm`}
+          highlight={fitResult.maxGpsNeckGap > 5 ? 'bad' : undefined}
+        />
+        <MetricRow
+          label="Enclosure–GPS angle"
+          value={`${fitResult.junctionAngleDeg.toFixed(1)}°`}
         />
         <MetricRow
           label="Max interference depth"
@@ -154,7 +163,7 @@ const NeckFitResults = ({
             onChange={(e) => onShowGapsChange(e.target.checked)}
             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
           />
-          Show gaps (rigid electronics)
+          Show neck air gaps
         </label>
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
@@ -172,7 +181,7 @@ const NeckFitResults = ({
             onChange={(e) => onShowPressureChange(e.target.checked)}
             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
           />
-          Show pressure / contact zones
+          Show neck contact zones
         </label>
       </div>
 
