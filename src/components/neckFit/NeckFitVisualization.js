@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   normalizeForView,
+  parseViewBox,
   pointsToSvgPath,
   polygonCentroid,
 } from '../../utils/neckFit/geometry';
@@ -22,7 +23,12 @@ const NeckFitVisualization = ({
     return normalizeForView(all, 60);
   }, [fitResult]);
 
-  if (!fitResult || !viewData) {
+  const vb = useMemo(() => {
+    if (!viewData?.viewBox) return null;
+    return parseViewBox(viewData.viewBox);
+  }, [viewData]);
+
+  if (!fitResult || !viewData || !vb) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px] bg-gray-50 rounded-lg border border-gray-200">
         <p className="text-gray-500 text-sm">Adjust inputs to see the fit visualization</p>
@@ -30,13 +36,26 @@ const NeckFitVisualization = ({
     );
   }
 
-  const { neckPoints, collarOffsetPoints, segments, gapIndicators, pressurePoints, junctionPoint } = fitResult;
+  const {
+    neckPoints,
+    collarOffsetPoints,
+    segments,
+    gapIndicators,
+    pressurePoints,
+    junctionPoint,
+    tracheaPoint,
+    skyPoint,
+  } = fitResult;
+
+  const labelX = vb.x + vb.w / 2;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden h-full flex flex-col">
       <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
         <h3 className="text-sm font-semibold text-gray-800">Cross-Section View</h3>
-        <p className="text-xs text-gray-500">Rigid/semi-rigid hardware attached in series; red markers = air gap to neck</p>
+        <p className="text-xs text-gray-500">
+          Top = sky / back of neck · Bottom = trachea / throat (ground). Strap end at throat; GPS wraps upward.
+        </p>
       </div>
       <div className="flex-1 p-2 min-h-[420px]">
         <svg
@@ -45,6 +64,28 @@ const NeckFitVisualization = ({
           style={{ maxHeight: '560px' }}
           preserveAspectRatio="xMidYMid meet"
         >
+          {/* Orientation labels */}
+          <text
+            x={labelX}
+            y={vb.y + 16}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            fill="#64748b"
+          >
+            ↑ Sky · Back of neck
+          </text>
+          <text
+            x={labelX}
+            y={vb.y + vb.h - 8}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            fill="#64748b"
+          >
+            ↓ Trachea · Throat (ground)
+          </text>
+
           {/* Neck fill */}
           <path
             d={pointsToSvgPath(neckPoints, true)}
@@ -53,6 +94,36 @@ const NeckFitVisualization = ({
             strokeWidth={1.5}
             opacity={0.9}
           />
+
+          {/* Trachea / sky landmarks on neck */}
+          {tracheaPoint && (
+            <g>
+              <circle cx={tracheaPoint.x} cy={tracheaPoint.y} r={4} fill="#b45309" opacity={0.35} />
+              <text
+                x={tracheaPoint.x}
+                y={tracheaPoint.y + 14}
+                textAnchor="middle"
+                fontSize={8}
+                fill="#92400e"
+              >
+                Throat
+              </text>
+            </g>
+          )}
+          {skyPoint && (
+            <g>
+              <circle cx={skyPoint.x} cy={skyPoint.y} r={4} fill="#0284c7" opacity={0.35} />
+              <text
+                x={skyPoint.x}
+                y={skyPoint.y - 8}
+                textAnchor="middle"
+                fontSize={8}
+                fill="#0369a1"
+              >
+                Back
+              </text>
+            </g>
+          )}
 
           {/* Ideal collar offset path (dashed) */}
           <path
@@ -63,7 +134,7 @@ const NeckFitVisualization = ({
             strokeDasharray="5 4"
           />
 
-          {/* Neck air-gap indicators (hardware lifted off seating path) */}
+          {/* Neck air-gap indicators */}
           {showGaps &&
             gapIndicators.map((p, i) => (
               <circle
@@ -76,7 +147,7 @@ const NeckFitVisualization = ({
               />
             ))}
 
-          {/* Electronics → GPS junction (always attached, parallel) */}
+          {/* Electronics → GPS junction */}
           {junctionPoint && (
             <circle
               cx={junctionPoint.x}
@@ -88,7 +159,7 @@ const NeckFitVisualization = ({
             />
           )}
 
-          {/* Collar segments with thickness */}
+          {/* Collar segments */}
           {segments.map((seg) => {
             if (!seg.pathPoints.length) return null;
             const color = SEGMENT_COLORS[seg.type];
@@ -115,7 +186,6 @@ const NeckFitVisualization = ({
             );
           })}
 
-          {/* Curvature markers on GPS segment */}
           {showCurvature &&
             segments
               .filter((s) => s.type === 'gpsAntenna' || s.type === 'electronics')
@@ -125,7 +195,6 @@ const NeckFitVisualization = ({
                 <circle key={`curv-${i}`} cx={p.x} cy={p.y} r={2} fill="#8b5cf6" opacity={0.6} />
               ))}
 
-          {/* Pressure / contact zones */}
           {showPressure &&
             pressurePoints.map((p, i) => (
               <circle
@@ -138,7 +207,6 @@ const NeckFitVisualization = ({
               />
             ))}
 
-          {/* Segment labels */}
           {segments.map((seg) => {
             if (!seg.pathPoints.length) return null;
             const mid = seg.pathPoints[Math.floor(seg.pathPoints.length / 2)];
@@ -164,7 +232,6 @@ const NeckFitVisualization = ({
             );
           })}
 
-          {/* Center marker */}
           <circle
             cx={polygonCentroid(neckPoints).x}
             cy={polygonCentroid(neckPoints).y}
@@ -175,7 +242,6 @@ const NeckFitVisualization = ({
         </svg>
       </div>
 
-      {/* Legend */}
       <div className="px-4 py-2 border-t border-gray-100 flex flex-wrap gap-3 text-xs">
         {Object.entries(SEGMENT_LABELS).map(([key, label]) => (
           <div key={key} className="flex items-center gap-1.5">
@@ -186,6 +252,14 @@ const NeckFitVisualization = ({
             <span className="text-gray-600">{label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full bg-amber-700 opacity-50" />
+          <span className="text-gray-600">Throat</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full bg-sky-600 opacity-50" />
+          <span className="text-gray-600">Back / sky</span>
+        </div>
         {showGaps && (
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500 opacity-75" />

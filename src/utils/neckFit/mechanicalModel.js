@@ -12,7 +12,9 @@ import {
   buildRigidArcPath,
   closestPointOnClosedPath,
   computeCurvature,
+  ensureTracheaDown,
   extractPathSegment,
+  findArcLengthAtExtremeY,
   getPointAtS,
   getTangentAtS,
   lerpPoint,
@@ -74,6 +76,8 @@ import {
  * @property {Point[]} gapIndicators air gaps between hardware and neck seating path
  * @property {Point[]} pressurePoints contact / compression zones at neck
  * @property {Point | null} junctionPoint electronics–GPS attachment
+ * @property {Point} tracheaPoint throat / ground side of neck
+ * @property {Point} skyPoint back of neck / sky side
  * @property {number} bendingEnergy
  */
 
@@ -201,13 +205,19 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   if (smoothing > 0) {
     neckPoints = smoothPolygon(neckPoints, smoothing);
   }
+  neckPoints = ensureTracheaDown(neckPoints);
   neckPoints = scaleProfileToPerimeter(neckPoints, inputs.neckCircumference);
 
   const collarOffsetPoints = offsetPolygon(neckPoints, inputs.clearanceOffset);
   const table = buildArcLengthTable(collarOffsetPoints);
   const collarPathLength = table.total;
 
-  const sElecStart = ((inputs.electronicsPlacementS % collarPathLength) + collarPathLength) % collarPathLength;
+  // Trachea (+y / ground) is the strap-side anchor; placement is offset from there.
+  const trachea = findArcLengthAtExtremeY(neckPoints, 'max');
+  const sky = findArcLengthAtExtremeY(neckPoints, 'min');
+  const sElecStart =
+    ((trachea.s + inputs.electronicsPlacementS) % collarPathLength + collarPathLength) %
+    collarPathLength;
   const elecLen = Math.max(0, inputs.electronicsLength);
   const gpsLen = Math.max(0, inputs.gpsAntennaLength);
 
@@ -371,6 +381,8 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     gapIndicators,
     pressurePoints,
     junctionPoint: elecLen > 0 && gpsLen > 0 ? elecEnd : null,
+    tracheaPoint: trachea.point,
+    skyPoint: sky.point,
     bendingEnergy,
   };
 }
@@ -393,7 +405,10 @@ export function generateFitReport(result, inputs, profileName) {
     `Clearance offset: ${inputs.clearanceOffset.toFixed(1)} mm`,
     `Collar path length: ${result.collarPathLength.toFixed(1)} mm`,
     '',
-    '--- Components ---',
+    '--- Orientation ---',
+    'Sky / back of neck: top of diagram (−y)',
+    'Trachea / throat: bottom of diagram (+y)',
+    'Electronics strap end anchored at trachea + placement offset',
     `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid arc)`,
     `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
     `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,

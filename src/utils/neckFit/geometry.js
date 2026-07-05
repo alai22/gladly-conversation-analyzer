@@ -499,6 +499,84 @@ export function lerpPoint(a, b, t) {
 }
 
 /**
+ * Horizontal spread of points near a given y level.
+ * @param {Point[]} points
+ * @param {number} targetY
+ * @param {number} [tolerance=8]
+ * @returns {number}
+ */
+function horizontalSpreadNearY(points, targetY, tolerance = 8) {
+  const xs = points
+    .filter((p) => Math.abs(p.y - targetY) <= tolerance)
+    .map((p) => p.x);
+  if (xs.length < 2) {
+    const sorted = [...points].sort((a, b) => Math.abs(a.y - targetY) - Math.abs(b.y - targetY));
+    const near = sorted.slice(0, Math.min(6, sorted.length));
+    const xs2 = near.map((p) => p.x);
+    return xs2.length >= 2 ? Math.max(...xs2) - Math.min(...xs2) : 0;
+  }
+  return Math.max(...xs) - Math.min(...xs);
+}
+
+/**
+ * Flip profile if the narrower throat side is at the top so trachea (+y) points down.
+ * @param {Point[]} points
+ * @returns {Point[]}
+ */
+export function ensureTracheaDown(points) {
+  if (points.length < 4) return points.map((p) => ({ ...p }));
+  const maxY = Math.max(...points.map((p) => p.y));
+  const minY = Math.min(...points.map((p) => p.y));
+  const widthAtBottom = horizontalSpreadNearY(points, maxY);
+  const widthAtTop = horizontalSpreadNearY(points, minY);
+  // Throat is usually the narrower side; in our coords trachea should be at +y (down).
+  if (widthAtTop < widthAtBottom * 0.85) {
+    return points.map((p) => ({ x: p.x, y: -p.y }));
+  }
+  return points.map((p) => ({ ...p }));
+}
+
+/**
+ * Arc length and point at the extreme y on a closed profile (max = trachea/ground, min = sky/back).
+ * @param {Point[]} points
+ * @param {'max' | 'min'} extreme
+ * @returns {{ s: number, point: Point }}
+ */
+export function findArcLengthAtExtremeY(points, extreme = 'max') {
+  const table = buildArcLengthTable(points);
+  let bestY = extreme === 'max' ? -Infinity : Infinity;
+  let bestS = 0;
+
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const candidates = [
+      { p: a, s: table.cumulative[i] },
+      { p: b, s: table.cumulative[i + 1] },
+      { p: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, s: (table.cumulative[i] + table.cumulative[i + 1]) / 2 },
+    ];
+    for (const { p, s } of candidates) {
+      if (extreme === 'max' ? p.y > bestY : p.y < bestY) {
+        bestY = p.y;
+        bestS = s;
+      }
+    }
+  }
+
+  return { s: bestS, point: getPointAtS(table, bestS) };
+}
+
+/**
+ * Parse SVG viewBox string into components.
+ * @param {string} viewBox
+ * @returns {{ x: number, y: number, w: number, h: number }}
+ */
+export function parseViewBox(viewBox) {
+  const [x, y, w, h] = viewBox.split(/\s+/).map(Number);
+  return { x, y, w, h };
+}
+
+/**
  * Normalize points for SVG viewBox (center and scale to fit).
  * @param {Point[]} points
  * @param {number} padding

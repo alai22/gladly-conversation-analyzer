@@ -184,11 +184,11 @@ const NeckFitControls = ({
           label="Placement around neck"
           value={inputs.electronicsPlacementS}
           onChange={set('electronicsPlacementS')}
-          min={0}
-          max={400}
+          min={-150}
+          max={150}
           step={1}
           unit="mm"
-          hint="Arc-length position on collar path"
+          hint="Offset from trachea (0 = strap end at throat / ground)"
         />
       </Section>
 
