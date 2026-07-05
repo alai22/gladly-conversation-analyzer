@@ -9,16 +9,18 @@
 import {
   angleBetweenDeg,
   buildArcLengthTable,
+  buildRigidArcPath,
   closestPointOnClosedPath,
   computeCurvature,
   extractPathSegment,
   getPointAtS,
   getTangentAtS,
   lerpPoint,
-  maxLinePolygonPenetration,
+  maxPolylinePolygonPenetration,
   offsetPolygon,
   polylineLength,
-  sampleLine,
+  rigidArcExitTangent,
+  RIGID_STRAIGHT_BEND_RADIUS,
   scaleProfileToPerimeter,
   smoothPolygon,
 } from './geometry';
@@ -31,6 +33,7 @@ import {
  * @property {number} electronicsLength mm
  * @property {number} electronicsThickness mm
  * @property {number} electronicsPlacementS mm along collar path
+ * @property {number} electronicsBendRadius mm fixed rigid bend radius (large = straight)
  * @property {number} gpsAntennaLength mm
  * @property {number} gpsAntennaThickness mm
  * @property {number} gpsAntennaStiffness 0-1 (1 = stiffest)
@@ -79,9 +82,10 @@ export const MIN_STRAP_LENGTH = 30; // mm manufacturability minimum
 export const DEFAULT_FIT_INPUTS = {
   neckCircumference: 350,
   clearanceOffset: 8,
-  electronicsLength: 85,
+  electronicsLength: 60,
   electronicsThickness: 12,
   electronicsPlacementS: 0,
+  electronicsBendRadius: 1200,
   gpsAntennaLength: 55,
   gpsAntennaThickness: 8,
   gpsAntennaStiffness: 0.5,
@@ -212,23 +216,25 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const sStrapStart = sIdealGpsEnd;
   const sStrapEnd = sElecStart;
 
-  // Rigid electronics — anchored at neck, extends as straight body
+  // Rigid electronics — fixed-curvature arc (or straight when bend radius is large)
   const elecStart = getPointAtS(table, sElecStart);
-  const elecTangent = getTangentAtS(table, sElecStart);
-  const elecEnd = {
-    x: elecStart.x + elecTangent.x * elecLen,
-    y: elecStart.y + elecTangent.y * elecLen,
-  };
-  const electronicsPath = elecLen > 0 ? sampleLine(elecStart, elecEnd, 12) : [elecStart];
+  const elecStartTangent = getTangentAtS(table, sElecStart);
+  const bendRadius = inputs.electronicsBendRadius ?? 1200;
+  const electronicsPath =
+    elecLen > 0
+      ? buildRigidArcPath(elecStart, elecStartTangent, elecLen, bendRadius, 16)
+      : [elecStart];
+  const elecEnd = electronicsPath[electronicsPath.length - 1];
+  const elecExitTangent = rigidArcExitTangent(elecStart, elecStartTangent, elecLen, bendRadius);
 
   // GPS attached at elecEnd, parallel at junction; rubber may bend toward neck
   const gpsPath =
     gpsLen > 0
-      ? buildGpsPathAttached(elecEnd, elecTangent, table, sIdealGpsStart, gpsLen, inputs.gpsAntennaStiffness)
+      ? buildGpsPathAttached(elecEnd, elecExitTangent, table, sIdealGpsStart, gpsLen, inputs.gpsAntennaStiffness)
       : [elecEnd];
   const gpsEnd = gpsPath[gpsPath.length - 1];
 
-  // Junction parallelism (should be ~0° by construction; reports GPS bend-away at entry)
+  // Junction parallelism at electronics→GPS (parallel by construction when GPS is stiff)
   let junctionAngleDeg = 0;
   if (gpsPath.length >= 2) {
     const gpsEntry = {
@@ -236,7 +242,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
       y: gpsPath[1].y - gpsPath[0].y,
     };
     const elen = Math.hypot(gpsEntry.x, gpsEntry.y) || 1;
-    junctionAngleDeg = angleBetweenDeg(elecTangent, { x: gpsEntry.x / elen, y: gpsEntry.y / elen });
+    junctionAngleDeg = angleBetweenDeg(elecExitTangent, { x: gpsEntry.x / elen, y: gpsEntry.y / elen });
   }
 
   const { maxCurvature: maxGpsCurvature, minBendRadius: minGpsBendRadius } = computeCurvature(gpsPath);
@@ -259,7 +265,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const gapIndicators = [...elecGaps.indicators, ...gpsGaps.indicators];
 
   const maxInterferenceDepth =
-    elecLen > 0 ? maxLinePolygonPenetration(elecStart, elecEnd, neckPoints) : 0;
+    elecLen > 0 ? maxPolylinePolygonPenetration(electronicsPath, neckPoints) : 0;
 
   const pressurePoints = [
     ...computeNeckContactPoints(electronicsPath, table, inputs.clearanceOffset),
@@ -388,7 +394,8 @@ export function generateFitReport(result, inputs, profileName) {
     `Collar path length: ${result.collarPathLength.toFixed(1)} mm`,
     '',
     '--- Components ---',
-    `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid)`,
+    `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid arc)`,
+    `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
     `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
     `Strap length (calculated): ${result.strapLength.toFixed(1)} mm`,
     `Slack: ${inputs.slack.toFixed(1)} mm`,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle, AlertTriangle, Download, FileText } from 'lucide-react';
 import { MIN_STRAP_LENGTH } from '../../utils/neckFit/mechanicalModel';
+import { RIGID_STRAIGHT_BEND_RADIUS } from '../../utils/neckFit/geometry';
 
 const MetricRow = ({ label, value, highlight }) => (
   <div className="flex justify-between items-baseline py-1.5 border-b border-gray-100 last:border-0">
@@ -96,6 +97,14 @@ const NeckFitResults = ({
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
           Mechanical Metrics
         </h4>
+        <MetricRow
+          label="Electronics bend radius"
+          value={
+            inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS
+              ? 'Straight'
+              : `${inputs.electronicsBendRadius.toFixed(0)} mm`
+          }
+        />
         <MetricRow
           label="Max GPS curvature"
           value={fitResult.maxGpsCurvature.toFixed(4)}

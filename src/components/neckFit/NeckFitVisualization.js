@@ -118,7 +118,7 @@ const NeckFitVisualization = ({
           {/* Curvature markers on GPS segment */}
           {showCurvature &&
             segments
-              .filter((s) => s.type === 'gpsAntenna')
+              .filter((s) => s.type === 'gpsAntenna' || s.type === 'electronics')
               .flatMap((s) => s.pathPoints)
               .filter((_, i, arr) => i > 0 && i < arr.length - 1 && i % 3 === 0)
               .map((p, i) => (

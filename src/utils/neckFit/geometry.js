@@ -242,6 +242,89 @@ export function sampleLine(a, b, count) {
   return pts;
 }
 
+/** Radii above this are treated as straight rigid segments. */
+export const RIGID_STRAIGHT_BEND_RADIUS = 2500;
+
+/**
+ * Rigid circular-arc centerline with fixed arc length (inextensible, fixed curvature).
+ * @param {Point} start
+ * @param {Point} startTangent unit vector at start
+ * @param {number} arcLength mm along the arc
+ * @param {number} bendRadius mm — center of curvature to the left of startTangent
+ * @param {number} [samples=12]
+ * @returns {Point[]}
+ */
+export function buildRigidArcPath(start, startTangent, arcLength, bendRadius, samples = 12) {
+  if (arcLength <= 0) return [start];
+  if (!Number.isFinite(bendRadius) || bendRadius >= RIGID_STRAIGHT_BEND_RADIUS) {
+    const end = {
+      x: start.x + startTangent.x * arcLength,
+      y: start.y + startTangent.y * arcLength,
+    };
+    return sampleLine(start, end, samples);
+  }
+
+  const R = Math.max(bendRadius, arcLength / (Math.PI * 1.95));
+  const nx = -startTangent.y;
+  const ny = startTangent.x;
+  const center = { x: start.x + nx * R, y: start.y + ny * R };
+  const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+  const deltaAngle = arcLength / R;
+
+  const pts = [];
+  for (let i = 0; i <= samples; i++) {
+    const angle = startAngle + deltaAngle * (i / samples);
+    pts.push({
+      x: center.x + R * Math.cos(angle),
+      y: center.y + R * Math.sin(angle),
+    });
+  }
+  return pts;
+}
+
+/**
+ * Unit tangent at the exit of a rigid arc segment.
+ * @param {Point} start
+ * @param {Point} startTangent
+ * @param {number} arcLength
+ * @param {number} bendRadius
+ * @returns {Point}
+ */
+export function rigidArcExitTangent(start, startTangent, arcLength, bendRadius) {
+  if (
+    arcLength <= 0 ||
+    !Number.isFinite(bendRadius) ||
+    bendRadius >= RIGID_STRAIGHT_BEND_RADIUS
+  ) {
+    return { ...startTangent };
+  }
+
+  const R = Math.max(bendRadius, arcLength / (Math.PI * 1.95));
+  const nx = -startTangent.y;
+  const ny = startTangent.x;
+  const center = { x: start.x + nx * R, y: start.y + ny * R };
+  const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+  const endAngle = startAngle + arcLength / R;
+  return { x: -Math.sin(endAngle), y: Math.cos(endAngle) };
+}
+
+/**
+ * Max penetration of a polyline into a polygon.
+ * @param {Point[]} points
+ * @param {Point[]} polygon
+ * @returns {number}
+ */
+export function maxPolylinePolygonPenetration(points, polygon) {
+  let maxDepth = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    maxDepth = Math.max(
+      maxDepth,
+      maxLinePolygonPenetration(points[i], points[i + 1], polygon)
+    );
+  }
+  return maxDepth;
+}
+
 /**
  * Angle between two unit vectors in degrees.
  * @param {Point} u

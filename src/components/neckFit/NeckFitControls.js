@@ -162,6 +162,16 @@ const NeckFitControls = ({
           unit="mm"
         />
         <SliderInput
+          label="Fixed bend radius"
+          value={inputs.electronicsBendRadius}
+          onChange={set('electronicsBendRadius')}
+          min={80}
+          max={2500}
+          step={10}
+          unit="mm"
+          hint="Rigid arc curvature — higher = straighter, length stays fixed"
+        />
+        <SliderInput
           label="Thickness"
           value={inputs.electronicsThickness}
           onChange={set('electronicsThickness')}
