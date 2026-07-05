@@ -23,7 +23,7 @@ import { useAnalytics } from './hooks/useAnalytics';
 import axios from 'axios';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { getSurvicateDataSource } from './utils/constants';
-import { getModeFromPath, getPathFromMode, isPathBasedMode, isInterviewParticipantPath } from './utils/routes';
+import { getModeFromPath, getPathFromMode, getRouteFromPath, isPathBasedMode, isInterviewParticipantPath, pathMatchesMode } from './utils/routes';
 
 // Configure axios to send credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
@@ -112,7 +112,7 @@ function App() {
   // Ref to prevent infinite loops when syncing URL and currentMode
   const isSyncingRef = useRef(false);
   
-  // Sync URL when currentMode changes: use path for path-based modes, else query
+  // Sync URL when currentMode / adminMode changes: use path for path-based modes, else query
   useEffect(() => {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
@@ -120,8 +120,8 @@ function App() {
     if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
       return;
     }
-    const path = getPathFromMode(currentMode);
-    const pathMatches = path && location.pathname === path;
+    const path = getPathFromMode(currentMode, adminMode);
+    const pathMatches = pathMatchesMode(location.pathname, currentMode, adminMode);
     const queryMode = searchParams.get('mode');
     const queryMatches = queryMode === currentMode;
     if (pathMatches && !queryMode) return; // already on canonical path with no redundant mode param
@@ -136,14 +136,22 @@ function App() {
       setSearchParams({ mode: currentMode }, { replace: true });
     }
     setTimeout(() => { isSyncingRef.current = false; }, 0);
-  }, [currentMode, location.pathname, searchParams, setSearchParams, navigate]);
+  }, [currentMode, adminMode, location.pathname, searchParams, setSearchParams, navigate]);
 
-  // Sync currentMode when URL changes (path first, then query; redirect old ?mode= to path)
+  // Sync currentMode / adminMode when URL changes (path first, then query; redirect legacy paths)
   useEffect(() => {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
-    const pathMode = getModeFromPath(location.pathname);
+
+    const route = getRouteFromPath(location.pathname);
     const queryMode = searchParams.get('mode');
+
+    if (route?.redirect) {
+      isSyncingRef.current = true;
+      navigate(route.redirect, { replace: true });
+      setTimeout(() => { isSyncingRef.current = false; }, 0);
+      return;
+    }
 
     // Redirect / with path-based ?mode= to canonical path (e.g. ?mode=churn-trends -> /churn)
     if (location.pathname === '/' && queryMode && isPathBasedMode(queryMode)) {
@@ -153,6 +161,7 @@ function App() {
       nextParams.delete('mode');
       navigate({ pathname: path, search: nextParams.toString() }, { replace: true });
       setCurrentMode(queryMode);
+      setAdminMode(null);
       setTimeout(() => { isSyncingRef.current = false; }, 0);
       return;
     }
@@ -175,34 +184,55 @@ function App() {
         nextParams.delete('mode');
         navigate({ pathname: canonicalAskPath, search: nextParams.toString() }, { replace: true });
         setCurrentMode('survicate');
+        setAdminMode(null);
         setTimeout(() => { isSyncingRef.current = false; }, 0);
         return;
       }
     }
 
-    if (pathMode && pathMode !== currentMode) {
-      isSyncingRef.current = true;
-      setCurrentMode(pathMode);
-      setTimeout(() => { isSyncingRef.current = false; }, 0);
+    // Legacy ?mode= for path-based tools → canonical path (e.g. ?mode=zoom -> /platform/zoom)
+    if (queryMode && isPathBasedMode(queryMode)) {
+      const canonicalPath = getPathFromMode(queryMode);
+      if (canonicalPath && location.pathname !== canonicalPath) {
+        isSyncingRef.current = true;
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('mode');
+        navigate({ pathname: canonicalPath, search: nextParams.toString() }, { replace: true });
+        setCurrentMode(queryMode);
+        setAdminMode(null);
+        setTimeout(() => { isSyncingRef.current = false; }, 0);
+        return;
+      }
+    }
+
+    if (route?.mode) {
+      const nextAdmin = route.adminMode ?? null;
+      if (route.mode !== currentMode || nextAdmin !== (adminMode ?? null)) {
+        isSyncingRef.current = true;
+        setCurrentMode(route.mode);
+        setAdminMode(nextAdmin);
+        setTimeout(() => { isSyncingRef.current = false; }, 0);
+      }
       return;
     }
-    if (!pathMode && queryMode && queryMode !== currentMode) {
+
+    if (!route?.mode && queryMode && queryMode !== currentMode) {
       isSyncingRef.current = true;
       setCurrentMode(queryMode);
       setTimeout(() => { isSyncingRef.current = false; }, 0);
       return;
     }
     // URL has no mode and we're not on a path: push current mode to URL (query)
-    if (!pathMode && !queryMode && currentMode && !isPathBasedMode(currentMode)) {
+    if (!route?.mode && !queryMode && currentMode && !isPathBasedMode(currentMode)) {
       isSyncingRef.current = true;
       setSearchParams({ mode: currentMode }, { replace: true });
       setTimeout(() => { isSyncingRef.current = false; }, 0);
-    } else if (!pathMode && !queryMode && currentMode && isPathBasedMode(currentMode)) {
+    } else if (!route?.mode && !queryMode && currentMode && isPathBasedMode(currentMode)) {
       isSyncingRef.current = true;
-      navigate(getPathFromMode(currentMode), { replace: true });
+      navigate(getPathFromMode(currentMode, adminMode), { replace: true });
       setTimeout(() => { isSyncingRef.current = false; }, 0);
     }
-  }, [location.pathname, searchParams, currentMode, setSearchParams, navigate]);
+  }, [location.pathname, searchParams, currentMode, adminMode, setSearchParams, navigate]);
 
   // Load conversations and settings from localStorage on mount
   useEffect(() => {
@@ -395,18 +425,16 @@ function App() {
     }
   };
 
-  // Check admin auth when trying to access admin tools or Tools page
+  // Check admin auth when trying to access platform admin tools
   useEffect(() => {
     if (isAuthenticated) {
-      // Check admin auth if:
-      // 1. In admin mode (claude or download)
-      // 2. On Tools page (currentMode === 'tools')
-      // 3. On api-data-manager (Survicate admin)
       const needsAdminAuth = adminMode === 'claude' || 
                              adminMode === 'download' || 
                              currentMode === 'tools' ||
                              currentMode === 'api-data-manager' ||
-                             currentMode === 'jira-status';
+                             currentMode === 'jira-status' ||
+                             currentMode === 'zoom' ||
+                             currentMode === 'analytics';
       
       if (needsAdminAuth) {
         const checkAdminAuth = async () => {
@@ -454,8 +482,8 @@ function App() {
     return <Login onLogin={handleLogin} onAdminLogin={handleAdminLogin} />;
   }
 
-  // If trying to access admin tools or Tools page but not admin authenticated, show admin login
-  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'tools' || currentMode === 'api-data-manager' || currentMode === 'jira-status') && !isAdminAuthenticated) {
+  // Platform hub and admin-gated tools require admin authentication
+  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'tools' || currentMode === 'api-data-manager' || currentMode === 'jira-status' || currentMode === 'zoom' || currentMode === 'analytics') && !isAdminAuthenticated) {
     return <Login onLogin={handleLogin} onAdminLogin={handleAdminLogin} requireAdmin={true} />;
   }
 
@@ -797,6 +825,7 @@ function App() {
                   currentMode={currentMode} 
                   setCurrentMode={setCurrentMode}
                   adminMode={adminMode}
+                  setAdminMode={setAdminMode}
                 />
               )}
             </div>

@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Wrench, Bug, Users, CircleDot } from 'lucide-react';
-import { getPathFromMode, isPathBasedMode } from '../utils/routes';
+import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Bug, Users, Cpu, FlaskConical, ClipboardList } from 'lucide-react';
+import { getPathFromMode, isPlatformMode, isProductResearchMode } from '../utils/routes';
 
-const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
+const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const setModeAndUrl = (modeId) => {
+  const setModeAndUrl = (modeId, nextAdminMode = null) => {
     setCurrentMode(modeId);
-    const path = getPathFromMode(modeId);
+    if (nextAdminMode !== undefined) {
+      setAdminMode(nextAdminMode);
+    }
+    const path = getPathFromMode(modeId, nextAdminMode ?? adminMode);
     if (path) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('mode');
@@ -18,51 +21,60 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       setSearchParams({ mode: modeId }, { replace: true });
     }
   };
-  const [activeTab, setActiveTab] = useState(() => {
-    // Determine active tab based on current mode
-    if (currentMode === 'bug-triage') {
-      return 'bug-triage';
-    }
-    if (currentMode === 'text-interview') {
-      return 'interviews';
-    }
-    if (currentMode === 'neck-fit-modeler') {
-      return 'engineering';
-    }
-    if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
-      return 'gladly';
-    } else if (['churn-trends', 'survicate'].includes(currentMode)) {
-      return 'churn';
-    } else if (currentMode === 'survey-manager') {
-      return 'surveys';
-    } else if (['api-data-manager', 'tools', 'analytics', 'jira-status'].includes(currentMode) || adminMode === 'download' || adminMode === 'claude') {
-      return 'tools';
-    }
-    // Default to churn if mode doesn't match
-    return 'churn';
-  });
 
-  // Update active tab when currentMode or adminMode changes externally
+  const resolveActiveTab = (mode, admin) => {
+    if (mode === 'bug-triage') return 'bug-triage';
+    if (mode === 'neck-fit-modeler') return 'hardware';
+    if (['conversations', 'ask', 'conversation-trends'].includes(mode)) return 'gladly';
+    if (isProductResearchMode(mode)) return 'research';
+    if (isPlatformMode(mode, admin)) return 'platform';
+    return 'research';
+  };
+
+  const [activeTab, setActiveTab] = useState(() => resolveActiveTab(currentMode, adminMode));
+
   useEffect(() => {
-    if (currentMode === 'bug-triage') {
-      setActiveTab('bug-triage');
-    } else if (currentMode === 'text-interview') {
-      setActiveTab('interviews');
-    } else if (currentMode === 'neck-fit-modeler') {
-      setActiveTab('engineering');
-    } else if (['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
-      setActiveTab('gladly');
-    } else if (['churn-trends', 'survicate'].includes(currentMode)) {
-      setActiveTab('churn');
-    } else if (currentMode === 'survey-manager') {
-      setActiveTab('surveys');
-    } else if (['api-data-manager', 'tools', 'analytics', 'jira-status'].includes(currentMode) || adminMode === 'download' || adminMode === 'claude') {
-      setActiveTab('tools');
-    } else {
-      // Default to churn if mode doesn't match
-      setActiveTab('churn');
-    }
+    setActiveTab(resolveActiveTab(currentMode, adminMode));
   }, [currentMode, adminMode]);
+
+  const productResearchModes = [
+    {
+      id: 'churn-trends',
+      name: 'Churn Trends',
+      description: 'Visualize cancellation trends',
+      icon: BarChart3,
+      color: 'text-red-600',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-200',
+    },
+    {
+      id: 'survicate',
+      name: 'Ask About Churn',
+      description: 'AI analysis of cancellation surveys',
+      icon: FileText,
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50',
+      borderColor: 'border-teal-200',
+    },
+    {
+      id: 'survey-manager',
+      name: 'Survicate Surveys',
+      description: 'Browse and manage Survicate survey data',
+      icon: ClipboardList,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+      borderColor: 'border-orange-200',
+    },
+    {
+      id: 'text-interview',
+      name: 'Text Interviews',
+      description: 'Run structured text-based research interviews',
+      icon: Users,
+      color: 'text-violet-600',
+      bgColor: 'bg-violet-50',
+      borderColor: 'border-violet-200',
+    },
+  ];
 
   const gladlyModes = [
     {
@@ -72,7 +84,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       icon: TrendingUp,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200'
+      borderColor: 'border-blue-200',
     },
     {
       id: 'conversations',
@@ -81,7 +93,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       icon: Search,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      borderColor: 'border-green-200'
+      borderColor: 'border-green-200',
     },
     {
       id: 'ask',
@@ -90,33 +102,12 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       icon: MessageSquare,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      borderColor: 'border-purple-200'
-    }
-  ];
-
-  const churnModes = [
-    {
-      id: 'churn-trends',
-      name: 'Churn Trends',
-      description: 'Visualize cancellation trends',
-      icon: BarChart3,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
-      borderColor: 'border-red-200'
+      borderColor: 'border-purple-200',
     },
-    {
-      id: 'survicate',
-      name: 'Ask About Churn',
-      description: 'AI analysis of cancellation surveys',
-      icon: FileText,
-      color: 'text-teal-600',
-      bgColor: 'bg-teal-50',
-      borderColor: 'border-teal-200'
-    }
   ];
 
   const handleModeChange = (modeId) => {
-    setModeAndUrl(modeId);
+    setModeAndUrl(modeId, null);
   };
 
   const tabBtn = (active) =>
@@ -124,40 +115,34 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
       active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
     }`;
 
+  const platformActive = isPlatformMode(currentMode, adminMode);
+  const researchActive = isProductResearchMode(currentMode);
+
+  const subNavModes =
+    activeTab === 'gladly' ? gladlyModes : activeTab === 'research' ? productResearchModes : [];
+
   return (
     <div className="flex flex-col space-y-3 min-w-0 w-full">
-      {/* Main Tabs — horizontal scroll on narrow viewports */}
       <div className="overflow-x-auto min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-nowrap w-max min-w-full md:w-full md:min-w-0">
         <button
           onClick={() => {
-            setActiveTab('churn');
-            if (!['churn-trends', 'survicate'].includes(currentMode)) {
-              setModeAndUrl('churn-trends');
+            setActiveTab('research');
+            if (!researchActive) {
+              setModeAndUrl('churn-trends', null);
             }
           }}
-          className={tabBtn(activeTab === 'churn')}
+          className={tabBtn(activeTab === 'research')}
         >
-          <span className="md:hidden whitespace-nowrap">Churn</span>
-          <span className="hidden md:inline whitespace-nowrap">Churn Analysis</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('surveys');
-            if (currentMode !== 'survey-manager') {
-              setModeAndUrl('survey-manager');
-            }
-          }}
-          className={tabBtn(activeTab === 'surveys')}
-        >
-          <span className="md:hidden whitespace-nowrap">Surveys</span>
-          <span className="hidden md:inline whitespace-nowrap">Survicate Surveys</span>
+          <FlaskConical className="h-4 w-4 shrink-0 hidden sm:block" />
+          <span className="md:hidden whitespace-nowrap">Research</span>
+          <span className="hidden md:inline whitespace-nowrap">Product Research</span>
         </button>
         <button
           onClick={() => {
             setActiveTab('gladly');
             if (!['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
-              setModeAndUrl('conversation-trends');
+              setModeAndUrl('conversation-trends', null);
             }
           }}
           className={tabBtn(activeTab === 'gladly')}
@@ -167,46 +152,32 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
         </button>
         <button
           onClick={() => {
-            setActiveTab('interviews');
-            if (currentMode !== 'text-interview') {
-              setModeAndUrl('text-interview');
+            setActiveTab('platform');
+            if (!platformActive || adminMode) {
+              setModeAndUrl('tools', null);
             }
           }}
-          className={tabBtn(activeTab === 'interviews')}
+          className={tabBtn(activeTab === 'platform')}
         >
-          <Users className="h-4 w-4 shrink-0 hidden sm:block" />
-          <span className="md:hidden whitespace-nowrap">Interviews</span>
-          <span className="hidden md:inline whitespace-nowrap">Text Interviews</span>
+          <span className="whitespace-nowrap">Platform</span>
         </button>
         <button
           onClick={() => {
-            setActiveTab('tools');
-            if (!['api-data-manager', 'tools', 'analytics'].includes(currentMode) && adminMode !== 'download' && adminMode !== 'claude') {
-              setModeAndUrl('tools');
-            }
-          }}
-          className={tabBtn(activeTab === 'tools')}
-        >
-          Tools
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('engineering');
+            setActiveTab('hardware');
             if (currentMode !== 'neck-fit-modeler') {
-              setModeAndUrl('neck-fit-modeler');
+              setModeAndUrl('neck-fit-modeler', null);
             }
           }}
-          className={tabBtn(activeTab === 'engineering')}
+          className={tabBtn(activeTab === 'hardware')}
         >
-          <CircleDot className="h-4 w-4 shrink-0 hidden sm:block" />
-          <span className="md:hidden whitespace-nowrap">Engineering</span>
-          <span className="hidden md:inline whitespace-nowrap">Engineering</span>
+          <Cpu className="h-4 w-4 shrink-0 hidden sm:block" />
+          <span className="whitespace-nowrap">Hardware</span>
         </button>
         <button
           onClick={() => {
             setActiveTab('bug-triage');
             if (currentMode !== 'bug-triage') {
-              setModeAndUrl('bug-triage');
+              setModeAndUrl('bug-triage', null);
             }
           }}
           className={tabBtn(activeTab === 'bug-triage')}
@@ -218,13 +189,12 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
         </div>
       </div>
 
-      {/* Sub-options for active tab */}
-      {activeTab !== 'tools' && activeTab !== 'surveys' && activeTab !== 'bug-triage' && activeTab !== 'interviews' && activeTab !== 'engineering' && (
+      {subNavModes.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
-          {(activeTab === 'gladly' ? gladlyModes : churnModes).map((mode) => {
+          {subNavModes.map((mode) => {
             const Icon = mode.icon;
             const isActive = currentMode === mode.id;
-            
+
             return (
               <button
                 key={mode.id}
@@ -254,4 +224,3 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode }) => {
 };
 
 export default TabNavigation;
-
