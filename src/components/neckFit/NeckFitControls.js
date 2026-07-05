@@ -165,8 +165,8 @@ const NeckFitControls = ({
           label="Fixed bend radius"
           value={inputs.electronicsBendRadius}
           onChange={set('electronicsBendRadius')}
-          min={80}
-          max={2500}
+          min={10}
+          max={1000}
           step={10}
           unit="mm"
           hint="Rigid arc curvature — higher = straighter, length stays fixed"

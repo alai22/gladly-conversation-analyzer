@@ -326,6 +326,20 @@ export function maxPolylinePolygonPenetration(points, polygon) {
 }
 
 /**
+ * Unit tangent at the end of a polyline (direction of the last segment).
+ * @param {Point[]} points
+ * @param {Point} [fallback]
+ * @returns {Point}
+ */
+export function polylineExitTangent(points, fallback = { x: 1, y: 0 }) {
+  if (points.length < 2) return { ...fallback };
+  const a = points[points.length - 2];
+  const b = points[points.length - 1];
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+}
+
+/**
  * Angle between two unit vectors in degrees.
  * @param {Point} u
  * @param {Point} v

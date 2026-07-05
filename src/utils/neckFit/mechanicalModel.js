@@ -20,6 +20,7 @@ import {
   lerpPoint,
   maxPolylinePolygonPenetration,
   offsetPolygon,
+  polylineExitTangent,
   polylineLength,
   rigidArcExitTangent,
   RIGID_STRAIGHT_BEND_RADIUS,
@@ -89,7 +90,7 @@ export const DEFAULT_FIT_INPUTS = {
   electronicsLength: 60,
   electronicsThickness: 12,
   electronicsPlacementS: 0,
-  electronicsBendRadius: 1200,
+  electronicsBendRadius: 200,
   gpsAntennaLength: 55,
   gpsAntennaThickness: 8,
   gpsAntennaStiffness: 0.5,
@@ -121,15 +122,24 @@ function buildGpsPathAttached(attachPoint, attachTangent, table, sIdealStart, le
   const samples = Math.max(20, Math.ceil(length / 2));
   const result = [attachPoint];
 
+  // Hold exit tangent before bending toward neck — keeps junction parallel to electronics.
+  const tangentRun = length * (0.06 + factor * 0.3);
+  const bendLength = Math.max(length - tangentRun, length * 0.05);
+
   for (let i = 1; i <= samples; i++) {
     const t = i / samples;
+    const s = length * t;
     const straightPt = {
-      x: attachPoint.x + attachTangent.x * length * t,
-      y: attachPoint.y + attachTangent.y * length * t,
+      x: attachPoint.x + attachTangent.x * s,
+      y: attachPoint.y + attachTangent.y * s,
     };
-    const idealPt = getPointAtS(table, sIdealStart + t * length);
-    // Conformity ramps along length; junction stays parallel to electronics
-    const blend = (1 - factor) * Math.pow(t, 0.85);
+    const idealPt = getPointAtS(table, sIdealStart + s);
+
+    let blend = 0;
+    if (s > tangentRun && bendLength > 0) {
+      const u = Math.min(1, (s - tangentRun) / bendLength);
+      blend = (1 - factor) * u * u * (3 - 2 * u);
+    }
     result.push(lerpPoint(straightPt, idealPt, blend));
   }
   return result;
@@ -229,13 +239,16 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   // Rigid electronics — fixed-curvature arc (or straight when bend radius is large)
   const elecStart = getPointAtS(table, sElecStart);
   const elecStartTangent = getTangentAtS(table, sElecStart);
-  const bendRadius = inputs.electronicsBendRadius ?? 1200;
+  const bendRadius = inputs.electronicsBendRadius ?? 200;
   const electronicsPath =
     elecLen > 0
       ? buildRigidArcPath(elecStart, elecStartTangent, elecLen, bendRadius, 16)
       : [elecStart];
   const elecEnd = electronicsPath[electronicsPath.length - 1];
-  const elecExitTangent = rigidArcExitTangent(elecStart, elecStartTangent, elecLen, bendRadius);
+  const elecExitTangent = polylineExitTangent(
+    electronicsPath,
+    rigidArcExitTangent(elecStart, elecStartTangent, elecLen, bendRadius)
+  );
 
   // GPS attached at elecEnd, parallel at junction; rubber may bend toward neck
   const gpsPath =
