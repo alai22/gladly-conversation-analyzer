@@ -44,6 +44,7 @@ import {
  * @property {number} electronicsPlacementS mm along collar path
  * @property {number} electronicsBodyRotationDeg body rotation vs neck tangent at anchor (+ = CW)
  * @property {number} electronicsBendRadius mm fixed rigid bend radius (large = straight)
+ * @property {number} staticContactTipLength mm perpendicular probe at strap-side electronics end
  * @property {number} gpsAntennaLength mm
  * @property {number} gpsAntennaThickness mm
  * @property {number} gpsAntennaStiffness 0-1 (1 = stiffest)
@@ -96,6 +97,7 @@ import {
  * @property {Point | null} junctionPoint electronics–GPS attachment
  * @property {Point[]} staticContactPath static feedback tip (strap-side end of electronics)
  * @property {Point | null} staticContactTipPoint tip endpoint toward neck
+ * @property {number} staticContactTipLength mm max probe length used
  * @property {ContactPad[]} contactPads sampled hardware–neck clearance probes
  * @property {number} contactPadViolations count of pads with negative neck clearance
  * @property {Point} tracheaPoint throat / ground side of neck
@@ -104,7 +106,7 @@ import {
  */
 
 export const MIN_STRAP_LENGTH = 30; // mm manufacturability minimum
-export const STATIC_CONTACT_TIP_LENGTH = 30; // mm perpendicular probe for static feedback
+export const STATIC_CONTACT_TIP_LENGTH = 45; // mm default perpendicular probe for static feedback
 export const STATIC_CONTACT_TIP_THICKNESS = 4; // mm visual stroke width
 
 export const DEFAULT_FIT_INPUTS = {
@@ -114,7 +116,8 @@ export const DEFAULT_FIT_INPUTS = {
   electronicsThickness: 20,
   electronicsPlacementS: 0,
   electronicsBodyRotationDeg: 0,
-  electronicsBendRadius: 40,
+  electronicsBendRadius: 60,
+  staticContactTipLength: 45,
   gpsAntennaLength: 60,
   gpsAntennaThickness: 8,
   gpsAntennaStiffness: 0.7,
@@ -364,12 +367,13 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const elecEnd = electronicsPath[electronicsPath.length - 1];
   const elecEntryTangent = polylineEntryTangent(electronicsPath, elecStartTangent);
   const neckCenter = polygonCentroid(neckPoints);
+  const staticContactTipLength = inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH;
   const staticContactPath =
     elecLen > 0
       ? buildStaticContactToNeck(
           elecStart,
           elecEntryTangent,
-          STATIC_CONTACT_TIP_LENGTH,
+          staticContactTipLength,
           neckPoints,
           neckCenter
         )
@@ -579,6 +583,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     junctionPoint: elecLen > 0 && gpsLen > 0 ? elecEnd : null,
     staticContactPath,
     staticContactTipPoint,
+    staticContactTipLength,
     contactPads,
     contactPadViolations,
     tracheaPoint: trachea.point,
@@ -740,7 +745,7 @@ export function generateFitReport(result, inputs, profileName) {
     'Trachea / throat: bottom of diagram (+y)',
     'Electronics strap end anchored at trachea + placement offset',
     `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid arc)`,
-    `Static contact tip: ${STATIC_CONTACT_TIP_LENGTH} mm (perpendicular, strap-side end)`,
+    `Static contact tip: ${(inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH).toFixed(1)} mm (perpendicular, strap-side end)`,
     `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
     `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
     `Strap length (calculated): ${result.strapLength.toFixed(1)} mm`,

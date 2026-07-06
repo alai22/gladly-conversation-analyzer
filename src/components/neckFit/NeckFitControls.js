@@ -53,10 +53,20 @@ const NumberInput = ({ label, value, onChange, min, max, step, unit }) => (
   </div>
 );
 
-const AutoFitPanel = ({ onOptimizePlacement, optimizeMessage }) => {
+const PlacementPanel = ({
+  inputs,
+  onInputChange,
+  onOptimizePlacement,
+  optimizeMessage,
+}) => {
+  const set = (key) => (val) => onInputChange({ ...inputs, [key]: val });
   if (!onOptimizePlacement) return null;
+
   return (
-    <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 p-3 space-y-2">
+    <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 p-3 space-y-3">
+      <p className="text-[10px] font-semibold text-indigo-900 uppercase tracking-wide">
+        Placement &amp; rotation
+      </p>
       <button
         type="button"
         onClick={onOptimizePlacement}
@@ -68,8 +78,28 @@ const AutoFitPanel = ({ onOptimizePlacement, optimizeMessage }) => {
       {optimizeMessage && (
         <p className="text-[10px] text-indigo-800 leading-snug">{optimizeMessage}</p>
       )}
+      <SliderInput
+        label="Body rotation vs neck"
+        value={inputs.electronicsBodyRotationDeg}
+        onChange={set('electronicsBodyRotationDeg')}
+        min={-35}
+        max={35}
+        step={1}
+        unit="°"
+        hint="Rigid body angle relative to neck tangent at anchor"
+      />
+      <SliderInput
+        label="Rotation from trachea"
+        value={inputs.electronicsPlacementS}
+        onChange={set('electronicsPlacementS')}
+        min={-200}
+        max={200}
+        step={1}
+        unit="mm"
+        hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
+      />
       <p className="text-[10px] text-indigo-600/80 leading-snug">
-        Optimizes placement and body rotation. Runs on load; re-run after changing dimensions or neck settings.
+        Auto-fit runs on load. Re-run after changing dimensions or neck settings.
       </p>
     </div>
   );
@@ -116,7 +146,9 @@ const NeckFitControls = ({
       </div>
       {tabHint && <p className="text-[10px] text-gray-500 leading-snug">{tabHint}</p>}
 
-      <AutoFitPanel
+      <PlacementPanel
+        inputs={inputs}
+        onInputChange={onInputChange}
         onOptimizePlacement={onOptimizePlacement}
         optimizeMessage={optimizeMessage}
       />
@@ -257,29 +289,19 @@ const NeckFitControls = ({
                   value={inputs.electronicsThickness}
                   onChange={set('electronicsThickness')}
                   min={4}
-                  max={25}
+                  max={30}
                   step={0.5}
                   unit="mm"
                 />
                 <SliderInput
-                  label="Body rotation vs neck"
-                  value={inputs.electronicsBodyRotationDeg}
-                  onChange={set('electronicsBodyRotationDeg')}
-                  min={-35}
-                  max={35}
-                  step={1}
-                  unit="°"
-                  hint="Rigid body angle relative to neck tangent at anchor"
-                />
-                <SliderInput
-                  label="Rotation from trachea"
-                  value={inputs.electronicsPlacementS}
-                  onChange={set('electronicsPlacementS')}
-                  min={-200}
-                  max={200}
+                  label="Contact tip length"
+                  value={inputs.staticContactTipLength ?? 45}
+                  onChange={set('staticContactTipLength')}
+                  min={10}
+                  max={75}
                   step={1}
                   unit="mm"
-                  hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
+                  hint="Perpendicular probe at strap-side electronics end (stops at neck skin)"
                 />
               </>
             )}

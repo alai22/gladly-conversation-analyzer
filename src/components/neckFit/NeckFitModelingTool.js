@@ -127,8 +127,9 @@ const NeckFitModelingTool = () => {
       <div className="p-4 sm:p-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 max-w-[1600px] mx-auto">
           {/* Left: Inputs */}
-          <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-800 mb-4">Inputs</h2>
+          <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-4 shadow-sm flex flex-col max-h-[calc(100vh-7rem)] lg:sticky lg:top-4">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 shrink-0">Inputs</h2>
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 -mr-1">
             <NeckFitControls
               profileId={profileId}
               onProfileChange={setProfileId}
@@ -145,6 +146,7 @@ const NeckFitModelingTool = () => {
               activeTab={controlsTab}
               onActiveTabChange={setControlsTab}
             />
+            </div>
           </div>
 
           {/* Center: Visualization */}
