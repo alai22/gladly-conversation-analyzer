@@ -340,6 +340,43 @@ export function polylineExitTangent(points, fallback = { x: 1, y: 0 }) {
 }
 
 /**
+ * Unit tangent at the start of a polyline (direction of the first segment).
+ * @param {Point[]} points
+ * @param {Point} [fallback]
+ * @returns {Point}
+ */
+export function polylineEntryTangent(points, fallback = { x: 1, y: 0 }) {
+  if (points.length < 2) return { ...fallback };
+  const a = points[0];
+  const b = points[1];
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+}
+
+/**
+ * Line segment perpendicular to a tangent, extending toward a reference point.
+ * @param {Point} anchor
+ * @param {Point} tangent unit vector along the parent segment
+ * @param {number} length mm
+ * @param {Point} towardPoint picks the inward normal side (e.g. neck centroid)
+ * @returns {Point[]}
+ */
+export function buildPerpendicularSegment(anchor, tangent, length, towardPoint) {
+  if (length <= 0) return [anchor];
+  const nx = -tangent.y;
+  const ny = tangent.x;
+  const toRef = { x: towardPoint.x - anchor.x, y: towardPoint.y - anchor.y };
+  const sign = nx * toRef.x + ny * toRef.y >= 0 ? 1 : -1;
+  return [
+    anchor,
+    {
+      x: anchor.x + sign * nx * length,
+      y: anchor.y + sign * ny * length,
+    },
+  ];
+}
+
+/**
  * Angle between two unit vectors in degrees.
  * @param {Point} u
  * @param {Point} v

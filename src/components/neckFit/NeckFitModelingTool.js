@@ -73,6 +73,7 @@ const NeckFitModelingTool = () => {
       segments: fitResult.segments,
       gapIndicators: fitResult.gapIndicators,
       pressurePoints: fitResult.pressurePoints,
+      staticContactPath: fitResult.staticContactPath,
       showGaps,
       showPressure,
     });

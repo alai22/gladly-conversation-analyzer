@@ -217,7 +217,7 @@ const NeckFitControls = ({
               max={200}
               step={1}
               unit="mm"
-              hint="Clockwise (+) rotates hardware; 0 = strap end at throat"
+              hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
             />
             {onOptimizePlacement && (
               <div className="space-y-1">
@@ -227,11 +227,14 @@ const NeckFitControls = ({
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
                 >
                   <RotateCw className="h-4 w-4" />
-                  Auto-fit rotation
-                </button>
-                {optimizeMessage && (
-                  <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
-                )}
+              Auto-fit rotation
+            </button>
+            {optimizeMessage && (
+              <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
+            )}
+            <p className="text-[10px] text-gray-400 leading-snug">
+              Steps CW and CCW from current position, following whichever reduces gap or strap span more.
+            </p>
               </div>
             )}
 

@@ -5,7 +5,8 @@ import {
   pointsToSvgPath,
   polygonCentroid,
 } from '../../utils/neckFit/geometry';
-import { SEGMENT_COLORS, SEGMENT_LABELS } from '../../utils/neckFit/export';
+import { SEGMENT_COLORS, SEGMENT_LABELS, STATIC_CONTACT_COLOR, STATIC_CONTACT_LABEL } from '../../utils/neckFit/export';
+import { STATIC_CONTACT_TIP_THICKNESS } from '../../utils/neckFit/mechanicalModel';
 
 const GUIDE_STORAGE_KEY = 'neckFitDiagramGuideSeen';
 
@@ -51,6 +52,7 @@ const NeckFitVisualization = ({
       ...fitResult.neckPoints,
       ...fitResult.collarOffsetPoints,
       ...fitResult.segments.flatMap((s) => s.pathPoints),
+      ...(fitResult.staticContactPath ?? []),
     ];
     return normalizeForView(all, 60);
   }, [fitResult]);
@@ -84,6 +86,8 @@ const NeckFitVisualization = ({
     junctionPoint,
     tracheaPoint,
     skyPoint,
+    staticContactPath,
+    staticContactTipPoint,
   } = fitResult;
 
   const labelX = vb.x + vb.w / 2;
@@ -131,6 +135,7 @@ const NeckFitVisualization = ({
             <li>Orange fill = neck cross-section (skin)</li>
             <li>Grey dashed loop = target seating path (clearance offset from skin)</li>
             <li>Thick colored strokes = electronics, GPS, and strap</li>
+            <li>Silver stub = static contact tip (15 mm, strap-side end of electronics)</li>
             <li>Red dashed spokes = lift-off gap between hardware and seating path</li>
           </ul>
         </details>
@@ -298,6 +303,49 @@ const NeckFitVisualization = ({
             );
           })}
 
+          {staticContactPath?.length >= 2 && (
+            <g>
+              <path
+                d={pointsToSvgPath(staticContactPath, false)}
+                fill="none"
+                stroke={STATIC_CONTACT_COLOR}
+                strokeWidth={STATIC_CONTACT_TIP_THICKNESS}
+                strokeLinecap="round"
+                opacity={0.95}
+              />
+              <path
+                d={pointsToSvgPath(staticContactPath, false)}
+                fill="none"
+                stroke="#e5e7eb"
+                strokeWidth={1}
+                strokeLinecap="round"
+                opacity={0.8}
+              />
+              {staticContactTipPoint && (
+                <circle
+                  cx={staticContactTipPoint.x}
+                  cy={staticContactTipPoint.y}
+                  r={2.5}
+                  fill={STATIC_CONTACT_COLOR}
+                  stroke="#9ca3af"
+                  strokeWidth={0.75}
+                />
+              )}
+              {staticContactTipPoint && (
+                <text
+                  x={staticContactTipPoint.x}
+                  y={staticContactTipPoint.y - 8}
+                  textAnchor="middle"
+                  fontSize={7}
+                  fontWeight={600}
+                  fill="#6b7280"
+                >
+                  Contact
+                </text>
+              )}
+            </g>
+          )}
+
           {showCurvature &&
             segments
               .filter((s) => s.type === 'gpsAntenna' || s.type === 'electronics')
@@ -364,6 +412,13 @@ const NeckFitVisualization = ({
             <span className="text-gray-600">{label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-3 h-3 rounded-full border border-gray-400"
+            style={{ backgroundColor: STATIC_CONTACT_COLOR }}
+          />
+          <span className="text-gray-600">{STATIC_CONTACT_LABEL}</span>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-0.5 border-t border-dashed border-slate-400" style={{ width: 12 }} />
           <span className="text-gray-600">Target seating path</span>

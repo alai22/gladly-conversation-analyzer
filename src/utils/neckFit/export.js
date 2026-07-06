@@ -10,11 +10,15 @@ const SEGMENT_COLORS = {
   strap: '#059669',
 };
 
+export const STATIC_CONTACT_COLOR = '#c0c0c0';
+
 const SEGMENT_LABELS = {
   electronics: 'Electronics',
   gpsAntenna: 'GPS / Antenna',
   strap: 'Strap',
 };
+
+export const STATIC_CONTACT_LABEL = 'Static contact tip';
 
 /**
  * Build standalone SVG string for export.
@@ -24,6 +28,7 @@ const SEGMENT_LABELS = {
  * @param {import('./mechanicalModel').CollarSegment[]} params.segments
  * @param {import('./geometry').Point[]} [params.gapIndicators]
  * @param {import('./geometry').Point[]} [params.pressurePoints]
+ * @param {import('./geometry').Point[]} [params.staticContactPath]
  * @param {boolean} [params.showGaps]
  * @param {boolean} [params.showPressure]
  * @returns {string}
@@ -34,10 +39,11 @@ export function buildExportSvg({
   segments,
   gapIndicators = [],
   pressurePoints = [],
+  staticContactPath = [],
   showGaps = true,
   showPressure = false,
 }) {
-  const allPts = [...neckPoints, ...collarOffsetPoints];
+  const allPts = [...neckPoints, ...collarOffsetPoints, ...staticContactPath];
   segments.forEach((s) => allPts.push(...s.pathPoints));
   const { viewBox } = normalizeForView(allPts, 50);
 
@@ -59,6 +65,12 @@ export function buildExportSvg({
     const mid = seg.pathPoints[Math.floor(seg.pathPoints.length / 2)];
     svg += `<text class="label" x="${mid.x}" y="${mid.y - 8}">${SEGMENT_LABELS[seg.type]}</text>`;
   });
+
+  if (staticContactPath.length >= 2) {
+    svg += `<path class="segment" stroke="${STATIC_CONTACT_COLOR}" stroke-width="4" d="${pointsToSvgPath(staticContactPath, false)}" />`;
+    const tip = staticContactPath[staticContactPath.length - 1];
+    svg += `<text class="label" x="${tip.x}" y="${tip.y - 6}">${STATIC_CONTACT_LABEL}</text>`;
+  }
 
   if (showGaps) {
     gapIndicators.forEach((p) => {

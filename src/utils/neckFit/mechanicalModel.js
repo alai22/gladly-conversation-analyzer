@@ -9,6 +9,7 @@
 import {
   angleBetweenDeg,
   buildArcLengthTable,
+  buildPerpendicularSegment,
   buildRigidArcPath,
   closestPointOnClosedPath,
   computeCurvature,
@@ -22,7 +23,9 @@ import {
   offsetPolygon,
   pointInPolygon,
   pointToPolygonBoundary,
+  polylineEntryTangent,
   polylineExitTangent,
+  polygonCentroid,
   polylineLength,
   rigidArcExitTangent,
   RIGID_STRAIGHT_BEND_RADIUS,
@@ -81,12 +84,16 @@ import {
  * @property {Point[]} gapIndicators air gaps between hardware and neck seating path
  * @property {Point[]} pressurePoints contact / compression zones at neck
  * @property {Point | null} junctionPoint electronics–GPS attachment
+ * @property {Point[]} staticContactPath static feedback tip (strap-side end of electronics)
+ * @property {Point | null} staticContactTipPoint tip endpoint toward neck
  * @property {Point} tracheaPoint throat / ground side of neck
  * @property {Point} skyPoint back of neck / sky side
  * @property {number} bendingEnergy
  */
 
 export const MIN_STRAP_LENGTH = 30; // mm manufacturability minimum
+export const STATIC_CONTACT_TIP_LENGTH = 15; // mm perpendicular probe for static feedback
+export const STATIC_CONTACT_TIP_THICKNESS = 4; // mm visual stroke width
 
 export const DEFAULT_FIT_INPUTS = {
   neckCircumference: 350,
@@ -284,6 +291,20 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
       ? buildRigidArcPath(elecStart, elecStartTangent, elecLen, bendRadius, 16)
       : [elecStart];
   const elecEnd = electronicsPath[electronicsPath.length - 1];
+  const elecEntryTangent = polylineEntryTangent(electronicsPath, elecStartTangent);
+  const neckCenter = polygonCentroid(neckPoints);
+  const staticContactPath =
+    elecLen > 0
+      ? buildPerpendicularSegment(
+          elecStart,
+          elecEntryTangent,
+          STATIC_CONTACT_TIP_LENGTH,
+          neckCenter
+        )
+      : [];
+  const staticContactTipPoint =
+    staticContactPath.length >= 2 ? staticContactPath[staticContactPath.length - 1] : null;
+
   const elecExitTangent = polylineExitTangent(
     electronicsPath,
     rigidArcExitTangent(elecStart, elecStartTangent, elecLen, bendRadius)
@@ -349,6 +370,9 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const pressurePoints = [
     ...computeNeckContactPoints(electronicsPath, table, inputs.clearanceOffset),
     ...computeNeckContactPoints(gpsPath, table, inputs.clearanceOffset),
+    ...(staticContactPath.length >= 2
+      ? computeNeckContactPoints(staticContactPath, table, inputs.clearanceOffset)
+      : []),
   ];
 
   const segments = [
@@ -453,6 +477,8 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     gapIndicators,
     pressurePoints,
     junctionPoint: elecLen > 0 && gpsLen > 0 ? elecEnd : null,
+    staticContactPath,
+    staticContactTipPoint,
     tracheaPoint: trachea.point,
     skyPoint: sky.point,
     bendingEnergy,
@@ -486,54 +512,85 @@ function normalizePlacementOffset(offset, loopLength) {
 }
 
 /**
+ * How much a candidate placement improves gap and strap closure vs current.
+ * @param {FitResult} fromResult
+ * @param {FitResult} toResult
+ * @returns {number}
+ */
+function placementImprovement(fromResult, toResult) {
+  const gapGain = fromResult.maxNeckGap - toResult.maxNeckGap;
+  const strapGain = fromResult.strapEndpointGap - toResult.strapEndpointGap;
+  return gapGain + 0.5 * strapGain;
+}
+
+/**
  * Search collar rotation (placement offset from trachea) to minimize neck gaps
  * and strap closure span while respecting bend-radius constraints.
  *
+ * Uses incremental bidirectional search: at each step tries clockwise (+) and
+ * counter-clockwise (−) and follows whichever reduces gap / strap span more.
+ *
  * @param {Point[]} rawNeckPoints
  * @param {FitInputs} inputs
- * @param {{ smoothing?: number, coarseStep?: number, fineStep?: number, refineWindow?: number }} [options]
+ * @param {{ smoothing?: number, coarseStep?: number, fineStep?: number, maxIterations?: number }} [options]
  * @returns {{ optimalPlacementS: number, fitResult: FitResult, baselineMaxNeckGap: number, baselineStrapEndpointGap: number }}
  */
 export function optimizeCollarPlacement(rawNeckPoints, inputs, options = {}) {
   const smoothing = options.smoothing ?? 0;
-  const coarseStep = options.coarseStep ?? 8;
+  const coarseStep = options.coarseStep ?? 5;
   const fineStep = options.fineStep ?? 1;
-  const refineWindow = options.refineWindow ?? 24;
+  const maxIterations = options.maxIterations ?? 200;
 
   const baseline = computeFit(rawNeckPoints, inputs, { smoothing });
   const loop = baseline.collarPathLength;
-  const halfLoop = loop / 2;
 
-  let best = {
-    placementS: normalizePlacementOffset(inputs.electronicsPlacementS, loop),
-    score: scoreFitForPlacement(baseline, inputs),
-    result: baseline,
-  };
-
-  const tryOffset = (offset) => {
-    const normalized = normalizePlacementOffset(offset, loop);
+  const evaluate = (offsetS) => {
+    const placementS = normalizePlacementOffset(offsetS, loop);
     const result = computeFit(
       rawNeckPoints,
-      { ...inputs, electronicsPlacementS: normalized },
+      { ...inputs, electronicsPlacementS: placementS },
       { smoothing }
     );
-    const score = scoreFitForPlacement(result, inputs);
-    if (score < best.score) {
-      best = { placementS: normalized, score, result };
+    return { placementS, result, score: scoreFitForPlacement(result, inputs) };
+  };
+
+  let current = evaluate(inputs.electronicsPlacementS);
+
+  const climb = (step) => {
+    const minGain = 0.05;
+    for (let i = 0; i < maxIterations; i++) {
+      const cw = evaluate(current.placementS + step);
+      const ccw = evaluate(current.placementS - step);
+      const cwGain = placementImprovement(current.result, cw.result);
+      const ccwGain = placementImprovement(current.result, ccw.result);
+
+      let next = null;
+      if (cwGain > minGain && cwGain >= ccwGain) {
+        next = cw;
+      } else if (ccwGain > minGain) {
+        next = ccw;
+      } else if (cwGain > minGain) {
+        next = cw;
+      }
+
+      if (!next) break;
+
+      const gain = placementImprovement(current.result, next.result);
+      const scoreImproved = next.score < current.score - 0.01;
+      const scoreNeutral = Math.abs(next.score - current.score) <= 0.01;
+      if (!scoreImproved && !(scoreNeutral && gain > 0.5)) break;
+      if (next.score > current.score + 5) break;
+
+      current = next;
     }
   };
 
-  for (let offset = -halfLoop; offset <= halfLoop; offset += coarseStep) {
-    tryOffset(offset);
-  }
-
-  for (let d = -refineWindow; d <= refineWindow; d += fineStep) {
-    tryOffset(best.placementS + d);
-  }
+  climb(coarseStep);
+  climb(fineStep);
 
   return {
-    optimalPlacementS: Math.round(best.placementS * 10) / 10,
-    fitResult: best.result,
+    optimalPlacementS: Math.round(current.placementS * 10) / 10,
+    fitResult: current.result,
     baselineMaxNeckGap: baseline.maxNeckGap,
     baselineStrapEndpointGap: baseline.strapEndpointGap,
   };
@@ -562,6 +619,7 @@ export function generateFitReport(result, inputs, profileName) {
     'Trachea / throat: bottom of diagram (+y)',
     'Electronics strap end anchored at trachea + placement offset',
     `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid arc)`,
+    `Static contact tip: ${STATIC_CONTACT_TIP_LENGTH} mm (perpendicular, strap-side end)`,
     `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
     `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
     `Strap length (calculated): ${result.strapLength.toFixed(1)} mm`,
