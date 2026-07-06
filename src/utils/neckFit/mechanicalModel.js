@@ -104,14 +104,14 @@ import {
  */
 
 export const MIN_STRAP_LENGTH = 30; // mm manufacturability minimum
-export const STATIC_CONTACT_TIP_LENGTH = 15; // mm perpendicular probe for static feedback
+export const STATIC_CONTACT_TIP_LENGTH = 30; // mm perpendicular probe for static feedback
 export const STATIC_CONTACT_TIP_THICKNESS = 4; // mm visual stroke width
 
 export const DEFAULT_FIT_INPUTS = {
   neckCircumference: 350,
   clearanceOffset: 8,
   electronicsLength: 100,
-  electronicsThickness: 12,
+  electronicsThickness: 20,
   electronicsPlacementS: 0,
   electronicsBodyRotationDeg: 0,
   electronicsBendRadius: 40,

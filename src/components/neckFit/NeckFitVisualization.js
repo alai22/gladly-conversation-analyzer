@@ -143,7 +143,7 @@ const NeckFitVisualization = ({
             <li>Orange fill = neck cross-section (skin)</li>
             <li>Grey dashed loop = target seating path (clearance offset from skin)</li>
             <li>Thick colored strokes = electronics, GPS, and strap</li>
-            <li>Silver stub = static contact tip (to neck skin, max 15 mm)</li>
+            <li>Silver stub = static contact tip (to neck skin, max 30 mm)</li>
             <li>Green/red pads = hardware contact samples (must stay outside neck)</li>
           </ul>
         </details>
