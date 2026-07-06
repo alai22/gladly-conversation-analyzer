@@ -14,7 +14,7 @@ export const STATIC_CONTACT_COLOR = '#c0c0c0';
 
 const SEGMENT_LABELS = {
   electronics: 'Electronics',
-  gpsAntenna: 'GPS / Antenna',
+  gpsAntenna: 'GPS',
   strap: 'Strap',
 };
 
@@ -40,7 +40,7 @@ export function buildExportSvg({
   gapIndicators = [],
   pressurePoints = [],
   staticContactPath = [],
-  showGaps = true,
+  showGaps = false,
   showPressure = false,
 }) {
   const allPts = [...neckPoints, ...collarOffsetPoints, ...staticContactPath];

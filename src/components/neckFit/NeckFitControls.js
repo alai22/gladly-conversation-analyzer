@@ -53,6 +53,28 @@ const NumberInput = ({ label, value, onChange, min, max, step, unit }) => (
   </div>
 );
 
+const AutoFitPanel = ({ onOptimizePlacement, optimizeMessage }) => {
+  if (!onOptimizePlacement) return null;
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 p-3 space-y-2">
+      <button
+        type="button"
+        onClick={onOptimizePlacement}
+        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors shadow-sm"
+      >
+        <RotateCw className="h-4 w-4" />
+        Re-run auto-fit
+      </button>
+      {optimizeMessage && (
+        <p className="text-[10px] text-indigo-800 leading-snug">{optimizeMessage}</p>
+      )}
+      <p className="text-[10px] text-indigo-600/80 leading-snug">
+        Optimizes placement and body rotation. Runs on load; re-run after changing dimensions or neck settings.
+      </p>
+    </div>
+  );
+};
+
 const NeckFitControls = ({
   profileId,
   onProfileChange,
@@ -93,6 +115,11 @@ const NeckFitControls = ({
         ))}
       </div>
       {tabHint && <p className="text-[10px] text-gray-500 leading-snug">{tabHint}</p>}
+
+      <AutoFitPanel
+        onOptimizePlacement={onOptimizePlacement}
+        optimizeMessage={optimizeMessage}
+      />
 
       <div className="space-y-4">
         {activeTab === 'neck' && (
@@ -254,24 +281,6 @@ const NeckFitControls = ({
                   unit="mm"
                   hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
                 />
-                {onOptimizePlacement && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={onOptimizePlacement}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
-                    >
-                      <RotateCw className="h-4 w-4" />
-                      Re-run auto-fit
-                    </button>
-                    {optimizeMessage && (
-                      <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
-                    )}
-                    <p className="text-[10px] text-gray-400 leading-snug">
-                      Runs automatically on load and when the neck profile changes.
-                    </p>
-                  </div>
-                )}
               </>
             )}
 

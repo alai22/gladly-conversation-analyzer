@@ -26,11 +26,9 @@ const OverlayChip = ({ label, active, onClick }) => (
 
 const NeckFitVisualization = ({
   fitResult,
-  showGaps,
   showCurvature,
   showPressure,
   showContactPads,
-  onShowGapsChange,
   onShowCurvatureChange,
   onShowPressureChange,
   onShowContactPadsChange,
@@ -64,13 +62,6 @@ const NeckFitVisualization = ({
     return parseViewBox(viewData.viewBox);
   }, [viewData]);
 
-  const worstGap = useMemo(() => {
-    if (!fitResult?.gapIndicators?.length) return null;
-    return fitResult.gapIndicators.reduce((best, g) =>
-      (g._gap ?? 0) > (best._gap ?? 0) ? g : best
-    );
-  }, [fitResult]);
-
   if (!fitResult || !viewData || !vb) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px] bg-gray-50 rounded-lg border border-gray-200">
@@ -83,7 +74,6 @@ const NeckFitVisualization = ({
     neckPoints,
     collarOffsetPoints,
     segments,
-    gapIndicators,
     pressurePoints,
     junctionPoint,
     tracheaPoint,
@@ -102,16 +92,11 @@ const NeckFitVisualization = ({
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Cross-Section View</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Top = sky / back · Bottom = trachea. Red spokes = hardware lifted off target seating path.
+              Top = sky / back · Bottom = trachea / throat.
             </p>
           </div>
-          {onShowGapsChange && (
+          {(onShowCurvatureChange || onShowPressureChange || onShowContactPadsChange) && (
             <div className="flex flex-wrap gap-1.5 shrink-0">
-              <OverlayChip
-                label="Lift-off gaps"
-                active={showGaps}
-                onClick={() => onShowGapsChange(!showGaps)}
-              />
               <OverlayChip
                 label="Contact"
                 active={showPressure}
@@ -190,7 +175,7 @@ const NeckFitVisualization = ({
               <circle cx={tracheaPoint.x} cy={tracheaPoint.y} r={4} fill="#b45309" opacity={0.35} />
               <text
                 x={tracheaPoint.x}
-                y={tracheaPoint.y + 14}
+                y={tracheaPoint.y + 26}
                 textAnchor="middle"
                 fontSize={8}
                 fill="#92400e"
@@ -221,58 +206,6 @@ const NeckFitVisualization = ({
             strokeWidth={1}
             strokeDasharray="5 4"
           />
-
-          {showGaps &&
-            gapIndicators.map((g, i) => {
-              const hw = g.hardwarePoint ?? { x: g.x, y: g.y };
-              const seat = g.seatingPoint ?? { x: g.x, y: g.y };
-              const gapMm = g._gap?.toFixed(1) ?? '?';
-              return (
-                <g key={`gap-${i}`}>
-                  <line
-                    x1={hw.x}
-                    y1={hw.y}
-                    x2={seat.x}
-                    y2={seat.y}
-                    stroke="#ef4444"
-                    strokeWidth={1}
-                    strokeDasharray="3 2"
-                    opacity={0.85}
-                  >
-                    <title>{`${gapMm} mm lift-off`}</title>
-                  </line>
-                  <circle cx={g.x} cy={g.y} r={2} fill="#ef4444" opacity={0.9}>
-                    <title>{`${gapMm} mm lift-off`}</title>
-                  </circle>
-                </g>
-              );
-            })}
-
-          {showGaps && worstGap && (
-            <g>
-              <rect
-                x={worstGap.x + 6}
-                y={worstGap.y - 10}
-                width={52}
-                height={14}
-                rx={3}
-                fill="white"
-                fillOpacity={0.9}
-                stroke="#ef4444"
-                strokeWidth={0.5}
-              />
-              <text
-                x={worstGap.x + 32}
-                y={worstGap.y}
-                textAnchor="middle"
-                fontSize={8}
-                fontWeight={600}
-                fill="#b91c1c"
-              >
-                {worstGap._gap?.toFixed(0)} mm
-              </text>
-            </g>
-          )}
 
           {showContactPads &&
             contactPads?.map((pad, i) => (
@@ -451,12 +384,6 @@ const NeckFitVisualization = ({
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500 opacity-75" />
             <span className="text-gray-600">Pad violation</span>
-          </div>
-        )}
-        {showGaps && (
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-red-500 opacity-75" style={{ width: 12 }} />
-            <span className="text-gray-600">Hardware lift-off gap</span>
           </div>
         )}
         {fitResult.junctionPoint && (

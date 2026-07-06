@@ -21,7 +21,6 @@ const NeckFitModelingTool = () => {
   const [customProfile, setCustomProfile] = useState(null);
   const [inputs, setInputs] = useState({ ...DEFAULT_FIT_INPUTS });
   const [smoothing, setSmoothing] = useState(0.15);
-  const [showGaps, setShowGaps] = useState(true);
   const [showCurvature, setShowCurvature] = useState(false);
   const [showPressure, setShowPressure] = useState(false);
   const [showContactPads, setShowContactPads] = useState(true);
@@ -98,11 +97,10 @@ const NeckFitModelingTool = () => {
       gapIndicators: fitResult.gapIndicators,
       pressurePoints: fitResult.pressurePoints,
       staticContactPath: fitResult.staticContactPath,
-      showGaps,
       showPressure,
     });
     downloadFile(svg, `halo-collar-6-neck-fit-${Date.now()}.svg`, 'image/svg+xml');
-  }, [fitResult, showGaps, showPressure]);
+  }, [fitResult, showPressure]);
 
   const handleExportReport = useCallback(() => {
     if (!fitResult) return;
@@ -153,10 +151,8 @@ const NeckFitModelingTool = () => {
           <div className="lg:col-span-6 min-h-[480px]">
             <NeckFitVisualization
               fitResult={fitResult}
-              showGaps={showGaps}
               showCurvature={showCurvature}
               showPressure={showPressure}
-              onShowGapsChange={setShowGaps}
               onShowCurvatureChange={setShowCurvature}
               onShowPressureChange={setShowPressure}
               showContactPads={showContactPads}
