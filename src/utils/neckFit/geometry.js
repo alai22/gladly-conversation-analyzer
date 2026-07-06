@@ -377,6 +377,46 @@ export function buildPerpendicularSegment(anchor, tangent, length, towardPoint) 
 }
 
 /**
+ * Static contact probe perpendicular to hardware, stopping at neck skin or max length.
+ * Never extends into the neck interior.
+ * @param {Point} anchor
+ * @param {Point} tangent unit vector along parent segment
+ * @param {number} maxLength mm
+ * @param {Point[]} neckPoints neck skin polygon
+ * @param {Point} towardPoint inward reference (e.g. neck centroid)
+ * @returns {Point[]}
+ */
+export function buildStaticContactToNeck(anchor, tangent, maxLength, neckPoints, towardPoint) {
+  if (maxLength <= 0) return [anchor];
+  const end = buildPerpendicularSegment(anchor, tangent, maxLength, towardPoint)[1];
+  const dx = end.x - anchor.x;
+  const dy = end.y - anchor.y;
+  const fullLen = Math.hypot(dx, dy);
+  if (fullLen < 1e-6) return [anchor];
+  const dir = { x: dx / fullLen, y: dy / fullLen };
+
+  let tipLen = 0;
+  for (let d = 0.5; d <= maxLength; d += 0.5) {
+    const p = { x: anchor.x + dir.x * d, y: anchor.y + dir.y * d };
+    if (pointInPolygon(p, neckPoints)) break;
+    tipLen = d;
+    if (pointToPolygonBoundary(p, neckPoints) <= 0.35) break;
+  }
+
+  if (tipLen <= 0) return [anchor];
+  return [
+    anchor,
+    { x: anchor.x + dir.x * tipLen, y: anchor.y + dir.y * tipLen },
+  ];
+}
+
+export function rotateVector(v, angleRad) {
+  const c = Math.cos(angleRad);
+  const s = Math.sin(angleRad);
+  return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
+}
+
+/**
  * Angle between two unit vectors in degrees.
  * @param {Point} u
  * @param {Point} v

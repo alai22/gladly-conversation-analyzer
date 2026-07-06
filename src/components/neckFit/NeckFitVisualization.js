@@ -29,9 +29,11 @@ const NeckFitVisualization = ({
   showGaps,
   showCurvature,
   showPressure,
+  showContactPads,
   onShowGapsChange,
   onShowCurvatureChange,
   onShowPressureChange,
+  onShowContactPadsChange,
 }) => {
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -88,6 +90,7 @@ const NeckFitVisualization = ({
     skyPoint,
     staticContactPath,
     staticContactTipPoint,
+    contactPads,
   } = fitResult;
 
   const labelX = vb.x + vb.w / 2;
@@ -115,6 +118,11 @@ const NeckFitVisualization = ({
                 onClick={() => onShowPressureChange(!showPressure)}
               />
               <OverlayChip
+                label="Contact pads"
+                active={showContactPads}
+                onClick={() => onShowContactPadsChange(!showContactPads)}
+              />
+              <OverlayChip
                 label="Curvature"
                 active={showCurvature}
                 onClick={() => onShowCurvatureChange(!showCurvature)}
@@ -135,8 +143,8 @@ const NeckFitVisualization = ({
             <li>Orange fill = neck cross-section (skin)</li>
             <li>Grey dashed loop = target seating path (clearance offset from skin)</li>
             <li>Thick colored strokes = electronics, GPS, and strap</li>
-            <li>Silver stub = static contact tip (15 mm, strap-side end of electronics)</li>
-            <li>Red dashed spokes = lift-off gap between hardware and seating path</li>
+            <li>Silver stub = static contact tip (to neck skin, max 15 mm)</li>
+            <li>Green/red pads = hardware contact samples (must stay outside neck)</li>
           </ul>
         </details>
       </div>
@@ -266,6 +274,20 @@ const NeckFitVisualization = ({
             </g>
           )}
 
+          {showContactPads &&
+            contactPads?.map((pad, i) => (
+              <circle
+                key={`pad-${i}`}
+                cx={pad.point.x}
+                cy={pad.point.y}
+                r={2.5}
+                fill={pad.valid ? '#22c55e' : '#ef4444'}
+                opacity={0.85}
+              >
+                <title>{`${pad.segment}: neck ${pad.neckClearance.toFixed(1)} mm`}</title>
+              </circle>
+            ))}
+
           {junctionPoint && (
             <circle
               cx={junctionPoint.x}
@@ -330,18 +352,6 @@ const NeckFitVisualization = ({
                   stroke="#9ca3af"
                   strokeWidth={0.75}
                 />
-              )}
-              {staticContactTipPoint && (
-                <text
-                  x={staticContactTipPoint.x}
-                  y={staticContactTipPoint.y - 8}
-                  textAnchor="middle"
-                  fontSize={7}
-                  fontWeight={600}
-                  fill="#6b7280"
-                >
-                  Contact
-                </text>
               )}
             </g>
           )}
@@ -431,6 +441,18 @@ const NeckFitVisualization = ({
           <span className="w-3 h-3 rounded-full bg-sky-600 opacity-50" />
           <span className="text-gray-600">Back / sky</span>
         </div>
+        {showContactPads && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-green-500 opacity-75" />
+            <span className="text-gray-600">Valid contact pad</span>
+          </div>
+        )}
+        {showContactPads && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500 opacity-75" />
+            <span className="text-gray-600">Pad violation</span>
+          </div>
+        )}
         {showGaps && (
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-red-500 opacity-75" style={{ width: 12 }} />

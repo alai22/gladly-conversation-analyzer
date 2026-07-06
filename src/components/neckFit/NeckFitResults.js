@@ -82,6 +82,12 @@ const NeckFitResults = ({
 
       <div className="grid grid-cols-2 gap-2">
         <KpiCard
+          label="Contact pad violations"
+          value={`${fitResult.contactPadViolations}`}
+          sublabel={`${fitResult.contactPads.length} pads sampled`}
+          status={fitResult.contactPadViolations > 0 ? 'bad' : 'good'}
+        />
+        <KpiCard
           label="Strap length"
           value={`${fitResult.strapLength.toFixed(0)} mm`}
           sublabel="Auto-calculated"
@@ -141,6 +147,10 @@ const NeckFitResults = ({
             label="Max GPS lift-off"
             value={`${fitResult.maxGpsNeckGap.toFixed(1)} mm`}
             highlight={fitResult.maxGpsNeckGap > 5 ? 'bad' : undefined}
+          />
+          <DetailRow
+            label="Body rotation vs neck"
+            value={`${(inputs.electronicsBodyRotationDeg ?? 0).toFixed(0)}°`}
           />
           <DetailRow label="Enclosure–GPS angle" value={`${fitResult.junctionAngleDeg.toFixed(1)}°`} />
           <DetailRow

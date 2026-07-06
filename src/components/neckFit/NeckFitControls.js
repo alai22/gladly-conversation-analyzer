@@ -209,8 +209,18 @@ const NeckFitControls = ({
               step={0.5}
               unit="mm"
             />
-            <SliderInput
-              label="Rotation from trachea"
+        <SliderInput
+          label="Body rotation vs neck"
+          value={inputs.electronicsBodyRotationDeg}
+          onChange={set('electronicsBodyRotationDeg')}
+          min={-35}
+          max={35}
+          step={1}
+          unit="°"
+          hint="Hardware pose — rigid body angle relative to neck tangent at anchor"
+        />
+        <SliderInput
+          label="Rotation from trachea"
               value={inputs.electronicsPlacementS}
               onChange={set('electronicsPlacementS')}
               min={-200}
@@ -233,7 +243,7 @@ const NeckFitControls = ({
               <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
             )}
             <p className="text-[10px] text-gray-400 leading-snug">
-              Steps CW and CCW from current position, following whichever reduces gap or strap span more.
+              Steps CW and CCW from current position; also searches body rotation so all contact pads stay outside the neck.
             </p>
               </div>
             )}

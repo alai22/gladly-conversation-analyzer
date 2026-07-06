@@ -24,6 +24,7 @@ const NeckFitModelingTool = () => {
   const [showGaps, setShowGaps] = useState(true);
   const [showCurvature, setShowCurvature] = useState(false);
   const [showPressure, setShowPressure] = useState(false);
+  const [showContactPads, setShowContactPads] = useState(true);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState(null);
   const [optimizeMessage, setOptimizeMessage] = useState(null);
@@ -55,13 +56,21 @@ const NeckFitModelingTool = () => {
 
   const handleOptimizePlacement = useCallback(() => {
     if (!activeProfile?.points?.length) return;
-    const { optimalPlacementS, fitResult: optimized, baselineMaxNeckGap, baselineStrapEndpointGap } =
-      optimizeCollarPlacement(activeProfile.points, inputs, { smoothing });
-    setInputs((prev) => ({ ...prev, electronicsPlacementS: optimalPlacementS }));
+    const {
+      optimalPlacementS,
+      optimalBodyRotationDeg,
+      fitResult: optimized,
+      baselineMaxNeckGap,
+      baselineStrapEndpointGap,
+    } = optimizeCollarPlacement(activeProfile.points, inputs, { smoothing });
+    setInputs((prev) => ({
+      ...prev,
+      electronicsPlacementS: optimalPlacementS,
+      electronicsBodyRotationDeg: optimalBodyRotationDeg,
+    }));
     const gapDelta = baselineMaxNeckGap - optimized.maxNeckGap;
-    const strapDelta = baselineStrapEndpointGap - optimized.strapEndpointGap;
     setOptimizeMessage(
-      `Rotated to ${optimalPlacementS.toFixed(0)} mm from trachea — neck gap ${optimized.maxNeckGap.toFixed(1)} mm (${gapDelta >= 0 ? '−' : '+'}${Math.abs(gapDelta).toFixed(1)}), strap span ${optimized.strapEndpointGap.toFixed(1)} mm (${strapDelta >= 0 ? '−' : '+'}${Math.abs(strapDelta).toFixed(1)})`
+      `Placement ${optimalPlacementS.toFixed(0)} mm, body rotation ${optimalBodyRotationDeg.toFixed(0)}° — gap ${optimized.maxNeckGap.toFixed(1)} mm (${gapDelta >= 0 ? '−' : '+'}${Math.abs(gapDelta).toFixed(1)}), ${optimized.contactPadViolations} pad violations`
     );
   }, [activeProfile, inputs, smoothing]);
 
@@ -135,6 +144,8 @@ const NeckFitModelingTool = () => {
               onShowGapsChange={setShowGaps}
               onShowCurvatureChange={setShowCurvature}
               onShowPressureChange={setShowPressure}
+              showContactPads={showContactPads}
+              onShowContactPadsChange={setShowContactPads}
             />
           </div>
 

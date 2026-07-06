@@ -9,8 +9,8 @@
 import {
   angleBetweenDeg,
   buildArcLengthTable,
-  buildPerpendicularSegment,
   buildRigidArcPath,
+  buildStaticContactToNeck,
   closestPointOnClosedPath,
   computeCurvature,
   ensureTracheaDown,
@@ -28,6 +28,7 @@ import {
   polygonCentroid,
   polylineLength,
   rigidArcExitTangent,
+  rotateVector,
   RIGID_STRAIGHT_BEND_RADIUS,
   scaleProfileToPerimeter,
   smoothPolygon,
@@ -41,6 +42,7 @@ import {
  * @property {number} electronicsLength mm
  * @property {number} electronicsThickness mm
  * @property {number} electronicsPlacementS mm along collar path
+ * @property {number} electronicsBodyRotationDeg body rotation vs neck tangent at anchor (+ = CW)
  * @property {number} electronicsBendRadius mm fixed rigid bend radius (large = straight)
  * @property {number} gpsAntennaLength mm
  * @property {number} gpsAntennaThickness mm
@@ -61,6 +63,14 @@ import {
  * @property {number} startS
  * @property {number} endS
  * @property {Point[]} pathPoints
+ */
+
+/** @typedef {Object} ContactPad
+ * @property {Point} point sample on hardware centerline
+ * @property {string} segment 'electronics' | 'gpsAntenna'
+ * @property {number} neckClearance mm from neck skin minus half-thickness (≥ 0 = valid)
+ * @property {number} seatingClearance mm lift-off from target seating path
+ * @property {boolean} valid
  */
 
 /** @typedef {Object} FitResult
@@ -86,6 +96,8 @@ import {
  * @property {Point | null} junctionPoint electronics–GPS attachment
  * @property {Point[]} staticContactPath static feedback tip (strap-side end of electronics)
  * @property {Point | null} staticContactTipPoint tip endpoint toward neck
+ * @property {ContactPad[]} contactPads sampled hardware–neck clearance probes
+ * @property {number} contactPadViolations count of pads with negative neck clearance
  * @property {Point} tracheaPoint throat / ground side of neck
  * @property {Point} skyPoint back of neck / sky side
  * @property {number} bendingEnergy
@@ -101,6 +113,7 @@ export const DEFAULT_FIT_INPUTS = {
   electronicsLength: 60,
   electronicsThickness: 12,
   electronicsPlacementS: 0,
+  electronicsBodyRotationDeg: 0,
   electronicsBendRadius: 40,
   gpsAntennaLength: 55,
   gpsAntennaThickness: 8,
@@ -159,33 +172,54 @@ function buildGpsPathAttached(
   if (length <= 0) return [attachPoint];
 
   const minStandoff = Math.max(clearanceOffset, gpsThickness / 2);
-  const samples = Math.max(20, Math.ceil(length / 2));
   const result = [attachPoint];
 
-  // Hold exit tangent before bending toward neck — keeps junction parallel to electronics.
-  const tangentRun = length * (0.06 + factor * 0.3);
-  const bendLength = Math.max(length - tangentRun, length * 0.05);
+  // Phase 1: hold exit tangent, but stop before crossing into neck volume
+  const straightMax = length * (0.06 + factor * 0.3);
+  let straightUsed = 0;
+  const straightSteps = Math.max(4, Math.ceil(straightMax / 2));
+  for (let i = 1; i <= straightSteps; i++) {
+    const d = (straightMax * i) / straightSteps;
+    const pt = {
+      x: attachPoint.x + attachTangent.x * d,
+      y: attachPoint.y + attachTangent.y * d,
+    };
+    if (intrudesNeck(pt, neckPoints, minStandoff)) break;
+    result.push(pt);
+    straightUsed = d;
+  }
+
+  const remaining = length - straightUsed;
+  if (remaining <= 0.01) return result;
+
+  // Phase 2: wrap along seating path (outside neck); optional soft blend near junction
+  const flexBlendZone = (1 - factor) * Math.min(remaining * 0.35, 12);
+  const samples = Math.max(18, Math.ceil(remaining / 2));
 
   for (let i = 1; i <= samples; i++) {
-    const t = i / samples;
-    const s = length * t;
-    const straightPt = {
-      x: attachPoint.x + attachTangent.x * s,
-      y: attachPoint.y + attachTangent.y * s,
-    };
+    const s = straightUsed + (remaining * i) / samples;
     const idealPt = getPointAtS(table, sIdealStart + s);
+    let pt = idealPt;
 
-    let blend = 0;
-    if (s > tangentRun && bendLength > 0) {
-      const u = Math.min(1, (s - tangentRun) / bendLength);
-      blend = (1 - factor) * u * u * (3 - 2 * u);
+    if (flexBlendZone > 0 && s - straightUsed < flexBlendZone) {
+      const straightPt = {
+        x: attachPoint.x + attachTangent.x * s,
+        y: attachPoint.y + attachTangent.y * s,
+      };
+      const u = (s - straightUsed) / flexBlendZone;
+      const blend = u * u * (3 - 2 * u);
+      const candidate = lerpPoint(straightPt, idealPt, blend);
+      if (!intrudesNeck(candidate, neckPoints, minStandoff)) {
+        pt = candidate;
+      }
     }
-    let pt = lerpPoint(straightPt, idealPt, blend);
+
     if (intrudesNeck(pt, neckPoints, minStandoff)) {
-      pt = { ...idealPt };
+      pt = idealPt;
     }
     result.push(pt);
   }
+
   return result;
 }
 
@@ -226,6 +260,43 @@ function analyzeNeckGaps(centerline, table, sampleEvery = 2) {
     }
   }
   return { maxGap, indicators };
+}
+
+/**
+ * Sample contact pads along rigid/semi-rigid hardware centerlines.
+ * Each pad must have non-negative neck clearance (body stays outside neck volume).
+ * @param {Array<{ path: Point[], halfThickness: number, segment: string }>} segments
+ * @param {ReturnType<typeof buildArcLengthTable>} seatingTable
+ * @param {Point[]} neckPoints
+ * @param {number} [sampleSpacing=10] mm
+ * @returns {ContactPad[]}
+ */
+function analyzeContactPads(segments, seatingTable, neckPoints, sampleSpacing = 10) {
+  const pads = [];
+  for (const { path, halfThickness, segment } of segments) {
+    if (path.length < 2) continue;
+    const total = polylineLength(path);
+    const steps = Math.max(1, Math.ceil(total / sampleSpacing));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const idx = Math.min(Math.floor(t * (path.length - 1)), path.length - 2);
+      const frac = t * (path.length - 1) - idx;
+      const a = path[idx];
+      const b = path[idx + 1];
+      const p = lerpPoint(a, b, frac);
+      const neckClearance = pointToPolygonBoundary(p, neckPoints) - halfThickness;
+      const seating = closestPointOnClosedPath(p, seatingTable);
+      const valid = !pointInPolygon(p, neckPoints) && neckClearance >= -0.15;
+      pads.push({
+        point: p,
+        segment,
+        neckClearance,
+        seatingClearance: seating.distance,
+        valid,
+      });
+    }
+  }
+  return pads;
 }
 
 /**
@@ -282,9 +353,11 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const sStrapStart = sIdealGpsEnd;
   const sStrapEnd = sElecStart;
 
-  // Rigid electronics — fixed-curvature arc (or straight when bend radius is large)
+  // Rigid electronics — anchor on neck path, orientation from body rotation (not neck tangent alone)
   const elecStart = getPointAtS(table, sElecStart);
-  const elecStartTangent = getTangentAtS(table, sElecStart);
+  const neckHintTangent = getTangentAtS(table, sElecStart);
+  const bodyRotationRad = ((inputs.electronicsBodyRotationDeg ?? 0) * Math.PI) / 180;
+  const elecStartTangent = rotateVector(neckHintTangent, bodyRotationRad);
   const bendRadius = inputs.electronicsBendRadius ?? 40;
   const electronicsPath =
     elecLen > 0
@@ -295,10 +368,11 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const neckCenter = polygonCentroid(neckPoints);
   const staticContactPath =
     elecLen > 0
-      ? buildPerpendicularSegment(
+      ? buildStaticContactToNeck(
           elecStart,
           elecEntryTangent,
           STATIC_CONTACT_TIP_LENGTH,
+          neckPoints,
           neckCenter
         )
       : [];
@@ -361,11 +435,25 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const maxNeckGap = Math.max(maxElectronicsNeckGap, maxGpsNeckGap);
   const gapIndicators = [...elecGaps.indicators, ...gpsGaps.indicators];
 
+  const contactPads = analyzeContactPads(
+    [
+      { path: electronicsPath, halfThickness: inputs.electronicsThickness / 2, segment: 'electronics' },
+      { path: gpsPath, halfThickness: inputs.gpsAntennaThickness / 2, segment: 'gpsAntenna' },
+    ],
+    table,
+    neckPoints
+  );
+  const contactPadViolations = contactPads.filter((p) => !p.valid).length;
+
   const elecInterference =
     elecLen > 0 ? maxPolylinePolygonPenetration(electronicsPath, neckPoints) : 0;
   const gpsInterference =
     gpsLen > 0 ? maxPolylinePolygonPenetration(gpsPath, neckPoints) : 0;
-  const maxInterferenceDepth = Math.max(elecInterference, gpsInterference);
+  const contactInterference =
+    staticContactPath.length >= 2
+      ? maxPolylinePolygonPenetration(staticContactPath, neckPoints)
+      : 0;
+  const maxInterferenceDepth = Math.max(elecInterference, gpsInterference, contactInterference);
 
   const pressurePoints = [
     ...computeNeckContactPoints(electronicsPath, table, inputs.clearanceOffset),
@@ -431,12 +519,19 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     const parts = [];
     if (elecInterference > 0.5) parts.push(`electronics (${elecInterference.toFixed(1)} mm)`);
     if (gpsInterference > 0.5) parts.push(`GPS/antenna (${gpsInterference.toFixed(1)} mm)`);
+    if (contactInterference > 0.5) parts.push(`static contact (${contactInterference.toFixed(1)} mm)`);
     warnings.push(`Hardware penetrates neck contour: ${parts.join(', ')}.`);
   }
 
   if (gpsLen > 0 && minGpsBendRadius < inputs.gpsMinBendRadius) {
     warnings.push(
       `GPS/antenna bend radius (${minGpsBendRadius.toFixed(1)} mm) is below minimum (${inputs.gpsMinBendRadius} mm).`
+    );
+  }
+
+  if (contactPadViolations > 0) {
+    warnings.push(
+      `${contactPadViolations} hardware contact pad(s) penetrate the neck — adjust rotation or placement.`
     );
   }
 
@@ -454,6 +549,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     strapLength >= 0 &&
     strapLength >= MIN_STRAP_LENGTH &&
     maxInterferenceDepth < 1 &&
+    contactPadViolations === 0 &&
     (gpsLen === 0 || minGpsBendRadius >= inputs.gpsMinBendRadius);
 
   return {
@@ -479,6 +575,8 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     junctionPoint: elecLen > 0 && gpsLen > 0 ? elecEnd : null,
     staticContactPath,
     staticContactTipPoint,
+    contactPads,
+    contactPadViolations,
     tracheaPoint: trachea.point,
     skyPoint: sky.point,
     bendingEnergy,
@@ -493,6 +591,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
  */
 function scoreFitForPlacement(result, inputs) {
   let score = result.maxNeckGap + 0.5 * result.strapEndpointGap;
+  score += result.contactPadViolations * 40;
   if (result.minGpsBendRadius < inputs.gpsMinBendRadius) score += 200;
   if (result.strapLength < MIN_STRAP_LENGTH) score += 100;
   if (result.maxInterferenceDepth > 1) score += 150;
@@ -533,34 +632,51 @@ function placementImprovement(fromResult, toResult) {
  * @param {Point[]} rawNeckPoints
  * @param {FitInputs} inputs
  * @param {{ smoothing?: number, coarseStep?: number, fineStep?: number, maxIterations?: number }} [options]
- * @returns {{ optimalPlacementS: number, fitResult: FitResult, baselineMaxNeckGap: number, baselineStrapEndpointGap: number }}
+ * @returns {{ optimalPlacementS: number, optimalBodyRotationDeg: number, fitResult: FitResult, baselineMaxNeckGap: number, baselineStrapEndpointGap: number }}
  */
 export function optimizeCollarPlacement(rawNeckPoints, inputs, options = {}) {
   const smoothing = options.smoothing ?? 0;
   const coarseStep = options.coarseStep ?? 5;
   const fineStep = options.fineStep ?? 1;
   const maxIterations = options.maxIterations ?? 200;
+  const rotationStep = options.rotationStep ?? 3;
+  const rotationRange = options.rotationRange ?? 35;
 
   const baseline = computeFit(rawNeckPoints, inputs, { smoothing });
   const loop = baseline.collarPathLength;
 
-  const evaluate = (offsetS) => {
+  const evaluate = (offsetS, rotationDeg) => {
     const placementS = normalizePlacementOffset(offsetS, loop);
     const result = computeFit(
       rawNeckPoints,
-      { ...inputs, electronicsPlacementS: placementS },
+      { ...inputs, electronicsPlacementS: placementS, electronicsBodyRotationDeg: rotationDeg },
       { smoothing }
     );
-    return { placementS, result, score: scoreFitForPlacement(result, inputs) };
+    return { placementS, rotationDeg, result, score: scoreFitForPlacement(result, inputs) };
   };
 
-  let current = evaluate(inputs.electronicsPlacementS);
+  /** Best rotation for a fixed placement (hardware pose, not neck tangent). */
+  const bestRotationAt = (placementS) => {
+    const baseRot = inputs.electronicsBodyRotationDeg ?? 0;
+    let best = evaluate(placementS, baseRot);
+    for (let d = -rotationRange; d <= rotationRange; d += rotationStep) {
+      const trial = evaluate(placementS, d);
+      if (trial.score < best.score) best = trial;
+    }
+    for (let d = best.rotationDeg - rotationStep; d <= best.rotationDeg + rotationStep; d += 1) {
+      const trial = evaluate(placementS, d);
+      if (trial.score < best.score) best = trial;
+    }
+    return best;
+  };
+
+  let current = bestRotationAt(inputs.electronicsPlacementS);
 
   const climb = (step) => {
     const minGain = 0.05;
     for (let i = 0; i < maxIterations; i++) {
-      const cw = evaluate(current.placementS + step);
-      const ccw = evaluate(current.placementS - step);
+      const cw = bestRotationAt(current.placementS + step);
+      const ccw = bestRotationAt(current.placementS - step);
       const cwGain = placementImprovement(current.result, cw.result);
       const ccwGain = placementImprovement(current.result, ccw.result);
 
@@ -590,6 +706,7 @@ export function optimizeCollarPlacement(rawNeckPoints, inputs, options = {}) {
 
   return {
     optimalPlacementS: Math.round(current.placementS * 10) / 10,
+    optimalBodyRotationDeg: Math.round(current.rotationDeg * 10) / 10,
     fitResult: current.result,
     baselineMaxNeckGap: baseline.maxNeckGap,
     baselineStrapEndpointGap: baseline.strapEndpointGap,
