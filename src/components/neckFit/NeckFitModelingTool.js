@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { CircleDot } from 'lucide-react';
 import NeckFitControls from './NeckFitControls';
 import NeckFitVisualization from './NeckFitVisualization';
@@ -35,10 +35,41 @@ const NeckFitModelingTool = () => {
     return getSampleProfileById(profileId) || getSampleProfileById(DEFAULT_SAMPLE_PROFILE_ID);
   }, [profileId, customProfile]);
 
+  const inputsRef = useRef(inputs);
+  inputsRef.current = inputs;
+
   const fitResult = useMemo(() => {
     if (!activeProfile?.points?.length) return null;
     return computeFit(activeProfile.points, inputs, { smoothing });
   }, [activeProfile, inputs, smoothing]);
+
+  const applyOptimizedPlacement = useCallback(
+    (profilePoints, currentInputs) => {
+      const {
+        optimalPlacementS,
+        optimalBodyRotationDeg,
+        fitResult: optimized,
+        baselineMaxNeckGap,
+      } = optimizeCollarPlacement(profilePoints, currentInputs, { smoothing });
+      setInputs((prev) => ({
+        ...prev,
+        electronicsPlacementS: optimalPlacementS,
+        electronicsBodyRotationDeg: optimalBodyRotationDeg,
+      }));
+      const gapDelta = baselineMaxNeckGap - optimized.maxNeckGap;
+      setOptimizeMessage(
+        `Placement ${optimalPlacementS.toFixed(0)} mm, body rotation ${optimalBodyRotationDeg.toFixed(0)}° — gap ${optimized.maxNeckGap.toFixed(1)} mm (${gapDelta >= 0 ? '−' : '+'}${Math.abs(gapDelta).toFixed(1)}), ${optimized.contactPadViolations} pad violations`
+      );
+    },
+    [smoothing]
+  );
+
+  // Re-fit placement when the neck profile changes (initial load, profile switch, image upload).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on profile id only
+  useEffect(() => {
+    if (!activeProfile?.points?.length) return;
+    applyOptimizedPlacement(activeProfile.points, inputsRef.current);
+  }, [activeProfile?.id, applyOptimizedPlacement]);
 
   const handleImageUpload = useCallback(async (file) => {
     setImageLoading(true);
@@ -56,23 +87,8 @@ const NeckFitModelingTool = () => {
 
   const handleOptimizePlacement = useCallback(() => {
     if (!activeProfile?.points?.length) return;
-    const {
-      optimalPlacementS,
-      optimalBodyRotationDeg,
-      fitResult: optimized,
-      baselineMaxNeckGap,
-      baselineStrapEndpointGap,
-    } = optimizeCollarPlacement(activeProfile.points, inputs, { smoothing });
-    setInputs((prev) => ({
-      ...prev,
-      electronicsPlacementS: optimalPlacementS,
-      electronicsBodyRotationDeg: optimalBodyRotationDeg,
-    }));
-    const gapDelta = baselineMaxNeckGap - optimized.maxNeckGap;
-    setOptimizeMessage(
-      `Placement ${optimalPlacementS.toFixed(0)} mm, body rotation ${optimalBodyRotationDeg.toFixed(0)}° — gap ${optimized.maxNeckGap.toFixed(1)} mm (${gapDelta >= 0 ? '−' : '+'}${Math.abs(gapDelta).toFixed(1)}), ${optimized.contactPadViolations} pad violations`
-    );
-  }, [activeProfile, inputs, smoothing]);
+    applyOptimizedPlacement(activeProfile.points, inputsRef.current);
+  }, [activeProfile, applyOptimizedPlacement]);
 
   const handleExportSvg = useCallback(() => {
     if (!fitResult) return;

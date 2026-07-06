@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Upload, ImageIcon, RotateCw } from 'lucide-react';
 import { SAMPLE_PROFILES } from '../../utils/neckFit/sampleProfiles';
 
@@ -6,6 +6,11 @@ const TABS = [
   { id: 'neck', label: 'Neck', hint: 'Profile shape and clearance from skin' },
   { id: 'hardware', label: 'Hardware', hint: 'Rigid enclosure + semi-flex GPS' },
   { id: 'strap', label: 'Strap', hint: 'Flexible strap that closes the loop' },
+];
+
+const HARDWARE_SECTIONS = [
+  { id: 'electronics', label: 'Electronics' },
+  { id: 'gps', label: 'GPS' },
 ];
 
 const SliderInput = ({ label, value, onChange, min, max, step, unit, hint }) => (
@@ -65,6 +70,7 @@ const NeckFitControls = ({
   onActiveTabChange,
 }) => {
   const fileRef = useRef(null);
+  const [hardwareSection, setHardwareSection] = useState('electronics');
   const set = (key) => (val) => onInputChange({ ...inputs, [key]: val });
   const tabHint = TABS.find((t) => t.id === activeTab)?.hint ?? '';
 
@@ -178,131 +184,156 @@ const NeckFitControls = ({
 
         {activeTab === 'hardware' && (
           <>
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-              Electronics (Rigid)
-            </p>
-            <SliderInput
-              label="Length"
-              value={inputs.electronicsLength}
-              onChange={set('electronicsLength')}
-              min={30}
-              max={150}
-              step={1}
-              unit="mm"
-            />
-            <SliderInput
-              label="Fixed bend radius"
-              value={inputs.electronicsBendRadius}
-              onChange={set('electronicsBendRadius')}
-              min={20}
-              max={120}
-              step={10}
-              unit="mm"
-              hint="Higher = straighter arc, length stays fixed"
-            />
-            <SliderInput
-              label="Thickness"
-              value={inputs.electronicsThickness}
-              onChange={set('electronicsThickness')}
-              min={4}
-              max={25}
-              step={0.5}
-              unit="mm"
-            />
-        <SliderInput
-          label="Body rotation vs neck"
-          value={inputs.electronicsBodyRotationDeg}
-          onChange={set('electronicsBodyRotationDeg')}
-          min={-35}
-          max={35}
-          step={1}
-          unit="°"
-          hint="Hardware pose — rigid body angle relative to neck tangent at anchor"
-        />
-        <SliderInput
-          label="Rotation from trachea"
-              value={inputs.electronicsPlacementS}
-              onChange={set('electronicsPlacementS')}
-              min={-200}
-              max={200}
-              step={1}
-              unit="mm"
-              hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
-            />
-            {onOptimizePlacement && (
-              <div className="space-y-1">
+            <div className="flex rounded-md border border-gray-200 p-0.5 bg-gray-50">
+              {HARDWARE_SECTIONS.map((section) => (
                 <button
+                  key={section.id}
                   type="button"
-                  onClick={onOptimizePlacement}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+                  onClick={() => setHardwareSection(section.id)}
+                  className={`flex-1 px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                    hardwareSection === section.id
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
-                  <RotateCw className="h-4 w-4" />
-              Auto-fit rotation
-            </button>
-            {optimizeMessage && (
-              <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
-            )}
-            <p className="text-[10px] text-gray-400 leading-snug">
-              Steps CW and CCW from current position; also searches body rotation so all contact pads stay outside the neck.
-            </p>
-              </div>
-            )}
+                  {section.label}
+                </button>
+              ))}
+            </div>
 
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide pt-1">
-              GPS / Antenna (Semi-Flexible)
-            </p>
-            <SliderInput
-              label="Length"
-              value={inputs.gpsAntennaLength}
-              onChange={set('gpsAntennaLength')}
-              min={20}
-              max={120}
-              step={1}
-              unit="mm"
-            />
-            <SliderInput
-              label="Thickness"
-              value={inputs.gpsAntennaThickness}
-              onChange={set('gpsAntennaThickness')}
-              min={3}
-              max={20}
-              step={0.5}
-              unit="mm"
-            />
-            <SliderInput
-              label="Stiffness"
-              value={inputs.gpsAntennaStiffness}
-              onChange={set('gpsAntennaStiffness')}
-              min={0}
-              max={1}
-              step={0.05}
-              hint="0 = fully flexible, 1 = rigid"
-            />
-
-            <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-              <summary className="text-xs font-medium text-gray-600 cursor-pointer select-none">
-                Advanced
-              </summary>
-              <div className="space-y-3 mt-3 pt-2 border-t border-gray-200">
+            {hardwareSection === 'electronics' && (
+              <>
+                <p className="text-[10px] text-gray-500 leading-snug">
+                  Rigid enclosure — length, bend, and placement on the neck.
+                </p>
                 <SliderInput
-                  label="Young's modulus (relative)"
-                  value={inputs.gpsAntennaYoungsModulus}
-                  onChange={set('gpsAntennaYoungsModulus')}
-                  min={0.5}
-                  max={10}
-                  step={0.1}
-                />
-                <NumberInput
-                  label="Minimum bend radius"
-                  value={inputs.gpsMinBendRadius}
-                  onChange={set('gpsMinBendRadius')}
-                  min={5}
-                  max={50}
+                  label="Length"
+                  value={inputs.electronicsLength}
+                  onChange={set('electronicsLength')}
+                  min={30}
+                  max={150}
                   step={1}
                   unit="mm"
                 />
-              </div>
-            </details>
+                <SliderInput
+                  label="Fixed bend radius"
+                  value={inputs.electronicsBendRadius}
+                  onChange={set('electronicsBendRadius')}
+                  min={20}
+                  max={120}
+                  step={10}
+                  unit="mm"
+                  hint="Higher = straighter arc, length stays fixed"
+                />
+                <SliderInput
+                  label="Thickness"
+                  value={inputs.electronicsThickness}
+                  onChange={set('electronicsThickness')}
+                  min={4}
+                  max={25}
+                  step={0.5}
+                  unit="mm"
+                />
+                <SliderInput
+                  label="Body rotation vs neck"
+                  value={inputs.electronicsBodyRotationDeg}
+                  onChange={set('electronicsBodyRotationDeg')}
+                  min={-35}
+                  max={35}
+                  step={1}
+                  unit="°"
+                  hint="Rigid body angle relative to neck tangent at anchor"
+                />
+                <SliderInput
+                  label="Rotation from trachea"
+                  value={inputs.electronicsPlacementS}
+                  onChange={set('electronicsPlacementS')}
+                  min={-200}
+                  max={200}
+                  step={1}
+                  unit="mm"
+                  hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
+                />
+                {onOptimizePlacement && (
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={onOptimizePlacement}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+                    >
+                      <RotateCw className="h-4 w-4" />
+                      Re-run auto-fit
+                    </button>
+                    {optimizeMessage && (
+                      <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
+                    )}
+                    <p className="text-[10px] text-gray-400 leading-snug">
+                      Runs automatically on load and when the neck profile changes.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {hardwareSection === 'gps' && (
+              <>
+                <p className="text-[10px] text-gray-500 leading-snug">
+                  Semi-flexible GPS/antenna segment attached to the electronics exit.
+                </p>
+                <SliderInput
+                  label="Length"
+                  value={inputs.gpsAntennaLength}
+                  onChange={set('gpsAntennaLength')}
+                  min={20}
+                  max={120}
+                  step={1}
+                  unit="mm"
+                />
+                <SliderInput
+                  label="Thickness"
+                  value={inputs.gpsAntennaThickness}
+                  onChange={set('gpsAntennaThickness')}
+                  min={3}
+                  max={20}
+                  step={0.5}
+                  unit="mm"
+                />
+                <SliderInput
+                  label="Stiffness"
+                  value={inputs.gpsAntennaStiffness}
+                  onChange={set('gpsAntennaStiffness')}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  hint="0 = fully flexible, 1 = rigid"
+                />
+
+                <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                  <summary className="text-xs font-medium text-gray-600 cursor-pointer select-none">
+                    Advanced
+                  </summary>
+                  <div className="space-y-3 mt-3 pt-2 border-t border-gray-200">
+                    <SliderInput
+                      label="Young's modulus (relative)"
+                      value={inputs.gpsAntennaYoungsModulus}
+                      onChange={set('gpsAntennaYoungsModulus')}
+                      min={0.5}
+                      max={10}
+                      step={0.1}
+                    />
+                    <NumberInput
+                      label="Minimum bend radius"
+                      value={inputs.gpsMinBendRadius}
+                      onChange={set('gpsMinBendRadius')}
+                      min={5}
+                      max={50}
+                      step={1}
+                      unit="mm"
+                    />
+                  </div>
+                </details>
+              </>
+            )}
           </>
         )}
 
