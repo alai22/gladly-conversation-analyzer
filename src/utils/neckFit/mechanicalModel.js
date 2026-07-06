@@ -172,51 +172,49 @@ function buildGpsPathAttached(
   if (length <= 0) return [attachPoint];
 
   const minStandoff = Math.max(clearanceOffset, gpsThickness / 2);
+  const samples = Math.max(20, Math.ceil(length / 2));
   const result = [attachPoint];
 
-  // Phase 1: hold exit tangent, but stop before crossing into neck volume
-  const straightMax = length * (0.06 + factor * 0.3);
-  let straightUsed = 0;
-  const straightSteps = Math.max(4, Math.ceil(straightMax / 2));
-  for (let i = 1; i <= straightSteps; i++) {
-    const d = (straightMax * i) / straightSteps;
-    const pt = {
-      x: attachPoint.x + attachTangent.x * d,
-      y: attachPoint.y + attachTangent.y * d,
-    };
-    if (intrudesNeck(pt, neckPoints, minStandoff)) break;
-    result.push(pt);
-    straightUsed = d;
-  }
-
-  const remaining = length - straightUsed;
-  if (remaining <= 0.01) return result;
-
-  // Phase 2: wrap along seating path (outside neck); optional soft blend near junction
-  const flexBlendZone = (1 - factor) * Math.min(remaining * 0.35, 12);
-  const samples = Math.max(18, Math.ceil(remaining / 2));
+  // Hold exit tangent before bending toward neck — keeps junction collinear with electronics.
+  const tangentRun = length * (0.06 + factor * 0.3);
+  const bendLength = Math.max(length - tangentRun, length * 0.05);
 
   for (let i = 1; i <= samples; i++) {
-    const s = straightUsed + (remaining * i) / samples;
+    const t = i / samples;
+    const s = length * t;
+    const straightPt = {
+      x: attachPoint.x + attachTangent.x * s,
+      y: attachPoint.y + attachTangent.y * s,
+    };
     const idealPt = getPointAtS(table, sIdealStart + s);
-    let pt = idealPt;
 
-    if (flexBlendZone > 0 && s - straightUsed < flexBlendZone) {
-      const straightPt = {
-        x: attachPoint.x + attachTangent.x * s,
-        y: attachPoint.y + attachTangent.y * s,
-      };
-      const u = (s - straightUsed) / flexBlendZone;
-      const blend = u * u * (3 - 2 * u);
-      const candidate = lerpPoint(straightPt, idealPt, blend);
-      if (!intrudesNeck(candidate, neckPoints, minStandoff)) {
-        pt = candidate;
+    let blend = 0;
+    if (s > tangentRun && bendLength > 0) {
+      const u = Math.min(1, (s - tangentRun) / bendLength);
+      blend = (1 - factor) * u * u * (3 - 2 * u);
+    }
+
+    let pt = lerpPoint(straightPt, idealPt, blend);
+
+    if (intrudesNeck(pt, neckPoints, minStandoff)) {
+      if (s <= tangentRun) {
+        // Preserve collinearity during run-out; never snap to seating path here.
+        pt = straightPt;
+      } else {
+        // After run-out, drape onto seating path (physical contact surface).
+        pt = idealPt;
+      }
+    } else if (s > tangentRun && blend > 0) {
+      // Pull semi-flex GPS toward seating path so it maintains neck contact when draping.
+      const contactPull = (1 - factor) * Math.min(1, blend * 1.25);
+      if (contactPull > 0) {
+        const draped = lerpPoint(pt, idealPt, contactPull);
+        if (!intrudesNeck(draped, neckPoints, minStandoff)) {
+          pt = draped;
+        }
       }
     }
 
-    if (intrudesNeck(pt, neckPoints, minStandoff)) {
-      pt = idealPt;
-    }
     result.push(pt);
   }
 
@@ -526,6 +524,12 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   if (gpsLen > 0 && minGpsBendRadius < inputs.gpsMinBendRadius) {
     warnings.push(
       `GPS/antenna bend radius (${minGpsBendRadius.toFixed(1)} mm) is below minimum (${inputs.gpsMinBendRadius} mm).`
+    );
+  }
+
+  if (elecLen > 0 && gpsLen > 0 && junctionAngleDeg > 3) {
+    warnings.push(
+      `Electronics→GPS junction is not collinear (${junctionAngleDeg.toFixed(1)}°) — check placement or stiffness.`
     );
   }
 
