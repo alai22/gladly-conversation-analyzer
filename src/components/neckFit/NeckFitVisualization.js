@@ -133,7 +133,7 @@ const NeckFitVisualization = ({
               Silver stub = static contact tip (to neck skin, max{' '}
               {staticContactTipLength?.toFixed(0) ?? 45} mm)
             </li>
-            <li>Green/red pads = hardware contact samples (must stay outside neck)</li>
+            <li>Hardware settles inward from a far start until contact pads touch the neck</li>
           </ul>
         </details>
       </div>

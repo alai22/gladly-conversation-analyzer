@@ -99,7 +99,7 @@ const PlacementPanel = ({
         hint="Clockwise (+) or counter-clockwise (−); 0 = strap end at throat"
       />
       <p className="text-[10px] text-indigo-600/80 leading-snug">
-        Auto-fit runs on load. Re-run after changing dimensions or neck settings.
+        Auto-fit runs on load. Hardware starts away from the neck and settles inward until contact.
       </p>
     </div>
   );

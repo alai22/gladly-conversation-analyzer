@@ -149,6 +149,11 @@ const NeckFitResults = ({
             highlight={fitResult.maxGpsNeckGap > 5 ? 'bad' : undefined}
           />
           <DetailRow
+            label="Hardware settle inset"
+            value={`${fitResult.hardwareSettleInsetMm.toFixed(1)} mm`}
+            highlight={fitResult.hardwareSettleInsetMm <= 0 ? 'bad' : undefined}
+          />
+          <DetailRow
             label="Body rotation vs neck"
             value={`${(inputs.electronicsBodyRotationDeg ?? 0).toFixed(0)}°`}
           />

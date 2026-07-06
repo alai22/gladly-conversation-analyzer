@@ -2,8 +2,9 @@
  * Simplified mechanical fit model for Halo Collar 6 neck-fit exploration.
  *
  * Assembly model: Electronics and GPS/antenna are serially attached (parallel at
- * the junction). The strap closes the loop. Rigidity lifts hardware off the
- * neck — neck gaps are the primary output, not inter-component separation.
+ * the junction). The strap closes the loop. Angular placement is on the neck;
+ * hardware starts away from the skin and settles inward until contact (no fixed
+ * anchor standoff at the strap end).
  */
 
 import {
@@ -97,7 +98,7 @@ import {
  * @property {Point | null} junctionPoint electronics–GPS attachment
  * @property {Point[]} staticContactPath static feedback tip (strap-side end of electronics)
  * @property {Point | null} staticContactTipPoint tip endpoint toward neck
- * @property {number} staticContactTipLength mm max probe length used
+ * @property {number} hardwareSettleInsetMm mm hardware moved inward from far start to contact
  * @property {ContactPad[]} contactPads sampled hardware–neck clearance probes
  * @property {number} contactPadViolations count of pads with negative neck clearance
  * @property {Point} tracheaPoint throat / ground side of neck
@@ -108,6 +109,10 @@ import {
 export const MIN_STRAP_LENGTH = 30; // mm manufacturability minimum
 export const STATIC_CONTACT_TIP_LENGTH = 45; // mm default perpendicular probe for static feedback
 export const STATIC_CONTACT_TIP_THICKNESS = 4; // mm visual stroke width
+const SETTLE_START_EXTRA_MM = 10; // mm beyond thickness-aware standoff before settling inward
+const SETTLE_STEP_MM = 0.5;
+const SETTLE_MAX_INSET_MM = 45;
+const SETTLE_CONTACT_THRESHOLD_MM = 0.25;
 
 export const DEFAULT_FIT_INPUTS = {
   neckCircumference: 350,
@@ -129,6 +134,105 @@ export const DEFAULT_FIT_INPUTS = {
 
 function gpsStiffnessFactor(stiffness) {
   return Math.max(0, Math.min(1, stiffness));
+}
+
+function normalizeVec(v) {
+  const len = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / len, y: v.y / len };
+}
+
+function translatePath(path, dx, dy) {
+  return path.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+}
+
+/**
+ * Far-start anchor: angular position from seating path, radially outside the neck.
+ * @param {Point} seatPt on clearance/seating loop (placement angle only)
+ * @param {Point} neckCenter
+ * @param {number} clearanceOffset mm
+ * @param {number} halfThickness mm
+ * @param {number} extraStandoff mm beyond valid centerline standoff
+ */
+function hardwareFarStartAnchor(seatPt, neckCenter, clearanceOffset, halfThickness, extraStandoff) {
+  const inward = normalizeVec({
+    x: neckCenter.x - seatPt.x,
+    y: neckCenter.y - seatPt.y,
+  });
+  const outward = { x: -inward.x, y: -inward.y };
+  const neckPt = {
+    x: seatPt.x - inward.x * clearanceOffset,
+    y: seatPt.y - inward.y * clearanceOffset,
+  };
+  const standoff = clearanceOffset + halfThickness + extraStandoff;
+  return {
+    start: {
+      x: neckPt.x + outward.x * standoff,
+      y: neckPt.y + outward.y * standoff,
+    },
+    inward,
+  };
+}
+
+/**
+ * Move electronics + GPS inward together until contact or penetration.
+ * @param {Point[]} electronicsPath
+ * @param {Point[]} gpsPath
+ * @param {Point[]} neckPoints
+ * @param {{ electronics: number, gps: number }} halfThicknesses
+ * @param {Point} inward unit vector toward neck
+ * @param {ReturnType<typeof buildArcLengthTable>} seatingTable
+ */
+function settleHardwareTowardNeck(
+  electronicsPath,
+  gpsPath,
+  neckPoints,
+  halfThicknesses,
+  inward,
+  seatingTable
+) {
+  const hasElec = electronicsPath.length >= 2;
+  const hasGps = gpsPath.length >= 2;
+  if (!hasElec && !hasGps) {
+    return { electronicsPath, gpsPath, insetMm: 0, minNeckClearance: Infinity };
+  }
+
+  let bestElec = electronicsPath;
+  let bestGps = gpsPath;
+  let insetMm = 0;
+  let minNeckClearance = Infinity;
+
+  for (let inset = SETTLE_STEP_MM; inset <= SETTLE_MAX_INSET_MM; inset += SETTLE_STEP_MM) {
+    const dx = inward.x * inset;
+    const dy = inward.y * inset;
+    const trialElec = hasElec ? translatePath(electronicsPath, dx, dy) : electronicsPath;
+    const trialGps = hasGps ? translatePath(gpsPath, dx, dy) : gpsPath;
+    const pads = analyzeContactPads(
+      [
+        ...(hasElec
+          ? [{ path: trialElec, halfThickness: halfThicknesses.electronics, segment: 'electronics' }]
+          : []),
+        ...(hasGps
+          ? [{ path: trialGps, halfThickness: halfThicknesses.gps, segment: 'gpsAntenna' }]
+          : []),
+      ],
+      seatingTable,
+      neckPoints
+    );
+    if (pads.some((p) => !p.valid)) break;
+
+    bestElec = trialElec;
+    bestGps = trialGps;
+    insetMm = inset;
+    minNeckClearance = Math.min(...pads.map((p) => p.neckClearance));
+    if (minNeckClearance <= SETTLE_CONTACT_THRESHOLD_MM) break;
+  }
+
+  return {
+    electronicsPath: bestElec,
+    gpsPath: bestGps,
+    insetMm,
+    minNeckClearance,
+  };
 }
 
 /**
@@ -354,32 +458,27 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   const sStrapStart = sIdealGpsEnd;
   const sStrapEnd = sElecStart;
 
-  // Rigid electronics — anchor on neck path, orientation from body rotation (not neck tangent alone)
-  const elecStart = getPointAtS(table, sElecStart);
+  // Angular placement on seating loop; radial start is outside neck, then settle inward.
+  const seatPt = getPointAtS(table, sElecStart);
+  const neckCenter = polygonCentroid(neckPoints);
+  const elecHalf = inputs.electronicsThickness / 2;
+  const { start: elecStart, inward: settleInward } = hardwareFarStartAnchor(
+    seatPt,
+    neckCenter,
+    inputs.clearanceOffset,
+    elecHalf,
+    SETTLE_START_EXTRA_MM
+  );
   const neckHintTangent = getTangentAtS(table, sElecStart);
   const bodyRotationRad = ((inputs.electronicsBodyRotationDeg ?? 0) * Math.PI) / 180;
   const elecStartTangent = rotateVector(neckHintTangent, bodyRotationRad);
   const bendRadius = inputs.electronicsBendRadius ?? 40;
-  const electronicsPath =
+  let electronicsPath =
     elecLen > 0
       ? buildRigidArcPath(elecStart, elecStartTangent, elecLen, bendRadius, 16)
       : [elecStart];
-  const elecEnd = electronicsPath[electronicsPath.length - 1];
+  let elecEnd = electronicsPath[electronicsPath.length - 1];
   const elecEntryTangent = polylineEntryTangent(electronicsPath, elecStartTangent);
-  const neckCenter = polygonCentroid(neckPoints);
-  const staticContactTipLength = inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH;
-  const staticContactPath =
-    elecLen > 0
-      ? buildStaticContactToNeck(
-          elecStart,
-          elecEntryTangent,
-          staticContactTipLength,
-          neckPoints,
-          neckCenter
-        )
-      : [];
-  const staticContactTipPoint =
-    staticContactPath.length >= 2 ? staticContactPath[staticContactPath.length - 1] : null;
 
   const elecExitTangent = polylineExitTangent(
     electronicsPath,
@@ -387,7 +486,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   );
 
   // GPS attached at elecEnd, parallel at junction; rubber may bend toward neck
-  const gpsPath =
+  let gpsPath =
     gpsLen > 0
       ? buildGpsPathAttached(
           elecEnd,
@@ -401,7 +500,36 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
           inputs.gpsAntennaThickness
         )
       : [elecEnd];
-  const gpsEnd = gpsPath[gpsPath.length - 1];
+
+  const settled = settleHardwareTowardNeck(
+    electronicsPath,
+    gpsPath,
+    neckPoints,
+    { electronics: elecHalf, gps: inputs.gpsAntennaThickness / 2 },
+    settleInward,
+    table
+  );
+  electronicsPath = settled.electronicsPath;
+  gpsPath = settled.gpsPath;
+  const hardwareSettleInsetMm = settled.insetMm;
+
+  elecEnd = electronicsPath[electronicsPath.length - 1];
+  const settledElecStart = electronicsPath[0];
+  const staticContactTipLength = inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH;
+  const staticContactPath =
+    elecLen > 0
+      ? buildStaticContactToNeck(
+          settledElecStart,
+          elecEntryTangent,
+          staticContactTipLength,
+          neckPoints,
+          neckCenter
+        )
+      : [];
+  const staticContactTipPoint =
+    staticContactPath.length >= 2 ? staticContactPath[staticContactPath.length - 1] : null;
+
+  let gpsEnd = gpsPath[gpsPath.length - 1];
 
   // Junction parallelism at electronics→GPS (parallel by construction when GPS is stiff)
   let junctionAngleDeg = 0;
@@ -416,12 +544,12 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
 
   const { maxCurvature: maxGpsCurvature, minBendRadius: minGpsBendRadius } = computeCurvature(gpsPath);
 
-  // Strap closes loop: GPS exit → neck contour → electronics entry
+  // Strap closes loop: GPS exit → neck contour → electronics entry (settled endpoints)
   const offsetStrap = extractPathSegment(table, sStrapStart, sStrapEnd, 40);
   const strapPath =
     offsetStrap.length > 0
-      ? [gpsEnd, ...offsetStrap.slice(1, -1), elecStart]
-      : [gpsEnd, elecStart];
+      ? [gpsEnd, ...offsetStrap.slice(1, -1), settledElecStart]
+      : [gpsEnd, settledElecStart];
 
   const strapLength = collarPathLength + inputs.slack - elecLen - gpsLen;
 
@@ -584,6 +712,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
     staticContactPath,
     staticContactTipPoint,
     staticContactTipLength,
+    hardwareSettleInsetMm,
     contactPads,
     contactPadViolations,
     tracheaPoint: trachea.point,
@@ -747,6 +876,7 @@ export function generateFitReport(result, inputs, profileName) {
     `Electronics length: ${inputs.electronicsLength.toFixed(1)} mm (rigid arc)`,
     `Static contact tip: ${(inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH).toFixed(1)} mm (perpendicular, strap-side end)`,
     `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
+    `Hardware settle inset: ${result.hardwareSettleInsetMm.toFixed(1)} mm (far start → contact)`,
     `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
     `Strap length (calculated): ${result.strapLength.toFixed(1)} mm`,
     `Slack: ${inputs.slack.toFixed(1)} mm`,
