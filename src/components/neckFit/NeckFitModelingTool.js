@@ -65,11 +65,10 @@ const NeckFitModelingTool = () => {
   );
 
   // Re-fit placement when the neck profile changes (initial load, profile switch, image upload).
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on profile id only
   useEffect(() => {
     if (!activeProfile?.points?.length) return;
     applyOptimizedPlacement(activeProfile.points, inputsRef.current);
-  }, [activeProfile?.id, applyOptimizedPlacement]);
+  }, [activeProfile, applyOptimizedPlacement]);
 
   const handleImageUpload = useCallback(async (file) => {
     setImageLoading(true);
