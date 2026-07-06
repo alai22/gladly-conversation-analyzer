@@ -27,6 +27,7 @@ const NeckFitModelingTool = () => {
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState(null);
   const [optimizeMessage, setOptimizeMessage] = useState(null);
+  const [controlsTab, setControlsTab] = useState('neck');
 
   const activeProfile = useMemo(() => {
     if (customProfile && profileId === customProfile.id) return customProfile;
@@ -118,6 +119,8 @@ const NeckFitModelingTool = () => {
               onSmoothingChange={setSmoothing}
               onOptimizePlacement={handleOptimizePlacement}
               optimizeMessage={optimizeMessage}
+              activeTab={controlsTab}
+              onActiveTabChange={setControlsTab}
             />
           </div>
 
@@ -128,6 +131,9 @@ const NeckFitModelingTool = () => {
               showGaps={showGaps}
               showCurvature={showCurvature}
               showPressure={showPressure}
+              onShowGapsChange={setShowGaps}
+              onShowCurvatureChange={setShowCurvature}
+              onShowPressureChange={setShowPressure}
             />
           </div>
 
@@ -138,12 +144,6 @@ const NeckFitModelingTool = () => {
               fitResult={fitResult}
               inputs={inputs}
               profileName={activeProfile?.name || ''}
-              showGaps={showGaps}
-              onShowGapsChange={setShowGaps}
-              showCurvature={showCurvature}
-              onShowCurvatureChange={setShowCurvature}
-              showPressure={showPressure}
-              onShowPressureChange={setShowPressure}
               onExportSvg={handleExportSvg}
               onExportReport={handleExportReport}
             />

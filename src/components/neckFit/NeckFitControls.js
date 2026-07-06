@@ -2,6 +2,12 @@ import React, { useRef } from 'react';
 import { Upload, ImageIcon, RotateCw } from 'lucide-react';
 import { SAMPLE_PROFILES } from '../../utils/neckFit/sampleProfiles';
 
+const TABS = [
+  { id: 'neck', label: 'Neck', hint: 'Profile shape and clearance from skin' },
+  { id: 'hardware', label: 'Hardware', hint: 'Rigid enclosure + semi-flex GPS' },
+  { id: 'strap', label: 'Strap', hint: 'Flexible strap that closes the loop' },
+];
+
 const SliderInput = ({ label, value, onChange, min, max, step, unit, hint }) => (
   <div className="space-y-1">
     <div className="flex justify-between items-baseline">
@@ -42,13 +48,6 @@ const NumberInput = ({ label, value, onChange, min, max, step, unit }) => (
   </div>
 );
 
-const Section = ({ title, children }) => (
-  <div className="space-y-3">
-    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</h4>
-    {children}
-  </div>
-);
-
 const NeckFitControls = ({
   profileId,
   onProfileChange,
@@ -62,221 +61,262 @@ const NeckFitControls = ({
   onSmoothingChange,
   onOptimizePlacement,
   optimizeMessage,
+  activeTab,
+  onActiveTabChange,
 }) => {
   const fileRef = useRef(null);
-
   const set = (key) => (val) => onInputChange({ ...inputs, [key]: val });
+  const tabHint = TABS.find((t) => t.id === activeTab)?.hint ?? '';
 
   return (
-    <div className="space-y-5 overflow-y-auto max-h-[calc(100vh-220px)] pr-1">
-      <Section title="Neck Profile">
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-gray-700">Built-in profile</label>
-          <select
-            value={profileId}
-            onChange={(e) => onProfileChange(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500"
-          >
-            {SAMPLE_PROFILES.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-            {customProfile && (
-              <option value={customProfile.id}>{customProfile.name} (uploaded)</option>
-            )}
-          </select>
-        </div>
-
-        <div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onImageUpload(file);
-              e.target.value = '';
-            }}
-          />
+    <div className="space-y-3">
+      <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+        {TABS.map((tab) => (
           <button
+            key={tab.id}
             type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={imageLoading}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-md hover:border-indigo-400 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+            onClick={() => onActiveTabChange(tab.id)}
+            className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeTab === tab.id
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
-            {imageLoading ? (
-              <span className="text-gray-500">Processing image…</span>
-            ) : (
-              <>
-                <Upload className="h-4 w-4 text-gray-500" />
-                <span>Upload neck cross-section</span>
-              </>
-            )}
+            {tab.label}
           </button>
-          {imageError && <p className="text-xs text-red-600 mt-1">{imageError}</p>}
-          {customProfile && profileId === customProfile.id && (
-            <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
-              <ImageIcon className="h-3 w-3" />
-              Image-derived contour active
-            </p>
-          )}
-        </div>
+        ))}
+      </div>
+      {tabHint && <p className="text-[10px] text-gray-500 leading-snug">{tabHint}</p>}
 
-        <SliderInput
-          label="Neck circumference"
-          value={inputs.neckCircumference}
-          onChange={set('neckCircumference')}
-          min={200}
-          max={600}
-          step={1}
-          unit="mm"
-        />
-        <SliderInput
-          label="Profile smoothing"
-          value={smoothing}
-          onChange={onSmoothingChange}
-          min={0}
-          max={1}
-          step={0.05}
-          hint="Higher = smoother outline"
-        />
-        <SliderInput
-          label="Collar clearance offset"
-          value={inputs.clearanceOffset}
-          onChange={set('clearanceOffset')}
-          min={2}
-          max={25}
-          step={0.5}
-          unit="mm"
-        />
-      </Section>
+      <div className="space-y-4">
+        {activeTab === 'neck' && (
+          <>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-gray-700">Built-in profile</label>
+              <select
+                value={profileId}
+                onChange={(e) => onProfileChange(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500"
+              >
+                {SAMPLE_PROFILES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+                {customProfile && (
+                  <option value={customProfile.id}>{customProfile.name} (uploaded)</option>
+                )}
+              </select>
+            </div>
 
-      <Section title="Electronics Enclosure (Rigid)">
-        <SliderInput
-          label="Length"
-          value={inputs.electronicsLength}
-          onChange={set('electronicsLength')}
-          min={30}
-          max={150}
-          step={1}
-          unit="mm"
-        />
-        <SliderInput
-          label="Fixed bend radius"
-          value={inputs.electronicsBendRadius}
-          onChange={set('electronicsBendRadius')}
-          min={10}
-          max={1000}
-          step={10}
-          unit="mm"
-          hint="Rigid arc curvature — higher = straighter, length stays fixed"
-        />
-        <SliderInput
-          label="Thickness"
-          value={inputs.electronicsThickness}
-          onChange={set('electronicsThickness')}
-          min={4}
-          max={25}
-          step={0.5}
-          unit="mm"
-        />
-        <SliderInput
-          label="Rotation from trachea"
-          value={inputs.electronicsPlacementS}
-          onChange={set('electronicsPlacementS')}
-          min={-200}
-          max={200}
-          step={1}
-          unit="mm"
-          hint="Clockwise (+) rotates hardware around neck; 0 = strap end at throat"
-        />
-        {onOptimizePlacement && (
-          <div className="space-y-1">
-            <button
-              type="button"
-              onClick={onOptimizePlacement}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
-            >
-              <RotateCw className="h-4 w-4" />
-              Auto-fit rotation
-            </button>
-            {optimizeMessage && (
-              <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
-            )}
-          </div>
+            <div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onImageUpload(file);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={imageLoading}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-md hover:border-indigo-400 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+              >
+                {imageLoading ? (
+                  <span className="text-gray-500">Processing image…</span>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 text-gray-500" />
+                    <span>Upload neck cross-section</span>
+                  </>
+                )}
+              </button>
+              {imageError && <p className="text-xs text-red-600 mt-1">{imageError}</p>}
+              {customProfile && profileId === customProfile.id && (
+                <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                  <ImageIcon className="h-3 w-3" />
+                  Image-derived contour active
+                </p>
+              )}
+            </div>
+
+            <SliderInput
+              label="Neck circumference"
+              value={inputs.neckCircumference}
+              onChange={set('neckCircumference')}
+              min={200}
+              max={600}
+              step={1}
+              unit="mm"
+            />
+            <SliderInput
+              label="Profile smoothing"
+              value={smoothing}
+              onChange={onSmoothingChange}
+              min={0}
+              max={1}
+              step={0.05}
+              hint="Higher = smoother outline"
+            />
+            <SliderInput
+              label="Collar clearance offset"
+              value={inputs.clearanceOffset}
+              onChange={set('clearanceOffset')}
+              min={2}
+              max={25}
+              step={0.5}
+              unit="mm"
+              hint="Distance from neck skin to target seating path"
+            />
+          </>
         )}
-      </Section>
 
-      <Section title="GPS / Antenna (Semi-Flexible)">
-        <SliderInput
-          label="Length"
-          value={inputs.gpsAntennaLength}
-          onChange={set('gpsAntennaLength')}
-          min={20}
-          max={120}
-          step={1}
-          unit="mm"
-        />
-        <SliderInput
-          label="Thickness"
-          value={inputs.gpsAntennaThickness}
-          onChange={set('gpsAntennaThickness')}
-          min={3}
-          max={20}
-          step={0.5}
-          unit="mm"
-        />
-        <SliderInput
-          label="Stiffness"
-          value={inputs.gpsAntennaStiffness}
-          onChange={set('gpsAntennaStiffness')}
-          min={0}
-          max={1}
-          step={0.05}
-          hint="0 = fully flexible, 1 = rigid"
-        />
-        <SliderInput
-          label="Young's modulus (relative)"
-          value={inputs.gpsAntennaYoungsModulus}
-          onChange={set('gpsAntennaYoungsModulus')}
-          min={0.5}
-          max={10}
-          step={0.1}
-        />
-        <NumberInput
-          label="Minimum bend radius"
-          value={inputs.gpsMinBendRadius}
-          onChange={set('gpsMinBendRadius')}
-          min={5}
-          max={50}
-          step={1}
-          unit="mm"
-        />
-      </Section>
+        {activeTab === 'hardware' && (
+          <>
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              Electronics (Rigid)
+            </p>
+            <SliderInput
+              label="Length"
+              value={inputs.electronicsLength}
+              onChange={set('electronicsLength')}
+              min={30}
+              max={150}
+              step={1}
+              unit="mm"
+            />
+            <SliderInput
+              label="Fixed bend radius"
+              value={inputs.electronicsBendRadius}
+              onChange={set('electronicsBendRadius')}
+              min={20}
+              max={120}
+              step={10}
+              unit="mm"
+              hint="Higher = straighter arc, length stays fixed"
+            />
+            <SliderInput
+              label="Thickness"
+              value={inputs.electronicsThickness}
+              onChange={set('electronicsThickness')}
+              min={4}
+              max={25}
+              step={0.5}
+              unit="mm"
+            />
+            <SliderInput
+              label="Rotation from trachea"
+              value={inputs.electronicsPlacementS}
+              onChange={set('electronicsPlacementS')}
+              min={-200}
+              max={200}
+              step={1}
+              unit="mm"
+              hint="Clockwise (+) rotates hardware; 0 = strap end at throat"
+            />
+            {onOptimizePlacement && (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={onOptimizePlacement}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+                >
+                  <RotateCw className="h-4 w-4" />
+                  Auto-fit rotation
+                </button>
+                {optimizeMessage && (
+                  <p className="text-[10px] text-indigo-700 leading-snug">{optimizeMessage}</p>
+                )}
+              </div>
+            )}
 
-      <Section title="Strap (Fully Flexible)">
-        <SliderInput
-          label="Thickness"
-          value={inputs.strapThickness}
-          onChange={set('strapThickness')}
-          min={2}
-          max={12}
-          step={0.5}
-          unit="mm"
-        />
-        <SliderInput
-          label="Slack"
-          value={inputs.slack}
-          onChange={set('slack')}
-          min={0}
-          max={30}
-          step={0.5}
-          unit="mm"
-          hint="Extra loop length beyond tight fit"
-        />
-      </Section>
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide pt-1">
+              GPS / Antenna (Semi-Flexible)
+            </p>
+            <SliderInput
+              label="Length"
+              value={inputs.gpsAntennaLength}
+              onChange={set('gpsAntennaLength')}
+              min={20}
+              max={120}
+              step={1}
+              unit="mm"
+            />
+            <SliderInput
+              label="Thickness"
+              value={inputs.gpsAntennaThickness}
+              onChange={set('gpsAntennaThickness')}
+              min={3}
+              max={20}
+              step={0.5}
+              unit="mm"
+            />
+            <SliderInput
+              label="Stiffness"
+              value={inputs.gpsAntennaStiffness}
+              onChange={set('gpsAntennaStiffness')}
+              min={0}
+              max={1}
+              step={0.05}
+              hint="0 = fully flexible, 1 = rigid"
+            />
+
+            <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <summary className="text-xs font-medium text-gray-600 cursor-pointer select-none">
+                Advanced
+              </summary>
+              <div className="space-y-3 mt-3 pt-2 border-t border-gray-200">
+                <SliderInput
+                  label="Young's modulus (relative)"
+                  value={inputs.gpsAntennaYoungsModulus}
+                  onChange={set('gpsAntennaYoungsModulus')}
+                  min={0.5}
+                  max={10}
+                  step={0.1}
+                />
+                <NumberInput
+                  label="Minimum bend radius"
+                  value={inputs.gpsMinBendRadius}
+                  onChange={set('gpsMinBendRadius')}
+                  min={5}
+                  max={50}
+                  step={1}
+                  unit="mm"
+                />
+              </div>
+            </details>
+          </>
+        )}
+
+        {activeTab === 'strap' && (
+          <>
+            <SliderInput
+              label="Thickness"
+              value={inputs.strapThickness}
+              onChange={set('strapThickness')}
+              min={2}
+              max={12}
+              step={0.5}
+              unit="mm"
+            />
+            <SliderInput
+              label="Slack"
+              value={inputs.slack}
+              onChange={set('slack')}
+              min={0}
+              max={30}
+              step={0.5}
+              unit="mm"
+              hint="Extra loop length beyond tight fit"
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 };

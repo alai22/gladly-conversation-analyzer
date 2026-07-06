@@ -94,7 +94,7 @@ export const DEFAULT_FIT_INPUTS = {
   electronicsLength: 60,
   electronicsThickness: 12,
   electronicsPlacementS: 0,
-  electronicsBendRadius: 200,
+  electronicsBendRadius: 40,
   gpsAntennaLength: 55,
   gpsAntennaThickness: 8,
   gpsAntennaStiffness: 0.7,
@@ -212,6 +212,8 @@ function analyzeNeckGaps(centerline, table, sampleEvery = 2) {
       indicators.push({
         x: (p.x + closest.point.x) / 2,
         y: (p.y + closest.point.y) / 2,
+        hardwarePoint: { x: p.x, y: p.y },
+        seatingPoint: { x: closest.point.x, y: closest.point.y },
         _gap: closest.distance,
       });
     }
@@ -276,7 +278,7 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
   // Rigid electronics — fixed-curvature arc (or straight when bend radius is large)
   const elecStart = getPointAtS(table, sElecStart);
   const elecStartTangent = getTangentAtS(table, sElecStart);
-  const bendRadius = inputs.electronicsBendRadius ?? 200;
+  const bendRadius = inputs.electronicsBendRadius ?? 40;
   const electronicsPath =
     elecLen > 0
       ? buildRigidArcPath(elecStart, elecStartTangent, elecLen, bendRadius, 16)
