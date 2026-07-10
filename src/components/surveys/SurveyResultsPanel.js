@@ -51,13 +51,6 @@ export default function SurveyResultsPanel({ surveyId, survey }) {
   }, [surveyId]);
 
   useEffect(() => {
-    if (tab === 'analysis' && !analysis && surveyId && !analysisLoading) {
-      runAnalysis();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, surveyId]);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, analysisLoading]);
 
@@ -109,6 +102,13 @@ export default function SurveyResultsPanel({ surveyId, survey }) {
     runAnalysis(q);
   };
 
+  const handleTabChange = (id) => {
+    setTab(id);
+    if (id === 'analysis' && !analysis && surveyId && !analysisLoading) {
+      runAnalysis();
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -132,7 +132,7 @@ export default function SurveyResultsPanel({ surveyId, survey }) {
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => handleTabChange(id)}
             className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg ${
               tab === id ? 'bg-halo-yellow text-halo-black font-medium' : 'text-gray-600 hover:bg-gray-100'
             }`}
