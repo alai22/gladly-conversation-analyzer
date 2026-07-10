@@ -33,6 +33,7 @@ from backend.api.routes.auth_routes import auth_bp
 from backend.api.routes.analytics_routes import analytics_bp
 from backend.api.routes.jira_routes import jira_bp
 from backend.api.routes.interview_routes import interview_bp
+from backend.api.routes.halo_survey_routes import halo_survey_bp
 
 # Import middleware
 from backend.api.middleware.error_handlers import register_error_handlers
@@ -122,6 +123,7 @@ def create_app():
     app.register_blueprint(analytics_bp)
     app.register_blueprint(jira_bp)
     app.register_blueprint(interview_bp)
+    app.register_blueprint(halo_survey_bp)
     
     # Register error handlers
     register_error_handlers(app)

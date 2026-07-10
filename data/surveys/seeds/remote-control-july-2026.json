@@ -1,0 +1,283 @@
+{
+  "survey_id": "00000000-0000-4000-8000-000000000001",
+  "slug": "remote-control-july-2026",
+  "title": "5-Button Remote Control Beta Feedback",
+  "description": "Gather thoughtful feedback from employees and professional partners to identify critical issues and improvements before testing with Halo Pack Members.",
+  "audience": "Halo Employees and Professional Partners",
+  "status": "draft",
+  "slug_locked": false,
+  "braze_url_template": "https://insight.halocollar.com/s/remote-control-july-2026?external_id={{${user_id}}}&utm_source=braze&utm_campaign=remote_july_2026",
+  "sections": [
+    {
+      "id": "eligibility",
+      "title": "Eligibility / Gating",
+      "questions": [
+        {
+          "id": "paired_remote",
+          "type": "single_choice",
+          "text": "Have you paired the new 5-button Remote Control to the Halo app?",
+          "required": true,
+          "options": ["Yes", "No"],
+          "end_if": {
+            "question_id": "paired_remote",
+            "operator": "equals",
+            "value": "No",
+            "message": "Please complete pairing first, then re-take this survey.",
+            "status": "ineligible"
+          }
+        },
+        {
+          "id": "phone_os",
+          "type": "single_choice",
+          "text": "What phone OS are you using?",
+          "required": true,
+          "options": ["iOS", "Android"]
+        },
+        {
+          "id": "collar_model",
+          "type": "single_choice",
+          "text": "Which collar model are you using for this test?",
+          "required": true,
+          "options": ["HC3", "HC4", "HC5"]
+        },
+        {
+          "id": "used_older_remote",
+          "type": "single_choice",
+          "text": "Have you used an older Halo remote before?",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "id": "testing_duration",
+          "type": "single_choice",
+          "text": "How long have you been testing the new 5-button Remote Control?",
+          "required": true,
+          "options": ["0–1 days", "2–3 days", "4–7 days", "8+ days"]
+        }
+      ]
+    },
+    {
+      "id": "pairing_connection",
+      "title": "Pairing & Connection",
+      "questions": [
+        {
+          "id": "pairing_reliability",
+          "type": "rating_with_text",
+          "text": "Pairing reliability",
+          "required": true,
+          "labels": { "min": "1 (Poor)", "max": "5 (Excellent)" },
+          "text_prompt": "Describe any pairing issues"
+        },
+        {
+          "id": "connection_reliability",
+          "type": "rating_with_text",
+          "text": "Connection reliability during use",
+          "required": true,
+          "labels": { "min": "1 (Poor)", "max": "5 (Excellent)" },
+          "text_prompt": "Describe disconnect scenarios"
+        }
+      ]
+    },
+    {
+      "id": "button_labeling",
+      "title": "Button Labeling Clarity",
+      "questions": [
+        {
+          "id": "button_123_clarity",
+          "type": "rating",
+          "text": "How clear is it what the \"1 / 2 / 3\" buttons do?",
+          "required": true,
+          "labels": { "min": "1 (Not clear)", "max": "5 (Very clear)" }
+        },
+        {
+          "id": "thought_123_buttons",
+          "type": "short_text",
+          "text": "Before reading any instructions, what did you think the \"1 / 2 / 3\" buttons did?",
+          "required": false,
+          "placeholder": "Your initial impression..."
+        },
+        {
+          "id": "thought_dot_button",
+          "type": "short_text",
+          "text": "Before reading any instructions, what did you think the dot button did?",
+          "required": false,
+          "placeholder": "Your initial impression..."
+        },
+        {
+          "id": "how_learned_buttons",
+          "type": "single_choice",
+          "text": "How did you learn what each button does (whistle, 1/2/3, dot)?",
+          "required": true,
+          "options": ["In-app", "Halo Customer Service (Dog Park)", "Someone told me", "Trial and error", "Still not sure"]
+        },
+        {
+          "id": "dot_button_preference",
+          "type": "single_choice",
+          "text": "What would you want the dot button to be set to?",
+          "required": true,
+          "options": ["Start/End Walk", "Pause/Resume fence feedback", "Other"]
+        },
+        {
+          "id": "button_expectation",
+          "type": "single_choice",
+          "text": "When you press a button, does it do what you expect?",
+          "required": true,
+          "options": ["Always", "Usually", "Sometimes", "Rarely", "Not tested"]
+        },
+        {
+          "id": "labeling_improvements",
+          "type": "long_text",
+          "text": "If you could change labeling/shape/placement to make any button clearer (whistle, 1/2/3, dot), what would you change?",
+          "required": false,
+          "placeholder": "Describe your suggested changes..."
+        }
+      ]
+    },
+    {
+      "id": "button_functional",
+      "title": "Button Functional Verification",
+      "questions": [
+        {
+          "id": "buttons_used_successfully",
+          "type": "multi_select",
+          "text": "Which buttons have you used successfully?",
+          "required": true,
+          "options": ["Whistle", "1", "2", "3", "Dot"]
+        },
+        {
+          "id": "buttons_not_working",
+          "type": "multi_select",
+          "text": "Any button not working as expected?",
+          "required": true,
+          "options": ["Whistle icon", "1", "2", "3", "Dot button", "None — everything worked as expected", "Other"]
+        },
+        {
+          "id": "button_issue_description",
+          "type": "short_text",
+          "text": "Briefly describe what happened.",
+          "required": false,
+          "placeholder": "What went wrong?",
+          "show_if": {
+            "question_id": "buttons_not_working",
+            "operator": "not_contains",
+            "value": "None — everything worked as expected"
+          }
+        },
+        {
+          "id": "previous_app_feedback",
+          "type": "single_choice",
+          "text": "Have you used Instant Feedback / Manual Feedback in the Halo app before?",
+          "required": true,
+          "options": ["Yes", "No"]
+        },
+        {
+          "id": "remote_vs_app_feedback",
+          "type": "single_choice",
+          "text": "Compared with using Instant Feedback / Manual Feedback in the app, how is using the new 5-button Remote Control to deliver feedback?",
+          "required": false,
+          "options": ["Much better", "Better", "About the same", "Worse", "Much worse"],
+          "show_if": {
+            "question_id": "previous_app_feedback",
+            "operator": "equals",
+            "value": "Yes"
+          }
+        }
+      ]
+    },
+    {
+      "id": "range_latency",
+      "title": "Range + Latency",
+      "questions": [
+        {
+          "id": "testing_environment",
+          "type": "single_choice",
+          "text": "Typical environment when testing",
+          "required": true,
+          "options": ["Home indoor", "Yard open", "Neighborhood streets", "Park/trails", "Farm / ranch", "Dense trees/brush"]
+        },
+        {
+          "id": "farthest_distance",
+          "type": "single_choice",
+          "text": "Farthest distance you believe it worked reliably",
+          "required": true,
+          "options": ["<25 ft", "25–50 ft", "50–100 ft", "100–200 ft", "200+ ft"]
+        },
+        {
+          "id": "response_time",
+          "type": "single_choice",
+          "text": "Perceived response time from button press to collar/dog response",
+          "required": true,
+          "options": ["<1 second", "1–2 seconds", "3+ seconds", "Unreliable"]
+        }
+      ]
+    },
+    {
+      "id": "ux_physical",
+      "title": "UX / Physical Product Feedback",
+      "questions": [
+        {
+          "id": "one_hand_comfort",
+          "type": "rating",
+          "text": "Comfort holding/using with one hand",
+          "required": true,
+          "labels": { "min": "1 (Poor)", "max": "5 (Excellent)" }
+        },
+        {
+          "id": "accidental_presses",
+          "type": "single_choice",
+          "text": "Accidental presses",
+          "required": true,
+          "options": ["Never", "Rarely", "Sometimes", "Often"]
+        },
+        {
+          "id": "accidental_press_causes",
+          "type": "multi_select",
+          "text": "What caused the accidental press?",
+          "required": false,
+          "options": [
+            "The remote was in my pocket or bag",
+            "My finger slipped onto the wrong button",
+            "I pressed a button while picking up or gripping the remote",
+            "Other"
+          ],
+          "show_if": {
+            "question_id": "accidental_presses",
+            "operator": "in",
+            "value": ["Rarely", "Sometimes", "Often"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "overall",
+      "title": "Overall + Recommendation",
+      "questions": [
+        {
+          "id": "bugs_issues",
+          "type": "long_text",
+          "text": "Did you encounter any bugs or issues? If yes, please describe what happened (what you were trying to do, what you expected, and what actually happened).",
+          "required": false,
+          "placeholder": "Describe any bugs or issues..."
+        },
+        {
+          "id": "overall_experience",
+          "type": "rating",
+          "text": "Overall experience",
+          "required": true,
+          "labels": { "min": "1 (Very poor)", "max": "5 (Excellent)" }
+        },
+        {
+          "id": "desired_improvements",
+          "type": "long_text",
+          "text": "What changes or improvements would you want?",
+          "required": false,
+          "placeholder": "Share your improvement ideas..."
+        }
+      ]
+    }
+  ],
+  "design_chat": [],
+  "created_at": "2026-07-01T00:00:00+00:00",
+  "updated_at": "2026-07-01T00:00:00+00:00",
+  "created_by": "seed"
+}

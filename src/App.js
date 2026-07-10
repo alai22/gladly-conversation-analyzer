@@ -18,12 +18,15 @@ import BugTriageCopilot from './components/BugTriageCopilot';
 import JiraStatusView from './components/JiraStatusView';
 import TextInterviewHub from './components/interview/TextInterviewHub';
 import InterviewParticipantPage from './components/interview/InterviewParticipantPage';
+import SurveyHub from './components/surveys/SurveyHub';
+import SurveyBuilder from './components/surveys/SurveyBuilder';
+import SurveyParticipantPage from './components/surveys/SurveyParticipantPage';
 import NeckFitModelingTool from './components/neckFit/NeckFitModelingTool';
 import { useAnalytics } from './hooks/useAnalytics';
 import axios from 'axios';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { getSurvicateDataSource } from './utils/constants';
-import { getModeFromPath, getPathFromMode, getRouteFromPath, isPathBasedMode, isInterviewParticipantPath, pathMatchesMode } from './utils/routes';
+import { getModeFromPath, getPathFromMode, getRouteFromPath, isPathBasedMode, isInterviewParticipantPath, isSurveyParticipantPath, getSurveyBuilderId, pathMatchesMode } from './utils/routes';
 
 // Configure axios to send credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
@@ -116,6 +119,7 @@ function App() {
   useEffect(() => {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
+    if (isSurveyParticipantPath(location.pathname)) return;
     // Legacy /churn?mode=survicate: do not strip query here; URL→mode effect migrates to /churn/ask
     if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
       return;
@@ -142,6 +146,7 @@ function App() {
   useEffect(() => {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
+    if (isSurveyParticipantPath(location.pathname)) return;
 
     const route = getRouteFromPath(location.pathname);
     const queryMode = searchParams.get('mode');
@@ -475,6 +480,11 @@ function App() {
   // Public participant interview — no Halo login required
   if (isInterviewParticipantPath(location.pathname)) {
     return <InterviewParticipantPage />;
+  }
+
+  // Public survey respondent — no Halo login required
+  if (isSurveyParticipantPath(location.pathname)) {
+    return <SurveyParticipantPage />;
   }
 
   // If not authenticated, show login screen
@@ -879,7 +889,7 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || currentMode === 'neck-fit-modeler' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || currentMode === 'halo-surveys' || currentMode === 'neck-fit-modeler' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {/* Show actual tool components when active */}
           {currentMode === 'bug-triage' ? (
             <BugTriageCopilot />
@@ -910,6 +920,12 @@ function App() {
             />
           ) : currentMode === 'text-interview' ? (
             <TextInterviewHub />
+          ) : currentMode === 'halo-surveys' ? (
+            getSurveyBuilderId(location.pathname) ? (
+              <SurveyBuilder surveyId={getSurveyBuilderId(location.pathname)} />
+            ) : (
+              <SurveyHub />
+            )
           ) : currentMode === 'neck-fit-modeler' ? (
             <NeckFitModelingTool />
           ) : currentMode === 'churn-trends' ? (
@@ -926,7 +942,7 @@ function App() {
         </div>
 
         {/* Prompt Input */}
-        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && currentMode !== 'neck-fit-modeler' && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && currentMode !== 'halo-surveys' && currentMode !== 'neck-fit-modeler' && (
           <div className="bg-white border-t border-gray-200 p-6">
             {/* Clear Conversation Button for Survicate Mode */}
             {currentMode === 'survicate' && conversations.survicate && conversations.survicate.length > 0 && (

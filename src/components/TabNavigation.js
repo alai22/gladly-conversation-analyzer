@@ -66,6 +66,15 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       borderColor: 'border-orange-200',
     },
     {
+      id: 'halo-surveys',
+      name: 'Halo Surveys',
+      description: 'Design and publish branded survey campaigns',
+      icon: ClipboardList,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+      borderColor: 'border-amber-200',
+    },
+    {
       id: 'text-interview',
       name: 'Text Interviews',
       description: 'Run structured text-based research interviews',

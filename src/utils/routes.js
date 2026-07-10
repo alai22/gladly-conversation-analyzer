@@ -26,6 +26,7 @@ export const PATH_TO_ROUTE = {
   '/platform/claude': { mode: 'tools', adminMode: 'claude' },
   '/jira': { mode: 'bug-triage', adminMode: null },
   '/interview': { mode: 'text-interview', adminMode: null },
+  '/surveys': { mode: 'halo-surveys', adminMode: null },
   '/hardware': { mode: 'neck-fit-modeler', adminMode: null },
   '/hardware/neck-fit': { mode: 'neck-fit-modeler', adminMode: null },
 };
@@ -36,6 +37,7 @@ export const MODE_TO_CANONICAL_PATH = {
   'survicate': '/churn/ask',
   'survey-manager': '/survicate',
   'text-interview': '/interview',
+  'halo-surveys': '/surveys',
   'conversation-trends': '/gladly',
   'tools': '/platform',
   'api-data-manager': '/platform/survicate-download',
@@ -52,6 +54,7 @@ export const PRODUCT_RESEARCH_MODES = [
   'survicate',
   'survey-manager',
   'text-interview',
+  'halo-surveys',
 ];
 
 /** Modes that belong to the Platform top-level tab */
@@ -73,6 +76,15 @@ export function isInterviewParticipantPath(pathname) {
   return pathname === '/interview/join' || pathname.startsWith('/interview/join/');
 }
 
+export function isSurveyParticipantPath(pathname) {
+  return /^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pathname);
+}
+
+export function getSurveyBuilderId(pathname) {
+  const match = pathname.match(/^\/surveys\/([0-9a-f-]{36})$/i);
+  return match ? match[1] : null;
+}
+
 /**
  * Resolve pathname to route config, including legacy redirects.
  * @param {string} pathname
@@ -81,6 +93,12 @@ export function isInterviewParticipantPath(pathname) {
 export function getRouteFromPath(pathname) {
   if (isInterviewParticipantPath(pathname)) {
     return { mode: 'interview-participant', adminMode: null };
+  }
+  if (isSurveyParticipantPath(pathname)) {
+    return { mode: 'survey-participant', adminMode: null };
+  }
+  if (getSurveyBuilderId(pathname)) {
+    return { mode: 'halo-surveys', adminMode: null };
   }
   if (LEGACY_PATH_REDIRECTS[pathname]) {
     return { redirect: LEGACY_PATH_REDIRECTS[pathname] };
