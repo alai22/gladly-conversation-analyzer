@@ -61,7 +61,8 @@ export function buildExportSvg({
   segments.forEach((seg) => {
     if (!seg.pathPoints.length) return;
     const color = SEGMENT_COLORS[seg.type];
-    svg += `<path class="segment" stroke="${color}" d="${pointsToSvgPath(seg.pathPoints, false)}" />`;
+    svg += `<path class="segment" stroke="${color}" stroke-width="${seg.thickness}" d="${pointsToSvgPath(seg.pathPoints, false)}" />`;
+    if (seg.type === 'gpsAntenna' && seg.part === 'junction') return;
     const mid = seg.pathPoints[Math.floor(seg.pathPoints.length / 2)];
     svg += `<text class="label" x="${mid.x}" y="${mid.y - 8}">${SEGMENT_LABELS[seg.type]}</text>`;
   });

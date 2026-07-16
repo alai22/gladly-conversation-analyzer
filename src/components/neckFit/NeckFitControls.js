@@ -321,13 +321,14 @@ const NeckFitControls = ({
                   unit="mm"
                 />
                 <SliderInput
-                  label="Thickness"
+                  label="Thickness (junction half)"
                   value={inputs.gpsAntennaThickness}
                   onChange={set('gpsAntennaThickness')}
                   min={3}
                   max={20}
                   step={0.5}
                   unit="mm"
+                  hint="Strap-side half is 2× this thickness"
                 />
                 <SliderInput
                   label="Stiffness"

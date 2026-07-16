@@ -228,8 +228,9 @@ const NeckFitVisualization = ({
           {segments.map((seg) => {
             if (!seg.pathPoints.length) return null;
             const color = SEGMENT_COLORS[seg.type];
+            const segKey = seg.part ? `${seg.type}-${seg.part}` : seg.type;
             return (
-              <g key={seg.type}>
+              <g key={segKey}>
                 <path
                   d={pointsToSvgPath(seg.pathPoints, false)}
                   fill="none"
@@ -305,6 +306,7 @@ const NeckFitVisualization = ({
 
           {segments.map((seg) => {
             if (!seg.pathPoints.length) return null;
+            if (seg.type === 'gpsAntenna' && seg.part === 'junction') return null;
             const mid = seg.pathPoints[Math.floor(seg.pathPoints.length / 2)];
             const c = polygonCentroid(fitResult.neckPoints);
             const dx = mid.x - c.x;
@@ -314,7 +316,7 @@ const NeckFitVisualization = ({
             const ly = mid.y + (dy / len) * (seg.thickness + 6);
             return (
               <text
-                key={`label-${seg.type}`}
+                key={`label-${seg.type}-${seg.part ?? 'full'}`}
                 x={lx}
                 y={ly}
                 textAnchor="middle"

@@ -441,6 +441,39 @@ export function polylineLength(points) {
   return len;
 }
 
+/** Thickness multiplier for the GPS half farthest from electronics. */
+export const GPS_STRAP_HALF_THICKNESS_FACTOR = 2;
+
+/**
+ * Split a polyline at a fraction of its arc length.
+ * @param {Point[]} path
+ * @param {number} [fraction=0.5]
+ * @returns {[Point[], Point[]]} [from start, toward end] — shares one join point
+ */
+export function splitPolylineAtArcLength(path, fraction = 0.5) {
+  if (path.length < 2) return [path, path.length ? [path[path.length - 1]] : []];
+  const total = polylineLength(path);
+  if (total <= 0) return [path, [path[path.length - 1]]];
+
+  const target = total * Math.max(0, Math.min(1, fraction));
+  if (target <= 0) return [[path[0]], path];
+  if (target >= total) return [path, [path[path.length - 1]]];
+
+  let acc = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+    if (acc + segLen >= target) {
+      const t = segLen > 0 ? (target - acc) / segLen : 0;
+      const mid = lerpPoint(a, b, t);
+      return [[...path.slice(0, i + 1), mid], [mid, ...path.slice(i + 1)]];
+    }
+    acc += segLen;
+  }
+  return [path, [path[path.length - 1]]];
+}
+
 /**
  * Resample closed polyline to N evenly spaced points by arc length.
  * @param {Point[]} points

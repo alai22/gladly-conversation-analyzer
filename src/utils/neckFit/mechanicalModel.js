@@ -33,6 +33,8 @@ import {
   RIGID_STRAIGHT_BEND_RADIUS,
   scaleProfileToPerimeter,
   smoothPolygon,
+  splitPolylineAtArcLength,
+  GPS_STRAP_HALF_THICKNESS_FACTOR,
 } from './geometry';
 
 /** @typedef {{ x: number, y: number }} Point */
@@ -65,6 +67,7 @@ import {
  * @property {number} startS
  * @property {number} endS
  * @property {Point[]} pathPoints
+ * @property {'junction' | 'strap'} [part] GPS half — junction = near electronics, strap = far end
  */
 
 /** @typedef {Object} ContactPad
@@ -178,7 +181,8 @@ function hardwareFarStartAnchor(seatPt, neckCenter, clearanceOffset, halfThickne
  * @param {Point[]} electronicsPath
  * @param {Point[]} gpsPath
  * @param {Point[]} neckPoints
- * @param {{ electronics: number, gps: number }} halfThicknesses
+ * @param {{ electronics: number, gps: number }} halfThicknesses max half-thickness for settle conservatism (electronics)
+ * @param {number} gpsBaseThickness mm at GPS junction half (strap half uses 2×)
  * @param {Point} inward unit vector toward neck
  * @param {ReturnType<typeof buildArcLengthTable>} seatingTable
  */
@@ -187,6 +191,7 @@ function settleHardwareTowardNeck(
   gpsPath,
   neckPoints,
   halfThicknesses,
+  gpsBaseThickness,
   inward,
   seatingTable
 ) {
@@ -211,9 +216,7 @@ function settleHardwareTowardNeck(
         ...(hasElec
           ? [{ path: trialElec, halfThickness: halfThicknesses.electronics, segment: 'electronics' }]
           : []),
-        ...(hasGps
-          ? [{ path: trialGps, halfThickness: halfThicknesses.gps, segment: 'gpsAntenna' }]
-          : []),
+        ...(hasGps ? gpsContactPadSegments(trialGps, gpsBaseThickness) : []),
       ],
       seatingTable,
       neckPoints
@@ -405,6 +408,60 @@ function analyzeContactPads(segments, seatingTable, neckPoints, sampleSpacing = 
 }
 
 /**
+ * @param {Point[]} gpsPath
+ * @param {number} gpsLen
+ * @param {number} baseThickness mm at electronics junction half
+ * @param {number} stiffness
+ * @param {number} sIdealStart
+ * @param {number} sIdealEnd
+ * @returns {CollarSegment[]}
+ */
+function buildGpsCollarSegments(gpsPath, gpsLen, baseThickness, stiffness, sIdealStart, sIdealEnd) {
+  if (gpsLen <= 0 || gpsPath.length < 2) return [];
+  const [junctionHalf, strapHalf] = splitPolylineAtArcLength(gpsPath, 0.5);
+  const halfLen = gpsLen / 2;
+  const midS = sIdealStart + halfLen;
+  return [
+    {
+      type: 'gpsAntenna',
+      part: 'junction',
+      length: halfLen,
+      thickness: baseThickness,
+      stiffness,
+      startS: sIdealStart,
+      endS: midS,
+      pathPoints: junctionHalf,
+    },
+    {
+      type: 'gpsAntenna',
+      part: 'strap',
+      length: halfLen,
+      thickness: baseThickness * GPS_STRAP_HALF_THICKNESS_FACTOR,
+      stiffness,
+      startS: midS,
+      endS: sIdealEnd,
+      pathPoints: strapHalf,
+    },
+  ];
+}
+
+/**
+ * Contact-pad segments for GPS with half-length thickness taper.
+ */
+function gpsContactPadSegments(gpsPath, baseThickness) {
+  if (gpsPath.length < 2) return [];
+  const [junctionHalf, strapHalf] = splitPolylineAtArcLength(gpsPath, 0.5);
+  return [
+    { path: junctionHalf, halfThickness: baseThickness / 2, segment: 'gpsAntenna' },
+    {
+      path: strapHalf,
+      halfThickness: (baseThickness * GPS_STRAP_HALF_THICKNESS_FACTOR) / 2,
+      segment: 'gpsAntenna',
+    },
+  ];
+}
+
+/**
  * Points where hardware presses into or sits tight against the neck seating path.
  * @param {Point[]} centerline
  * @param {ReturnType<typeof buildArcLengthTable>} table
@@ -501,11 +558,13 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
         )
       : [elecEnd];
 
+  const gpsBaseThickness = inputs.gpsAntennaThickness;
   const settled = settleHardwareTowardNeck(
     electronicsPath,
     gpsPath,
     neckPoints,
-    { electronics: elecHalf, gps: inputs.gpsAntennaThickness / 2 },
+    { electronics: elecHalf, gps: inputs.gpsAntennaThickness },
+    gpsBaseThickness,
     settleInward,
     table
   );
@@ -567,8 +626,8 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
 
   const contactPads = analyzeContactPads(
     [
-      { path: electronicsPath, halfThickness: inputs.electronicsThickness / 2, segment: 'electronics' },
-      { path: gpsPath, halfThickness: inputs.gpsAntennaThickness / 2, segment: 'gpsAntenna' },
+      { path: electronicsPath, halfThickness: elecHalf, segment: 'electronics' },
+      ...gpsContactPadSegments(gpsPath, gpsBaseThickness),
     ],
     table,
     neckPoints
@@ -603,15 +662,16 @@ export function computeFit(rawNeckPoints, inputs, options = {}) {
       endS: sIdealGpsStart,
       pathPoints: electronicsPath,
     },
-    {
-      type: 'gpsAntenna',
-      length: gpsLen,
-      thickness: inputs.gpsAntennaThickness,
-      stiffness: inputs.gpsAntennaStiffness,
-      startS: sIdealGpsStart,
-      endS: sIdealGpsEnd,
-      pathPoints: gpsPath,
-    },
+    ...(gpsLen > 0
+      ? buildGpsCollarSegments(
+          gpsPath,
+          gpsLen,
+          gpsBaseThickness,
+          inputs.gpsAntennaStiffness,
+          sIdealGpsStart,
+          sIdealGpsEnd
+        )
+      : []),
     {
       type: 'strap',
       length: Math.max(0, strapLength),
@@ -877,7 +937,7 @@ export function generateFitReport(result, inputs, profileName) {
     `Static contact tip: ${(inputs.staticContactTipLength ?? STATIC_CONTACT_TIP_LENGTH).toFixed(1)} mm (perpendicular, strap-side end)`,
     `Electronics bend radius: ${inputs.electronicsBendRadius >= RIGID_STRAIGHT_BEND_RADIUS ? 'straight' : inputs.electronicsBendRadius.toFixed(0) + ' mm'}`,
     `Hardware settle inset: ${result.hardwareSettleInsetMm.toFixed(1)} mm (far start → contact)`,
-    `GPS/Antenna length: ${inputs.gpsAntennaLength.toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
+    `GPS length: ${inputs.gpsAntennaLength.toFixed(1)} mm — junction half ${inputs.gpsAntennaThickness.toFixed(1)} mm thick, strap half ${(inputs.gpsAntennaThickness * GPS_STRAP_HALF_THICKNESS_FACTOR).toFixed(1)} mm (stiffness ${(inputs.gpsAntennaStiffness * 100).toFixed(0)}%)`,
     `Strap length (calculated): ${result.strapLength.toFixed(1)} mm`,
     `Slack: ${inputs.slack.toFixed(1)} mm`,
     '',
