@@ -2,7 +2,8 @@
 Minimal Slack Events API webhook.
 
 Isolated from core business logic. Feature-flagged via SLACK_BOT_ENABLED.
-Handles signature verification, URL challenge, and hardcoded app_mention replies.
+Handles signature verification, URL challenge, and async app_mention replies
+grounded in read-only Notion + Claude.
 """
 
 from __future__ import annotations
@@ -13,11 +14,16 @@ import json
 import threading
 import time
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Optional
 
 import requests
 from flask import Blueprint, jsonify, request
 
+from backend.services.slack_bot.answer_service import (
+    generate_answer,
+    is_channel_allowed,
+    strip_bot_mention,
+)
 from backend.utils.config import Config
 from backend.utils.logging import get_logger
 
@@ -26,7 +32,6 @@ logger = get_logger('slack_routes')
 slack_bp = Blueprint('slack', __name__, url_prefix='/integrations/slack')
 
 SLACK_API_POST_MESSAGE = 'https://slack.com/api/chat.postMessage'
-TEST_REPLY_TEXT = 'Test reply from the Slack bot webhook.'
 SIGNATURE_MAX_AGE_SEC = 60 * 5
 DEDUPE_MAX_ENTRIES = 512
 
@@ -108,9 +113,10 @@ def _post_thread_reply(channel: str, thread_ts: str, text: str) -> None:
             )
         else:
             logger.info(
-                'Slack test reply sent channel=%s thread_ts=%s',
+                'Slack reply posted channel=%s thread_ts=%s chars=%s',
                 channel,
                 thread_ts,
+                len(text or ''),
             )
     except Exception as exc:
         logger.error('Slack chat.postMessage exception: %s', type(exc).__name__)
@@ -120,12 +126,34 @@ def _handle_app_mention(event: dict) -> None:
     if _is_bot_event(event):
         logger.info('Ignoring app_mention from bot to avoid loops')
         return
+
     channel = event.get('channel')
     thread_ts = event.get('thread_ts') or event.get('ts')
+    raw_text = event.get('text') or ''
+
+    logger.info(
+        'app_mention received channel=%s text_len=%s',
+        channel,
+        len(raw_text),
+    )
+
     if not channel or not thread_ts:
         logger.warning('app_mention missing channel or ts; skipping reply')
         return
-    _post_thread_reply(channel, thread_ts, TEST_REPLY_TEXT)
+
+    if not is_channel_allowed(channel):
+        logger.info('channel blocked channel=%s', channel)
+        _post_thread_reply(
+            channel,
+            thread_ts,
+            'This channel is not enabled for the bot. Ask an admin to add it to SLACK_ALLOWED_CHANNEL_IDS.',
+        )
+        return
+
+    logger.info('channel allowed channel=%s', channel)
+    question = strip_bot_mention(raw_text)
+    answer = generate_answer(question)
+    _post_thread_reply(channel, thread_ts, answer)
 
 
 def _dispatch_event_async(payload: dict[str, Any]) -> None:
@@ -149,6 +177,13 @@ def slack_health():
         'enabled': _slack_enabled(),
         'signing_secret_configured': bool(Config.SLACK_SIGNING_SECRET),
         'bot_token_configured': bool(Config.SLACK_BOT_TOKEN),
+        'notion_token_configured': bool(Config.NOTION_TOKEN),
+        'anthropic_configured': bool(Config.ANTHROPIC_API_KEY),
+        'channel_allowlist_configured': bool(Config.parse_csv_ids(Config.SLACK_ALLOWED_CHANNEL_IDS)),
+        'notion_page_filter_configured': bool(Config.parse_csv_ids(Config.NOTION_ALLOWED_PAGE_IDS)),
+        'notion_database_filter_configured': bool(
+            Config.parse_csv_ids(Config.NOTION_ALLOWED_DATABASE_IDS)
+        ),
     }), 200
 
 

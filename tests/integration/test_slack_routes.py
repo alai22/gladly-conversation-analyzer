@@ -42,6 +42,8 @@ class TestSlackRoutes:
         assert data['enabled'] is True
         assert data['signing_secret_configured'] is True
         assert data['bot_token_configured'] is True
+        assert 'notion_token_configured' in data
+        assert 'anthropic_configured' in data
         assert 'SLACK_BOT_TOKEN' not in str(data)
         assert 'test-signing-secret' not in str(data)
 
@@ -91,7 +93,12 @@ class TestSlackRoutes:
         ts = str(int(time.time()))
         sig = _sign('test-signing-secret', ts, body)
 
-        with patch('backend.api.routes.slack_routes.requests.post') as mock_post:
+        with patch(
+            'backend.api.routes.slack_routes.generate_answer',
+            return_value='Grounded Notion answer',
+        ) as mock_answer, patch(
+            'backend.api.routes.slack_routes.requests.post'
+        ) as mock_post:
             mock_post.return_value.status_code = 200
             mock_post.return_value.content = b'{"ok":true}'
             mock_post.return_value.json.return_value = {'ok': True}
@@ -110,11 +117,13 @@ class TestSlackRoutes:
 
             # Allow daemon thread to run
             time.sleep(0.3)
+            assert mock_answer.called
+            assert mock_answer.call_args.args[0] == 'hello'
             assert mock_post.called
             kwargs = mock_post.call_args.kwargs
             assert kwargs['json']['channel'] == 'C123'
             assert kwargs['json']['thread_ts'] == '1710000000.000100'
-            assert 'Test reply' in kwargs['json']['text']
+            assert kwargs['json']['text'] == 'Grounded Notion answer'
             # Token must not appear in logs; Authorization header is fine in mock call
             assert kwargs['headers']['Authorization'].startswith('Bearer ')
 
@@ -139,7 +148,10 @@ class TestSlackRoutes:
             'X-Slack-Signature': sig,
         }
 
-        with patch('backend.api.routes.slack_routes.requests.post') as mock_post:
+        with patch(
+            'backend.api.routes.slack_routes.generate_answer',
+            return_value='answer',
+        ), patch('backend.api.routes.slack_routes.requests.post') as mock_post:
             mock_post.return_value.status_code = 200
             mock_post.return_value.content = b'{"ok":true}'
             mock_post.return_value.json.return_value = {'ok': True}
@@ -150,3 +162,47 @@ class TestSlackRoutes:
             assert r2.status_code == 200
             time.sleep(0.3)
             assert mock_post.call_count == 1
+
+    def test_channel_allowlist_blocks_and_replies(self, client, slack_env, monkeypatch):
+        monkeypatch.setattr(
+            'backend.utils.config.Config.SLACK_ALLOWED_CHANNEL_IDS',
+            'C999',
+        )
+        payload = {
+            'type': 'event_callback',
+            'event_id': 'Ev_BLOCKED',
+            'event': {
+                'type': 'app_mention',
+                'user': 'U123',
+                'channel': 'C123',
+                'ts': '1710000000.000300',
+                'text': '<@B0BOT> secret?',
+            },
+        }
+        body = json.dumps(payload).encode('utf-8')
+        ts = str(int(time.time()))
+        sig = _sign('test-signing-secret', ts, body)
+
+        with patch(
+            'backend.api.routes.slack_routes.generate_answer'
+        ) as mock_answer, patch(
+            'backend.api.routes.slack_routes.requests.post'
+        ) as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.content = b'{"ok":true}'
+            mock_post.return_value.json.return_value = {'ok': True}
+
+            response = client.post(
+                '/integrations/slack/events',
+                data=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Slack-Request-Timestamp': ts,
+                    'X-Slack-Signature': sig,
+                },
+            )
+            assert response.status_code == 200
+            time.sleep(0.3)
+            assert not mock_answer.called
+            assert mock_post.called
+            assert 'not enabled' in mock_post.call_args.kwargs['json']['text']

@@ -199,6 +199,23 @@ class Config:
     SLACK_SIGNING_SECRET: Optional[str] = os.getenv('SLACK_SIGNING_SECRET')
     SLACK_BOT_TOKEN: Optional[str] = os.getenv('SLACK_BOT_TOKEN')
     SLACK_BOT_ENABLED: bool = os.getenv('SLACK_BOT_ENABLED', '0').lower() in ('true', '1', 'yes')
+    # Optional comma-separated Slack channel IDs; empty = all channels allowed
+    SLACK_ALLOWED_CHANNEL_IDS: str = os.getenv('SLACK_ALLOWED_CHANNEL_IDS', '')
+    # Optional model override for Slack bot answers (defaults to CLAUDE_MODEL)
+    SLACK_BOT_MODEL: Optional[str] = os.getenv('SLACK_BOT_MODEL')
+
+    # Notion (read-only) for Slack bot — scope primarily via Notion connection UI
+    NOTION_TOKEN: Optional[str] = os.getenv('NOTION_TOKEN')
+    # Optional comma-separated filters; empty = search whatever the integration can access
+    NOTION_ALLOWED_PAGE_IDS: str = os.getenv('NOTION_ALLOWED_PAGE_IDS', '')
+    NOTION_ALLOWED_DATABASE_IDS: str = os.getenv('NOTION_ALLOWED_DATABASE_IDS', '')
+
+    @classmethod
+    def parse_csv_ids(cls, raw: Optional[str]) -> frozenset:
+        """Parse comma-separated IDs into a lowercase frozenset (empty if unset)."""
+        if not raw:
+            return frozenset()
+        return frozenset(part.strip().lower() for part in raw.split(',') if part.strip())
     
     # Local file fallback
     LOCAL_FILE_PATH: str = os.getenv('LOCAL_FILE_PATH', 'conversation_items.jsonl')
