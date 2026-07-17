@@ -194,6 +194,11 @@ class Config:
     FLASK_SECRET_KEY: Optional[str] = os.getenv('FLASK_SECRET_KEY')
     PORT: int = int(os.getenv('PORT', 5000))
     HOST: str = os.getenv('HOST', '0.0.0.0')
+
+    # Slack bot webhook (internal; feature-flagged off by default)
+    SLACK_SIGNING_SECRET: Optional[str] = os.getenv('SLACK_SIGNING_SECRET')
+    SLACK_BOT_TOKEN: Optional[str] = os.getenv('SLACK_BOT_TOKEN')
+    SLACK_BOT_ENABLED: bool = os.getenv('SLACK_BOT_ENABLED', '0').lower() in ('true', '1', 'yes')
     
     # Local file fallback
     LOCAL_FILE_PATH: str = os.getenv('LOCAL_FILE_PATH', 'conversation_items.jsonl')
