@@ -210,6 +210,16 @@ class Config:
     NOTION_ALLOWED_PAGE_IDS: str = os.getenv('NOTION_ALLOWED_PAGE_IDS', '')
     NOTION_ALLOWED_DATABASE_IDS: str = os.getenv('NOTION_ALLOWED_DATABASE_IDS', '')
 
+    # Product Bot (separate Slack app + Notion corpus; feature-flagged off by default)
+    PRODUCT_BOT_ENABLED: bool = os.getenv('PRODUCT_BOT_ENABLED', '0').lower() in ('true', '1', 'yes')
+    PRODUCT_SLACK_SIGNING_SECRET: Optional[str] = os.getenv('PRODUCT_SLACK_SIGNING_SECRET')
+    PRODUCT_SLACK_BOT_TOKEN: Optional[str] = os.getenv('PRODUCT_SLACK_BOT_TOKEN')
+    PRODUCT_SLACK_ALLOWED_CHANNEL_IDS: str = os.getenv('PRODUCT_SLACK_ALLOWED_CHANNEL_IDS', '')
+    PRODUCT_NOTION_TOKEN: Optional[str] = os.getenv('PRODUCT_NOTION_TOKEN')
+    # Required filters for Product Bot (fail closed if both empty)
+    PRODUCT_NOTION_ALLOWED_PAGE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_PAGE_IDS', '')
+    PRODUCT_NOTION_ALLOWED_DATABASE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_DATABASE_IDS', '')
+
     @classmethod
     def parse_csv_ids(cls, raw: Optional[str]) -> frozenset:
         """Parse comma-separated IDs into a lowercase frozenset (empty if unset)."""
