@@ -120,6 +120,7 @@ function App() {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
     if (isSurveyParticipantPath(location.pathname)) return;
+    if (getSurveyBuilderId(location.pathname)) return;
     // Legacy /churn?mode=survicate: do not strip query here; URL→mode effect migrates to /churn/ask
     if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
       return;
