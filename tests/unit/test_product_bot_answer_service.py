@@ -29,13 +29,27 @@ class TestProductGenerateAnswer:
     def test_empty_question(self):
         assert 'question' in generate_answer('').lower()
 
-    def test_fail_closed_without_notion_allowlists(self, monkeypatch):
+    def test_empty_notion_allowlists_searches_integration_scope(self, monkeypatch):
+        monkeypatch.setattr(
+            'backend.utils.config.Config.PRODUCT_NOTION_TOKEN',
+            'secret_product',
+        )
         monkeypatch.setattr('backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_PAGE_IDS', '')
         monkeypatch.setattr('backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_DATABASE_IDS', '')
+        monkeypatch.setattr('backend.utils.config.Config.CLAUDE_MODEL', 'claude-haiku-4-5')
+
+        mock_claude = MagicMock()
+        mock_claude.send_message.return_value = SimpleNamespace(content='Product answer')
+
         with patch('backend.services.product_bot.answer_service.NotionClient') as MockNotion:
-            text = generate_answer('roadmap?')
-            assert 'not fully configured' in text.lower()
-            assert not MockNotion.called
+            MockNotion.return_value.build_context_for_query.return_value = '### Page\nRoadmap'
+            text = generate_answer('roadmap?', claude=mock_claude)
+
+        assert text == 'Product answer'
+        MockNotion.assert_called_once_with(token='secret_product')
+        kwargs = MockNotion.return_value.build_context_for_query.call_args.kwargs
+        assert kwargs['allowed_page_ids'] == frozenset()
+        assert kwargs['allowed_database_ids'] == frozenset()
 
     def test_uses_product_notion_token_and_allowlists(self, monkeypatch):
         monkeypatch.setattr(
@@ -71,14 +85,8 @@ class TestProductGenerateAnswer:
             'backend.utils.config.Config.PRODUCT_NOTION_TOKEN',
             'product_token',
         )
-        monkeypatch.setattr(
-            'backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_PAGE_IDS',
-            'page-1',
-        )
-        monkeypatch.setattr(
-            'backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_DATABASE_IDS',
-            '',
-        )
+        monkeypatch.setattr('backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_PAGE_IDS', '')
+        monkeypatch.setattr('backend.utils.config.Config.PRODUCT_NOTION_ALLOWED_DATABASE_IDS', '')
 
         mock_claude = MagicMock()
         mock_claude.send_message.return_value = SimpleNamespace(content='ok')

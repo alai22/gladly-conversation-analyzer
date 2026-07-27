@@ -216,7 +216,7 @@ class Config:
     PRODUCT_SLACK_BOT_TOKEN: Optional[str] = os.getenv('PRODUCT_SLACK_BOT_TOKEN')
     PRODUCT_SLACK_ALLOWED_CHANNEL_IDS: str = os.getenv('PRODUCT_SLACK_ALLOWED_CHANNEL_IDS', '')
     PRODUCT_NOTION_TOKEN: Optional[str] = os.getenv('PRODUCT_NOTION_TOKEN')
-    # Required filters for Product Bot (fail closed if both empty)
+    # Optional filters; empty = search whatever the Product Notion integration can access
     PRODUCT_NOTION_ALLOWED_PAGE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_PAGE_IDS', '')
     PRODUCT_NOTION_ALLOWED_DATABASE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_DATABASE_IDS', '')
 
