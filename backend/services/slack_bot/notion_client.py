@@ -130,18 +130,53 @@ class NotionClient:
         page_id: str,
         max_blocks: int = DEFAULT_MAX_BLOCKS,
         max_chars: int = DEFAULT_MAX_CHARS,
+        max_depth: int = 0,
     ) -> str:
-        blocks = self.get_block_children(page_id, page_size=min(100, max_blocks))
+        """
+        Load plain text from a page's block children.
+
+        max_depth=0 (default): top-level blocks only — Ops bot behavior.
+        max_depth>0: recurse into has_children blocks up to that depth.
+        """
         lines: List[str] = []
-        total = 0
-        for block in blocks[:max_blocks]:
-            text = self._block_to_text(block).strip()
-            if not text:
-                continue
-            lines.append(text)
-            total += len(text)
-            if total >= max_chars:
-                break
+        blocks_used = 0
+
+        def walk(block_id: str, depth: int) -> None:
+            nonlocal blocks_used
+            if blocks_used >= max_blocks:
+                return
+            remaining_blocks = max_blocks - blocks_used
+            children = self.get_block_children(
+                block_id,
+                page_size=min(100, remaining_blocks),
+            )
+            for block in children:
+                if blocks_used >= max_blocks:
+                    break
+                text = self._block_to_text(block).strip()
+                if text:
+                    lines.append(text)
+                    blocks_used += 1
+                    total = sum(len(line) for line in lines)
+                    if total >= max_chars:
+                        return
+                elif block.get('has_children') and depth < max_depth:
+                    # Count structural containers toward the block budget lightly
+                    blocks_used += 1
+
+                if (
+                    block.get('has_children')
+                    and depth < max_depth
+                    and blocks_used < max_blocks
+                ):
+                    child_id = block.get('id')
+                    if child_id:
+                        walk(child_id, depth + 1)
+                        total = sum(len(line) for line in lines)
+                        if total >= max_chars:
+                            return
+
+        walk(page_id, 0)
         content = '\n'.join(lines)
         if len(content) > max_chars:
             content = content[:max_chars] + '\n…'

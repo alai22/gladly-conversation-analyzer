@@ -219,6 +219,8 @@ class Config:
     # Optional filters; empty = search whatever the Product Notion integration can access
     PRODUCT_NOTION_ALLOWED_PAGE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_PAGE_IDS', '')
     PRODUCT_NOTION_ALLOWED_DATABASE_IDS: str = os.getenv('PRODUCT_NOTION_ALLOWED_DATABASE_IDS', '')
+    # Optional ranking boost for canonical hub pages (not required; boost only)
+    PRODUCT_NOTION_PRIORITY_PAGE_IDS: str = os.getenv('PRODUCT_NOTION_PRIORITY_PAGE_IDS', '')
 
     @classmethod
     def parse_csv_ids(cls, raw: Optional[str]) -> frozenset:
