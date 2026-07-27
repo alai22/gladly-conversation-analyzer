@@ -26,7 +26,7 @@ import { useAnalytics } from './hooks/useAnalytics';
 import axios from 'axios';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { getSurvicateDataSource } from './utils/constants';
-import { getModeFromPath, getPathFromMode, getRouteFromPath, isPathBasedMode, isInterviewParticipantPath, isSurveyParticipantPath, getSurveyBuilderId, pathMatchesMode } from './utils/routes';
+import { getModeFromPath, getPathFromMode, getRouteFromPath, isPathBasedMode, isInterviewParticipantPath, isSurveyParticipantPath, isSurveyBuilderPath, getSurveyBuilderId, pathMatchesMode } from './utils/routes';
 
 // Configure axios to send credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
@@ -120,7 +120,7 @@ function App() {
     if (isSyncingRef.current) return;
     if (isInterviewParticipantPath(location.pathname)) return;
     if (isSurveyParticipantPath(location.pathname)) return;
-    if (getSurveyBuilderId(location.pathname)) return;
+    if (isSurveyBuilderPath(location.pathname)) return;
     // Legacy /churn?mode=survicate: do not strip query here; URL→mode effect migrates to /churn/ask
     if (location.pathname === '/churn' && searchParams.get('mode') === 'survicate') {
       return;
@@ -199,7 +199,8 @@ function App() {
     // Legacy ?mode= for path-based tools → canonical path (e.g. ?mode=zoom -> /platform/zoom)
     if (queryMode && isPathBasedMode(queryMode)) {
       const canonicalPath = getPathFromMode(queryMode);
-      if (canonicalPath && location.pathname !== canonicalPath) {
+      const onSurveyBuilder = queryMode === 'halo-surveys' && isSurveyBuilderPath(location.pathname);
+      if (canonicalPath && location.pathname !== canonicalPath && !onSurveyBuilder) {
         isSyncingRef.current = true;
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete('mode');

@@ -85,6 +85,10 @@ export function getSurveyBuilderId(pathname) {
   return match ? match[1] : null;
 }
 
+export function isSurveyBuilderPath(pathname) {
+  return getSurveyBuilderId(pathname) !== null;
+}
+
 /**
  * Resolve pathname to route config, including legacy redirects.
  * @param {string} pathname
@@ -175,6 +179,9 @@ export function isPlatformMode(currentMode, adminMode = null) {
  * @returns {boolean}
  */
 export function pathMatchesMode(pathname, currentMode, adminMode = null) {
+  if (currentMode === 'halo-surveys') {
+    return pathname === '/surveys' || isSurveyBuilderPath(pathname);
+  }
   const expected = getPathFromMode(currentMode, adminMode);
   return expected !== null && pathname === expected;
 }
