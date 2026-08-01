@@ -13,7 +13,7 @@ import { AlertCircle, CheckCircle2, Clock, Dog, FolderOpen, Play, RefreshCw, Use
 import axios from 'axios';
 
 const PROCESS_POLL_MS = 4000;
-const SUMMARY_STORAGE_KEY = 'halo_labeling_summary_v1';
+const SUMMARY_STORAGE_KEY = 'halo_labeling_summary_v2';
 
 const COLORS = [
   '#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6',
@@ -291,6 +291,21 @@ const LabelingDataDashboard = () => {
     [users]
   );
 
+  const byDate = data?.by_date || [];
+  const byDateChartData = useMemo(
+    () =>
+      byDate.map((d) => ({
+        date: d.date,
+        label: d.date && d.date.length >= 10 ? d.date.slice(5) : d.date, // MM-DD
+        seconds: d.duration_seconds || 0,
+        sessions: d.sessions || 0,
+        files: d.files || 0,
+        users: d.users || 0,
+        human: d.duration_human || formatSecondsShort(d.duration_seconds),
+      })),
+    [byDate]
+  );
+
   const stagingEmails = Object.keys(status?.staging_by_email || {});
   const outputEmails = status?.output_emails || [];
   const unprocessedEmails = stagingEmails.filter((e) => !outputEmails.includes(e));
@@ -458,6 +473,65 @@ const LabelingDataDashboard = () => {
           label="Total labeled duration"
           value={totals.duration_human || formatSecondsShort(totals.duration_seconds)}
         />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Volume by date</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Labeled duration per session day (from activity_session timestamps)
+        </p>
+        {byDateChartData.length === 0 ? (
+          <p className="text-sm text-gray-500">No dated sessions found.</p>
+        ) : (
+          <>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={byDateChartData}
+                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v) => formatSecondsShort(v)}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${formatSecondsShort(value)} · ${props.payload.sessions} sessions · ${props.payload.users} users`,
+                      props.payload.date,
+                    ]}
+                  />
+                  <Bar dataKey="seconds" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-4 font-medium">Date</th>
+                    <th className="py-2 pr-4 font-medium">Duration</th>
+                    <th className="py-2 pr-4 font-medium">Sessions</th>
+                    <th className="py-2 pr-4 font-medium">Users</th>
+                    <th className="py-2 font-medium">Files</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...byDateChartData].reverse().map((d) => (
+                    <tr key={d.date} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 text-gray-900 font-mono text-xs">{d.date}</td>
+                      <td className="py-2 pr-4 text-gray-700">{d.human}</td>
+                      <td className="py-2 pr-4 text-gray-500">{d.sessions}</td>
+                      <td className="py-2 pr-4 text-gray-500">{d.users}</td>
+                      <td className="py-2 text-gray-500">{d.files}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">

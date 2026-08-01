@@ -32,7 +32,8 @@ _CACHE: Dict[str, Any] = {
     "fresh_until": 0.0,
 }
 _DEFAULT_CACHE_TTL_SEC = 15 * 60  # treat as fresh for 15 minutes
-_SUMMARY_CACHE_KEY = "labeling-jobs/summary_cache.json"
+_SUMMARY_CACHE_KEY = "labeling-jobs/summary_cache_v2.json"
+_SUMMARY_CACHE_MEM_KEY = "summary:v2"
 _BG_REFRESH_LOCK = threading.Lock()
 _BG_REFRESH_RUNNING = False
 
@@ -134,7 +135,9 @@ def _load_summary_cache_s3(ttl_sec: int) -> Optional[Dict[str, Any]]:
             except Exception:  # noqa: BLE001
                 generated_at = time.time()
         # Hydrate memory so subsequent requests skip S3
-        return _cache_set_memory("summary:v1", body["data"], ttl_sec, generated_at=generated_at)
+        return _cache_set_memory(
+            _SUMMARY_CACHE_MEM_KEY, body["data"], ttl_sec, generated_at=generated_at
+        )
     except Exception:  # noqa: BLE001
         return None
 
@@ -158,7 +161,7 @@ def _compute_summary(ttl_sec: int) -> Dict[str, Any]:
     analyzer = LabelingDataAnalyzer()
     raw = analyzer.analyze(include_content=True)
     data = format_ui_summary(raw)
-    entry = _cache_set_memory("summary:v1", data, ttl_sec)
+    entry = _cache_set_memory(_SUMMARY_CACHE_MEM_KEY, data, ttl_sec)
     _persist_summary_cache(data, entry["generated_at"], ttl_sec)
     return entry
 
@@ -431,7 +434,7 @@ def labeling_summary():
             ttl = _DEFAULT_CACHE_TTL_SEC
 
         if not refresh:
-            entry = _cache_get_memory("summary:v1")
+            entry = _cache_get_memory(_SUMMARY_CACHE_MEM_KEY)
             if entry is None:
                 entry = _load_summary_cache_s3(ttl if ttl > 0 else _DEFAULT_CACHE_TTL_SEC)
             if entry is not None:

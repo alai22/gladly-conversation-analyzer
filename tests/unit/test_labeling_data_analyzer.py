@@ -104,6 +104,10 @@ class TestLocalAnalyze:
         assert summary["activity_duration_seconds"]["Standing"] > 0
         assert summary["collar_activity_events"].get("Standing", 0) >= 1
         assert summary["user_reported_events"].get("Standing", 0) >= 1
+        assert summary["by_date"]
+        assert summary["by_date"][0]["date"] == "2026-04-21"
+        assert summary["by_date"][0]["duration_seconds"] > 0
+        assert summary["by_date"][0]["sessions"] >= 1
 
     def test_format_ui_summary(self):
         analyzer = LabelingDataAnalyzer(bucket_name="local", prefix="extracted-txt/")
@@ -111,6 +115,8 @@ class TestLocalAnalyze:
         assert ui["totals"]["users"] >= 1
         assert ui["totals"]["duration_seconds"] > 0
         assert any(a["name"] == "Standing" and a["label"] == "Standing" for a in ui["activities"])
+        assert ui["by_date"]
+        assert ui["by_date"][0]["date"] == "2026-04-21"
         assert ui["users"][0]["email"]
         assert ui["users"][0]["total_duration_seconds"] > 0
         assert ui["users"][0]["collar_sns"]

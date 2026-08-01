@@ -347,6 +347,7 @@ class LabelingDataAnalyzer:
         activity_collar_events: Dict[str, int] = defaultdict(int)
         activity_user_reported_events: Dict[str, int] = defaultdict(int)
         sessions_seen: Dict[str, set] = defaultdict(set)
+        by_date: Dict[str, Dict[str, Any]] = {}
         dogs: Dict[str, Dict[str, Any]] = {}
         parse_errors: List[Dict[str, str]] = []
 
@@ -404,6 +405,31 @@ class LabelingDataAnalyzer:
 
             session_id = f"{ref.timestamp}_{ref.index}"
             sessions_seen[ref.user].add(session_id)
+            day = (ref.timestamp or "")[:10] or "unknown"
+            day_stats = by_date.setdefault(
+                day,
+                {
+                    "date": day,
+                    "duration_seconds": 0.0,
+                    "sessions": set(),
+                    "files": 0,
+                    "users": set(),
+                    "by_user": defaultdict(
+                        lambda: {
+                            "duration_seconds": 0.0,
+                            "sessions": set(),
+                            "files": 0,
+                        }
+                    ),
+                },
+            )
+            day_stats["files"] += 1
+            day_stats["users"].add(ref.user)
+            day_stats["sessions"].add((ref.user, session_id))
+            day_user = day_stats["by_user"][ref.user]
+            day_user["files"] += 1
+            day_user["sessions"].add(session_id)
+
             collar_sn = session_collar.get((ref.user, session_id)) or UNKNOWN_COLLAR_SN
             user_stats["collar_sns"].add(collar_sn)
             collar_stats = user_stats["by_collar"][collar_sn]
@@ -428,6 +454,8 @@ class LabelingDataAnalyzer:
                         activity_duration_seconds[key] += seconds
                         user_stats["activity_duration_seconds"][key] += seconds
                         collar_stats["activity_duration_seconds"][key] += seconds
+                        day_stats["duration_seconds"] += seconds
+                        day_user["duration_seconds"] += seconds
                 elif ref.kind == "collar_collected":
                     parsed = parse_collar_collected(text)
                     if parsed.dog_name or parsed.collar_sn:
@@ -481,6 +509,33 @@ class LabelingDataAnalyzer:
                 collars_out, key=lambda c: (-c["sessions"], c["collar_sn"])
             )
 
+        by_date_out: List[Dict[str, Any]] = []
+        for day in sorted(by_date.keys()):
+            dstats = by_date[day]
+            users_day = []
+            for email, ustats in dstats["by_user"].items():
+                users_day.append(
+                    {
+                        "user": email,
+                        "duration_seconds": round(float(ustats["duration_seconds"]), 3),
+                        "duration_human": format_seconds(float(ustats["duration_seconds"])),
+                        "sessions": len(ustats["sessions"]),
+                        "files": ustats["files"],
+                    }
+                )
+            users_day.sort(key=lambda u: (-u["duration_seconds"], u["user"]))
+            by_date_out.append(
+                {
+                    "date": day,
+                    "duration_seconds": round(float(dstats["duration_seconds"]), 3),
+                    "duration_human": format_seconds(float(dstats["duration_seconds"])),
+                    "sessions": len(dstats["sessions"]),
+                    "files": dstats["files"],
+                    "users": len(dstats["users"]),
+                    "by_user": users_day,
+                }
+            )
+
         summary = {
             "bucket": self.bucket_name,
             "prefix": self.prefix,
@@ -491,6 +546,7 @@ class LabelingDataAnalyzer:
                 kind: sum(1 for f in files if f.kind == kind) for kind in FILE_KINDS
             },
             "users": sorted(by_user.values(), key=lambda u: (-u["total_files"], u["user"])),
+            "by_date": by_date_out,
             "activity_duration_seconds": dict(
                 sorted(activity_duration_seconds.items(), key=lambda kv: (-kv[1], kv[0]))
             ),
@@ -643,6 +699,7 @@ def format_ui_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
         "activities": activity_rows,
         "all_activities": all_activity_rows,
         "users": users_out,
+        "by_date": summary.get("by_date") or [],
         "collar_activity_events": summary.get("collar_activity_events") or {},
         "user_reported_events": summary.get("user_reported_events") or {},
         "dogs": summary.get("dogs") or [],
