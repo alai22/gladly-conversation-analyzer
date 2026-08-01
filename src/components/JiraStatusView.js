@@ -154,7 +154,7 @@ const JiraStatusView = ({ setCurrentMode }) => {
           onClick={() => setCurrentMode('tools')}
           className="text-sm text-gray-600 hover:text-gray-900"
         >
-          Back to Platform
+          Back to Home
         </button>
       </div>
 

@@ -7,22 +7,23 @@
 
 /** Old paths → canonical paths (SPA redirects) */
 export const LEGACY_PATH_REDIRECTS = {
-  '/tools': '/platform',
+  '/tools': '/',
+  '/platform': '/',
   '/engineering': '/hardware',
+  '/platform/labeling': '/hardware/labeling',
 };
 
 export const PATH_TO_ROUTE = {
+  '/': { mode: 'tools', adminMode: null },
   '/research': { mode: 'churn-trends', adminMode: null },
   '/churn': { mode: 'churn-trends', adminMode: null },
   '/churn/ask': { mode: 'survicate', adminMode: null },
   '/survicate': { mode: 'survey-manager', adminMode: null },
   '/gladly': { mode: 'conversation-trends', adminMode: null },
-  '/platform': { mode: 'tools', adminMode: null },
   '/platform/survicate-download': { mode: 'api-data-manager', adminMode: null },
   '/platform/gladly-download': { mode: 'tools', adminMode: 'download' },
   '/platform/zoom': { mode: 'zoom', adminMode: null },
   '/platform/analytics': { mode: 'analytics', adminMode: null },
-  '/platform/labeling': { mode: 'labeling-data', adminMode: null },
   '/platform/jira': { mode: 'jira-status', adminMode: null },
   '/platform/claude': { mode: 'tools', adminMode: 'claude' },
   '/jira': { mode: 'bug-triage', adminMode: null },
@@ -30,6 +31,7 @@ export const PATH_TO_ROUTE = {
   '/surveys': { mode: 'halo-surveys', adminMode: null },
   '/hardware': { mode: 'neck-fit-modeler', adminMode: null },
   '/hardware/neck-fit': { mode: 'neck-fit-modeler', adminMode: null },
+  '/hardware/labeling': { mode: 'labeling-data', adminMode: null },
 };
 
 /** @type {Record<string, string>} */
@@ -40,11 +42,11 @@ export const MODE_TO_CANONICAL_PATH = {
   'text-interview': '/interview',
   'halo-surveys': '/surveys',
   'conversation-trends': '/gladly',
-  'tools': '/platform',
+  'tools': '/',
   'api-data-manager': '/platform/survicate-download',
   'zoom': '/platform/zoom',
   'analytics': '/platform/analytics',
-  'labeling-data': '/platform/labeling',
+  'labeling-data': '/hardware/labeling',
   'jira-status': '/platform/jira',
   'bug-triage': '/jira',
   'neck-fit-modeler': '/hardware/neck-fit',
@@ -59,15 +61,20 @@ export const PRODUCT_RESEARCH_MODES = [
   'halo-surveys',
 ];
 
-/** Modes that belong to the Platform top-level tab */
-export const PLATFORM_MODES = [
+/** Modes shown under the Home tab (launcher + data/integration tools) */
+export const HOME_TAB_MODES = [
   'tools',
   'api-data-manager',
   'zoom',
   'analytics',
-  'labeling-data',
   'jira-status',
 ];
+
+/** @deprecated Use HOME_TAB_MODES; kept for older imports */
+export const PLATFORM_MODES = HOME_TAB_MODES;
+
+/** Modes that belong to the Hardware top-level tab */
+export const HARDWARE_MODES = ['neck-fit-modeler', 'labeling-data'];
 
 /** Paths that have a canonical route (for redirects and path-first logic) */
 export const PATH_BASED_PATHS = Object.keys(PATH_TO_ROUTE);
@@ -133,7 +140,7 @@ export function getPathFromMode(mode, adminMode = null) {
   if (mode === 'tools') {
     if (adminMode === 'download') return '/platform/gladly-download';
     if (adminMode === 'claude') return '/platform/claude';
-    return '/platform';
+    return '/';
   }
   return MODE_TO_CANONICAL_PATH[mode] ?? null;
 }
@@ -143,7 +150,7 @@ export function getPathFromMode(mode, adminMode = null) {
  * @returns {boolean}
  */
 export function isPathBasedMode(mode) {
-  return mode in MODE_TO_CANONICAL_PATH || PLATFORM_MODES.includes(mode);
+  return mode in MODE_TO_CANONICAL_PATH || HOME_TAB_MODES.includes(mode);
 }
 
 /**
@@ -163,16 +170,30 @@ export function isProductResearchMode(currentMode) {
 }
 
 /**
+ * Home tab (launcher + data/integration tools).
  * @param {string} currentMode
  * @param {string | null} [adminMode]
  * @returns {boolean}
  */
-export function isPlatformMode(currentMode, adminMode = null) {
+export function isHomeTabMode(currentMode, adminMode = null) {
   return (
-    PLATFORM_MODES.includes(currentMode) ||
+    HOME_TAB_MODES.includes(currentMode) ||
     adminMode === 'download' ||
     adminMode === 'claude'
   );
+}
+
+/** @deprecated Use isHomeTabMode */
+export function isPlatformMode(currentMode, adminMode = null) {
+  return isHomeTabMode(currentMode, adminMode);
+}
+
+/**
+ * @param {string} currentMode
+ * @returns {boolean}
+ */
+export function isHardwareMode(currentMode) {
+  return HARDWARE_MODES.includes(currentMode);
 }
 
 /**

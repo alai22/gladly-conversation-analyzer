@@ -78,7 +78,7 @@ function App() {
     const urlMode = searchParams.get('mode');
     if (urlMode) return urlMode;
     const savedMode = localStorage.getItem('gladly_current_mode');
-    return savedMode || 'churn-trends';
+    return savedMode || 'tools';
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -161,8 +161,9 @@ function App() {
       return;
     }
 
-    // Redirect / with path-based ?mode= to canonical path (e.g. ?mode=churn-trends -> /churn)
-    if (location.pathname === '/' && queryMode && isPathBasedMode(queryMode)) {
+    // Redirect /?mode=<path-based> to canonical path (e.g. ?mode=churn-trends -> /churn)
+    // Leave bare / as the Home launcher (tools mode).
+    if (location.pathname === '/' && queryMode && isPathBasedMode(queryMode) && queryMode !== 'tools') {
       isSyncingRef.current = true;
       const path = getPathFromMode(queryMode);
       const nextParams = new URLSearchParams(searchParams);
@@ -170,15 +171,6 @@ function App() {
       navigate({ pathname: path, search: nextParams.toString() }, { replace: true });
       setCurrentMode(queryMode);
       setAdminMode(null);
-      setTimeout(() => { isSyncingRef.current = false; }, 0);
-      return;
-    }
-
-    // Redirect / with no mode to /churn
-    if (location.pathname === '/' && !queryMode) {
-      isSyncingRef.current = true;
-      navigate('/churn', { replace: true });
-      if (currentMode !== 'churn-trends') setCurrentMode('churn-trends');
       setTimeout(() => { isSyncingRef.current = false; }, 0);
       return;
     }
@@ -437,9 +429,8 @@ function App() {
   // Check admin auth when trying to access platform admin tools
   useEffect(() => {
     if (isAuthenticated) {
-      const needsAdminAuth = adminMode === 'claude' || 
-                             adminMode === 'download' || 
-                             currentMode === 'tools' ||
+      const needsAdminAuth = adminMode === 'claude' ||
+                             adminMode === 'download' ||
                              currentMode === 'api-data-manager' ||
                              currentMode === 'jira-status' ||
                              currentMode === 'zoom' ||
@@ -461,7 +452,7 @@ function App() {
               setAdminMode(null);
               // Don't change currentMode if user is just browsing - only reset if they were in admin mode
               if (adminMode === 'claude' || adminMode === 'download') {
-                setCurrentMode('churn-trends');
+                setCurrentMode('tools');
               }
             }
           } catch (error) {
@@ -470,12 +461,12 @@ function App() {
             setIsAdminAuthenticated(false);
             setAdminMode(null);
             if (adminMode === 'claude' || adminMode === 'download') {
-              setCurrentMode('churn-trends');
+              setCurrentMode('tools');
             }
           }
         };
         checkAdminAuth();
-      } else if (!adminMode && currentMode !== 'tools' && currentMode !== 'api-data-manager' && currentMode !== 'jira-status') {
+      } else if (!adminMode && currentMode !== 'api-data-manager' && currentMode !== 'jira-status') {
         // Not in admin mode or on admin pages, reset admin auth state
         setIsAdminAuthenticated(false);
       }
@@ -497,8 +488,8 @@ function App() {
     return <Login onLogin={handleLogin} onAdminLogin={handleAdminLogin} />;
   }
 
-  // Platform hub and admin-gated tools require admin authentication
-  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'tools' || currentMode === 'api-data-manager' || currentMode === 'jira-status' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'labeling-data') && !isAdminAuthenticated) {
+  // Admin-gated tools require admin authentication (Home launcher itself does not)
+  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'api-data-manager' || currentMode === 'jira-status' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'labeling-data') && !isAdminAuthenticated) {
     return <Login onLogin={handleLogin} onAdminLogin={handleAdminLogin} requireAdmin={true} />;
   }
 
@@ -776,7 +767,9 @@ function App() {
       'download': 'Download Manager',
       'survicate': 'Ask About Churn',
       'churn-trends': 'Churn Trends',
-      'api-data-manager': 'Data Management'
+      'api-data-manager': 'Data Management',
+      'tools': 'Home',
+      'labeling-data': 'Labeling Data',
     };
     if (adminMode) {
       return modeTitles[adminMode] || 'Admin Mode';

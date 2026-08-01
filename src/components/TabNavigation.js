@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, MessageSquare, BarChart3, FileText, TrendingUp, Bug, Users, Cpu, FlaskConical, ClipboardList } from 'lucide-react';
-import { getPathFromMode, isPlatformMode, isProductResearchMode } from '../utils/routes';
+import {
+  Search,
+  MessageSquare,
+  BarChart3,
+  FileText,
+  TrendingUp,
+  Bug,
+  Users,
+  Cpu,
+  FlaskConical,
+  ClipboardList,
+  Home,
+  Tags,
+} from 'lucide-react';
+import { getPathFromMode, isHomeTabMode, isProductResearchMode, isHardwareMode } from '../utils/routes';
 
 const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,11 +37,11 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
 
   const resolveActiveTab = (mode, admin) => {
     if (mode === 'bug-triage') return 'bug-triage';
-    if (mode === 'neck-fit-modeler') return 'hardware';
+    if (isHardwareMode(mode)) return 'hardware';
     if (['conversations', 'ask', 'conversation-trends'].includes(mode)) return 'gladly';
     if (isProductResearchMode(mode)) return 'research';
-    if (isPlatformMode(mode, admin)) return 'platform';
-    return 'research';
+    if (isHomeTabMode(mode, admin)) return 'home';
+    return 'home';
   };
 
   const [activeTab, setActiveTab] = useState(() => resolveActiveTab(currentMode, adminMode));
@@ -115,6 +128,27 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
     },
   ];
 
+  const hardwareModes = [
+    {
+      id: 'neck-fit-modeler',
+      name: 'Neck Fit Modeler',
+      description: 'Hardware fit modeling tools',
+      icon: Cpu,
+      color: 'text-slate-700',
+      bgColor: 'bg-slate-50',
+      borderColor: 'border-slate-200',
+    },
+    {
+      id: 'labeling-data',
+      name: 'Labeling Data',
+      description: 'Activity labeling inventory and durations',
+      icon: Tags,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      borderColor: 'border-emerald-200',
+    },
+  ];
+
   const handleModeChange = (modeId) => {
     setModeAndUrl(modeId, null);
   };
@@ -124,16 +158,32 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
     }`;
 
-  const platformActive = isPlatformMode(currentMode, adminMode);
   const researchActive = isProductResearchMode(currentMode);
+  const hardwareActive = isHardwareMode(currentMode);
 
   const subNavModes =
-    activeTab === 'gladly' ? gladlyModes : activeTab === 'research' ? productResearchModes : [];
+    activeTab === 'gladly'
+      ? gladlyModes
+      : activeTab === 'research'
+        ? productResearchModes
+        : activeTab === 'hardware'
+          ? hardwareModes
+          : [];
 
   return (
     <div className="flex flex-col space-y-3 min-w-0 w-full">
       <div className="overflow-x-auto min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-nowrap w-max min-w-full md:w-full md:min-w-0">
+        <button
+          onClick={() => {
+            setActiveTab('home');
+            setModeAndUrl('tools', null);
+          }}
+          className={tabBtn(activeTab === 'home')}
+        >
+          <Home className="h-4 w-4 shrink-0 hidden sm:block" />
+          <span className="whitespace-nowrap">Home</span>
+        </button>
         <button
           onClick={() => {
             setActiveTab('research');
@@ -161,19 +211,8 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
         </button>
         <button
           onClick={() => {
-            setActiveTab('platform');
-            if (!platformActive || adminMode) {
-              setModeAndUrl('tools', null);
-            }
-          }}
-          className={tabBtn(activeTab === 'platform')}
-        >
-          <span className="whitespace-nowrap">Platform</span>
-        </button>
-        <button
-          onClick={() => {
             setActiveTab('hardware');
-            if (currentMode !== 'neck-fit-modeler') {
+            if (!hardwareActive) {
               setModeAndUrl('neck-fit-modeler', null);
             }
           }}

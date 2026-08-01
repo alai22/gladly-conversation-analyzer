@@ -1074,7 +1074,7 @@ function OverviewMarkdownRowActions({
             title={
               jiraConfigured
                 ? 'Update this issue in Jira and add a comment'
-                : 'Connect Jira first (Platform → Jira connection), then disconnect/reconnect OAuth if you need write access.'
+                : 'Connect Jira first (Home → Jira connection), then disconnect/reconnect OAuth if you need write access.'
             }
             className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-semibold rounded border border-indigo-300 bg-indigo-50 text-indigo-950 hover:bg-indigo-100 disabled:opacity-60"
             onClick={applyToJira}
