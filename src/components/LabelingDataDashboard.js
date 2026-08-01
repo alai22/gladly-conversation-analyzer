@@ -4,6 +4,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,6 +20,100 @@ const COLORS = [
   '#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6',
   '#00ACC1', '#64B5F6', '#F28B82', '#81C784', '#FFB74D', '#BA68C8',
 ];
+
+function shortLabeler(email) {
+  if (!email) return '?';
+  const local = String(email).split('@')[0];
+  return local.length > 16 ? `${local.slice(0, 14)}…` : local;
+}
+
+function labelerColorMap(emails) {
+  const map = {};
+  (emails || []).forEach((email, i) => {
+    map[email] = COLORS[i % COLORS.length];
+  });
+  return map;
+}
+
+/** Pivot by_date[].by_user into Recharts stacked rows (date × labeler). */
+function buildDateLabelerStack(byDate, labelerKeys) {
+  return (byDate || []).map((d) => {
+    const row = {
+      date: d.date,
+      label: (d.date || '').length >= 10 ? d.date.slice(5) : d.date,
+      total: Number(d.duration_seconds) || 0,
+    };
+    const byUser = {};
+    (d.by_user || []).forEach((u) => {
+      byUser[u.user] = Number(u.duration_seconds) || 0;
+    });
+    (labelerKeys || []).forEach((email) => {
+      row[email] = byUser[email] || 0;
+    });
+    return row;
+  });
+}
+
+/** Pivot users[].activities into Recharts stacked rows (activity × labeler). */
+function buildActivityLabelerStack(activities, users, labelerKeys) {
+  return (activities || []).map((a) => {
+    const row = {
+      label: a.label,
+      name: displayLabel(a.label),
+      total: Number(a.seconds) || 0,
+    };
+    (labelerKeys || []).forEach((email) => {
+      const user = (users || []).find((u) => u.email === email);
+      const act = (user?.activities || []).find((x) => x.label === a.label);
+      row[email] = Number(act?.seconds) || 0;
+    });
+    return row;
+  });
+}
+
+function StackedDurationChart({
+  data,
+  seriesKeys,
+  colorMap,
+  xKey = 'label',
+  height = 320,
+  emptyText = 'No data yet.',
+}) {
+  if (!data?.length || !seriesKeys?.length) {
+    return <p className="text-sm text-gray-500">{emptyText}</p>;
+  }
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatSecondsShort(v)} />
+          <Tooltip
+            formatter={(value, name) => [
+              formatSecondsShort(value),
+              shortLabeler(name),
+            ]}
+            labelFormatter={(label) => String(label)}
+          />
+          <Legend
+            formatter={(value) => shortLabeler(value)}
+            wrapperStyle={{ fontSize: 12 }}
+          />
+          {seriesKeys.map((key, index) => (
+            <Bar
+              key={key}
+              dataKey={key}
+              stackId="stack"
+              fill={colorMap[key] || COLORS[index % COLORS.length]}
+              radius={index === seriesKeys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 const GPS_LABEL_DISPLAY = {
   IndoorBlocked: 'Indoor (blocked)',
@@ -379,6 +474,8 @@ const LabelingDataDashboard = () => {
       (a, b) => (b.total_duration_seconds || 0) - (a.total_duration_seconds || 0)
     );
   }, [data?.users]);
+  const labelerKeys = useMemo(() => users.map((u) => u.email).filter(Boolean), [users]);
+  const labelerColors = useMemo(() => labelerColorMap(labelerKeys), [labelerKeys]);
 
   const chartData = useMemo(
     () =>
@@ -417,6 +514,14 @@ const LabelingDataDashboard = () => {
       })),
     [byDate]
   );
+  const dateLabelerStack = useMemo(
+    () => buildDateLabelerStack(byDate, labelerKeys),
+    [byDate, labelerKeys]
+  );
+  const activityLabelerStack = useMemo(
+    () => buildActivityLabelerStack(activities, users, labelerKeys),
+    [activities, users, labelerKeys]
+  );
 
   const gps = data?.gps || null;
   const gpsTotals = gps?.totals || {};
@@ -427,6 +532,14 @@ const LabelingDataDashboard = () => {
       (a, b) => (b.total_duration_seconds || 0) - (a.total_duration_seconds || 0)
     );
   }, [gps?.users]);
+  const gpsLabelerKeys = useMemo(
+    () => gpsUsers.map((u) => u.email).filter(Boolean),
+    [gpsUsers]
+  );
+  const gpsLabelerColors = useMemo(
+    () => labelerColorMap(gpsLabelerKeys),
+    [gpsLabelerKeys]
+  );
   const gpsChartData = useMemo(
     () =>
       gpsActivities.map((a) => ({
@@ -460,6 +573,14 @@ const LabelingDataDashboard = () => {
         human: d.duration_human || formatSecondsShort(d.duration_seconds),
       })),
     [gps?.by_date]
+  );
+  const gpsDateLabelerStack = useMemo(
+    () => buildDateLabelerStack(gps?.by_date || [], gpsLabelerKeys),
+    [gps?.by_date, gpsLabelerKeys]
+  );
+  const gpsActivityLabelerStack = useMemo(
+    () => buildActivityLabelerStack(gpsActivities, gpsUsers, gpsLabelerKeys),
+    [gpsActivities, gpsUsers, gpsLabelerKeys]
   );
 
   const stagingEmails = Object.keys(status?.staging_by_email || {});
@@ -707,6 +828,38 @@ const LabelingDataDashboard = () => {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          Duration by date · stacked by labeler
+        </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Session-day volume with each labeler as a stack segment
+        </p>
+        <StackedDurationChart
+          data={dateLabelerStack}
+          seriesKeys={labelerKeys}
+          colorMap={labelerColors}
+          xKey="label"
+          emptyText="No dated sessions found."
+        />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          Duration by posture · stacked by labeler
+        </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Each posture bar broken down by who labeled it
+        </p>
+        <StackedDurationChart
+          data={activityLabelerStack}
+          seriesKeys={labelerKeys}
+          colorMap={labelerColors}
+          xKey="name"
+          emptyText="No non-zero activity durations found."
+        />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Duration by posture</h3>
         <p className="text-sm text-gray-500 mb-4">
           Posture / activity labels from{' '}
@@ -915,6 +1068,38 @@ const LabelingDataDashboard = () => {
               icon={Clock}
               label="GPS labeled duration"
               value={gpsTotals.duration_human || formatSecondsShort(gpsTotals.duration_seconds)}
+            />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              GPS by date · stacked by labeler
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Session-day GPS volume with each labeler as a stack segment
+            </p>
+            <StackedDurationChart
+              data={gpsDateLabelerStack}
+              seriesKeys={gpsLabelerKeys}
+              colorMap={gpsLabelerColors}
+              xKey="label"
+              emptyText="No dated GPS sessions found."
+            />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              GPS by environment · stacked by labeler
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Each environment bar broken down by who labeled it
+            </p>
+            <StackedDurationChart
+              data={gpsActivityLabelerStack}
+              seriesKeys={gpsLabelerKeys}
+              colorMap={gpsLabelerColors}
+              xKey="name"
+              emptyText="No non-zero GPS durations found."
             />
           </div>
 
