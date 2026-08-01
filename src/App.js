@@ -14,6 +14,7 @@ import ApiDataManager from './components/ApiDataManager';
 import SurveyManager from './components/SurveyManager';
 import Tools from './components/Tools';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import LabelingDataDashboard from './components/LabelingDataDashboard';
 import BugTriageCopilot from './components/BugTriageCopilot';
 import JiraStatusView from './components/JiraStatusView';
 import TextInterviewHub from './components/interview/TextInterviewHub';
@@ -66,7 +67,8 @@ function App() {
     'conversation-trends': [],
     'api-data-manager': [],
     'tools': [],
-    'analytics': []
+    'analytics': [],
+    'labeling-data': []
   });
 
   // Initialize currentMode: path takes precedence, then query mode, then default
@@ -441,7 +443,8 @@ function App() {
                              currentMode === 'api-data-manager' ||
                              currentMode === 'jira-status' ||
                              currentMode === 'zoom' ||
-                             currentMode === 'analytics';
+                             currentMode === 'analytics' ||
+                             currentMode === 'labeling-data';
       
       if (needsAdminAuth) {
         const checkAdminAuth = async () => {
@@ -495,7 +498,7 @@ function App() {
   }
 
   // Platform hub and admin-gated tools require admin authentication
-  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'tools' || currentMode === 'api-data-manager' || currentMode === 'jira-status' || currentMode === 'zoom' || currentMode === 'analytics') && !isAdminAuthenticated) {
+  if ((adminMode === 'claude' || adminMode === 'download' || currentMode === 'tools' || currentMode === 'api-data-manager' || currentMode === 'jira-status' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'labeling-data') && !isAdminAuthenticated) {
     return <Login onLogin={handleLogin} onAdminLogin={handleAdminLogin} requireAdmin={true} />;
   }
 
@@ -891,7 +894,7 @@ function App() {
         )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || currentMode === 'halo-surveys' || currentMode === 'neck-fit-modeler' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <div className={`flex-1 ${currentMode === 'churn-trends' || currentMode === 'conversation-trends' || currentMode === 'api-data-manager' || currentMode === 'survey-manager' || currentMode === 'tools' || currentMode === 'zoom' || currentMode === 'analytics' || currentMode === 'labeling-data' || currentMode === 'bug-triage' || currentMode === 'jira-status' || currentMode === 'text-interview' || currentMode === 'halo-surveys' || currentMode === 'neck-fit-modeler' || adminMode === 'download' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {/* Show actual tool components when active */}
           {currentMode === 'bug-triage' ? (
             <BugTriageCopilot />
@@ -905,6 +908,8 @@ function App() {
             <ZoomDownloadManager />
           ) : currentMode === 'analytics' ? (
             <AnalyticsDashboard />
+          ) : currentMode === 'labeling-data' ? (
+            <LabelingDataDashboard />
           ) : adminMode === 'download' ? (
             <DownloadManager />
           ) : adminMode === 'claude' ? (
@@ -944,7 +949,7 @@ function App() {
         </div>
 
         {/* Prompt Input */}
-        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && currentMode !== 'halo-surveys' && currentMode !== 'neck-fit-modeler' && (
+        {adminMode !== 'download' && currentMode !== 'churn-trends' && currentMode !== 'conversation-trends' && currentMode !== 'api-data-manager' && currentMode !== 'survey-manager' && currentMode !== 'tools' && currentMode !== 'zoom' && currentMode !== 'analytics' && currentMode !== 'labeling-data' && currentMode !== 'bug-triage' && currentMode !== 'jira-status' && currentMode !== 'text-interview' && currentMode !== 'halo-surveys' && currentMode !== 'neck-fit-modeler' && (
           <div className="bg-white border-t border-gray-200 p-6">
             {/* Clear Conversation Button for Survicate Mode */}
             {currentMode === 'survicate' && conversations.survicate && conversations.survicate.length > 0 && (

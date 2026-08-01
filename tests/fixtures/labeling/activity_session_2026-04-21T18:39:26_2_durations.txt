@@ -1,0 +1,14 @@
+{
+  "EatingDrinking (5)": "00:00:00",
+  "Barking (14)": "00:00:00",
+  "RunningPlaying (4)": "00:00:00",
+  "Sniffing (6)": "00:00:00",
+  "Walking (1)": "00:00:00",
+  "Jumping (7)": "00:00:00",
+  "Lying (8)": "00:00:00",
+  "Sitting (9)": "00:00:00",
+  "Standing (10)": "00:01:24.2000000",
+  "HandCarryDevice (11)": "00:00:00",
+  "OnShelf (12)": "00:00:00",
+  "PottyTwo (13)": "00:00:00"
+}

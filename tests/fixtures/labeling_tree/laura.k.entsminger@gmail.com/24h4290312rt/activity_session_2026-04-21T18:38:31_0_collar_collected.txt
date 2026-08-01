@@ -1,0 +1,9 @@
+18:38:31.123: Dog's name: Diamond
+18:38:31.150: Dog's breed: Mixed
+18:38:31.150: Dog's weight: 27.215574566138386
+18:38:31.150: Collar SN: 24h4290312rt
+18:38:31.150 / 18:38:29.000: Session started
+18:38:31.151 / 18:38:29.000: OnShelf (12) (initial state)
+18:38:35.307 / 18:38:34.000: Standing (10)
+18:38:36.568 / 18:38:36.000: OnShelf (12)
+18:38:47.095: End of session

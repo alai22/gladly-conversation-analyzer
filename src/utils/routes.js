@@ -22,6 +22,7 @@ export const PATH_TO_ROUTE = {
   '/platform/gladly-download': { mode: 'tools', adminMode: 'download' },
   '/platform/zoom': { mode: 'zoom', adminMode: null },
   '/platform/analytics': { mode: 'analytics', adminMode: null },
+  '/platform/labeling': { mode: 'labeling-data', adminMode: null },
   '/platform/jira': { mode: 'jira-status', adminMode: null },
   '/platform/claude': { mode: 'tools', adminMode: 'claude' },
   '/jira': { mode: 'bug-triage', adminMode: null },
@@ -43,6 +44,7 @@ export const MODE_TO_CANONICAL_PATH = {
   'api-data-manager': '/platform/survicate-download',
   'zoom': '/platform/zoom',
   'analytics': '/platform/analytics',
+  'labeling-data': '/platform/labeling',
   'jira-status': '/platform/jira',
   'bug-triage': '/jira',
   'neck-fit-modeler': '/hardware/neck-fit',
@@ -63,6 +65,7 @@ export const PLATFORM_MODES = [
   'api-data-manager',
   'zoom',
   'analytics',
+  'labeling-data',
   'jira-status',
 ];
 

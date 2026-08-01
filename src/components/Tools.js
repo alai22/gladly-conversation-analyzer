@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Database, Bot, TrendingUp, Video, Activity, ExternalLink } from 'lucide-react';
+import { Download, Database, Bot, TrendingUp, Video, Activity, ExternalLink, Tags } from 'lucide-react';
 
 const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   const [activeSection, setActiveSection] = useState(() => {
@@ -12,7 +12,7 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   useEffect(() => {
     if (adminMode === 'claude') {
       setActiveSection('admin-tools');
-    } else if (adminMode === 'download' || ['api-data-manager', 'zoom', 'analytics', 'jira-status'].includes(currentMode)) {
+    } else if (adminMode === 'download' || ['api-data-manager', 'zoom', 'analytics', 'labeling-data', 'jira-status'].includes(currentMode)) {
       setActiveSection('data-management');
     }
   }, [currentMode, adminMode]);
@@ -64,6 +64,16 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
       action: () => openTool('analytics', null)
     },
     {
+      id: 'labeling-data',
+      name: 'Labeling Data',
+      description: 'Activity labeling inventory by user and duration totals',
+      icon: Tags,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      borderColor: 'border-emerald-200',
+      action: () => openTool('labeling-data', null)
+    },
+    {
       id: 'jira-status',
       name: 'Jira connection',
       description: 'Check if Jira (HALO) issues can be fetched for Bug Triage',
@@ -112,6 +122,9 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
     }
     if (tool.id === 'analytics') {
       return currentMode === 'analytics';
+    }
+    if (tool.id === 'labeling-data') {
+      return currentMode === 'labeling-data';
     }
     if (tool.id === 'jira-status') {
       return currentMode === 'jira-status';

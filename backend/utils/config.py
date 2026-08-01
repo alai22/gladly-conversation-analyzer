@@ -182,6 +182,13 @@ class Config:
     S3_BUCKET_NAME: Optional[str] = os.getenv('S3_BUCKET_NAME')
     S3_FILE_KEY: str = os.getenv('S3_FILE_KEY', 'conversation_items.json')
     S3_REGION: str = os.getenv('S3_REGION', 'us-east-2')
+
+    # Halo AI labeling: staging/ (Make ingest) → extracted-txt/<email>/<collar-sn>/
+    LABELING_S3_BUCKET_NAME: Optional[str] = os.getenv(
+        'LABELING_S3_BUCKET_NAME', 'halo-ai-labeling-prod'
+    )
+    LABELING_S3_PREFIX: str = os.getenv('LABELING_S3_PREFIX', 'extracted-txt/')
+    LABELING_S3_STAGING_PREFIX: str = os.getenv('LABELING_S3_STAGING_PREFIX', 'staging/')
     
     # Azure Storage Configuration
     AZURE_CONNECTION_STRING: Optional[str] = os.getenv('AZURE_CONNECTION_STRING')

@@ -1,0 +1,2 @@
+18:39:28.009: Standing (10) (touch start)
+18:40:52.311: Standing (10) (touch end)

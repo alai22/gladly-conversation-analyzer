@@ -31,6 +31,7 @@ from backend.api.routes.zoom_routes import zoom_bp
 from backend.api.routes.survicate_routes import survicate_bp
 from backend.api.routes.auth_routes import auth_bp
 from backend.api.routes.analytics_routes import analytics_bp
+from backend.api.routes.labeling_routes import labeling_bp
 from backend.api.routes.jira_routes import jira_bp
 from backend.api.routes.interview_routes import interview_bp
 from backend.api.routes.halo_survey_routes import halo_survey_bp
@@ -123,6 +124,7 @@ def create_app():
     app.register_blueprint(zoom_bp)
     app.register_blueprint(survicate_bp)
     app.register_blueprint(analytics_bp)
+    app.register_blueprint(labeling_bp)
     app.register_blueprint(jira_bp)
     app.register_blueprint(interview_bp)
     app.register_blueprint(halo_survey_bp)

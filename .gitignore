@@ -135,6 +135,12 @@ api_test_results.json
 data/*.jsonl
 data/*.log
 
+# Local mirror of halo-ai-labeling-prod S3 exports (do not commit)
+data/s3-halo-ai-labeling-prod/
+data/labeling_samples/
+data/labeling_inventory.json
+data/labeling_dedupe_plan.json
+
 # Jira OAuth tokens (sensitive)
 data/jira_oauth_tokens.json
 data/interviews/
