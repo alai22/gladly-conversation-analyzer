@@ -6,6 +6,7 @@ import pytest
 
 from backend.services.labeling_data_analyzer import (
     LabelingDataAnalyzer,
+    canonicalize_activity_label,
     format_ui_summary,
     parse_collar_collected,
     parse_duration_to_seconds,
@@ -56,6 +57,12 @@ class TestParsers:
         assert parse_duration_to_seconds("00:00:01.5000000") == pytest.approx(1.5)
         assert parse_duration_to_seconds("00:01:24.2000000") == pytest.approx(84.2)
 
+    def test_canonicalize_activity_label(self):
+        assert canonicalize_activity_label("Standing (10)") == "Standing"
+        assert canonicalize_activity_label("Standing") == "Standing"
+        assert canonicalize_activity_label("RunningPlaying (4)") == "RunningPlaying"
+        assert canonicalize_activity_label("  Sedentary  ") == "Sedentary"
+
     def test_parse_collar_collected(self):
         text = _read("activity_session_2026-04-21T18:38:31_0_collar_collected.txt")
         parsed = parse_collar_collected(text)
@@ -92,19 +99,37 @@ class TestLocalAnalyze:
         assert summary["total_files"] >= 3
         assert summary["files_by_kind"]["collar_collected"] >= 1
         assert summary["files_by_kind"]["durations"] >= 1
-        assert "Standing (10)" in summary["activity_duration_seconds"]
-        assert summary["activity_duration_seconds"]["Standing (10)"] > 0
-        assert summary["collar_activity_events"].get("Standing (10)", 0) >= 1
-        assert summary["user_reported_events"].get("Standing (10)", 0) >= 1
+        assert "Standing" in summary["activity_duration_seconds"]
+        assert "Standing (10)" not in summary["activity_duration_seconds"]
+        assert summary["activity_duration_seconds"]["Standing"] > 0
+        assert summary["collar_activity_events"].get("Standing", 0) >= 1
+        assert summary["user_reported_events"].get("Standing", 0) >= 1
 
     def test_format_ui_summary(self):
         analyzer = LabelingDataAnalyzer(bucket_name="local", prefix="extracted-txt/")
         ui = format_ui_summary(analyzer.analyze_local(str(TREE)))
         assert ui["totals"]["users"] >= 1
         assert ui["totals"]["duration_seconds"] > 0
-        assert any(a["name"] == "Standing" for a in ui["activities"])
+        assert any(a["name"] == "Standing" and a["label"] == "Standing" for a in ui["activities"])
         assert ui["users"][0]["email"]
         assert ui["users"][0]["total_duration_seconds"] > 0
         assert ui["users"][0]["collar_sns"]
         assert ui["users"][0]["collars"]
         assert ui["users"][0]["collars"][0]["collar_sn"] == "24h4290312rt"
+
+    def test_merges_bare_and_id_duration_labels(self, tmp_path: Path):
+        user_dir = tmp_path / "labeler@x.com" / "collar1"
+        user_dir.mkdir(parents=True)
+        (user_dir / "activity_session_2026-04-21T18:38:31_0_durations.txt").write_text(
+            '{\n  "Standing (10)": "00:00:10.0000000",\n  "Walking (1)": "00:00:05.0000000"\n}\n',
+            encoding="utf-8",
+        )
+        (user_dir / "activity_session_2026-04-21T18:39:26_2_durations.txt").write_text(
+            '{\n  "Standing": "00:00:03.0000000",\n  "Walking": "00:00:02.0000000"\n}\n',
+            encoding="utf-8",
+        )
+        analyzer = LabelingDataAnalyzer(bucket_name="local", prefix="extracted-txt/")
+        summary = analyzer.analyze_local(str(tmp_path))
+        assert summary["activity_duration_seconds"]["Standing"] == pytest.approx(13.0)
+        assert summary["activity_duration_seconds"]["Walking"] == pytest.approx(7.0)
+        assert len(summary["activity_duration_seconds"]) == 2

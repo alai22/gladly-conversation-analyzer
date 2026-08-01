@@ -97,6 +97,22 @@ def parse_activity_label(label: str) -> Optional[Tuple[str, int]]:
     return match.group("name"), int(match.group("id"))
 
 
+def canonicalize_activity_label(label: str) -> str:
+    """
+    Normalize activity keys so export variants group together.
+
+    'Standing (10)' and 'Standing' both become 'Standing'.
+    """
+    text = (label or "").strip()
+    if not text:
+        return text
+    parsed = parse_activity_label(text)
+    if parsed:
+        return parsed[0]
+    bare = re.match(r"^([A-Za-z][A-Za-z0-9]*)", text)
+    return bare.group(1) if bare else text
+
+
 def sanitize_collar_sn(sn: Optional[str]) -> str:
     """Normalize collar SN for use as an S3 path segment."""
     if not sn or not str(sn).strip():
@@ -408,9 +424,10 @@ class LabelingDataAnalyzer:
                 if ref.kind == "durations":
                     durations = parse_durations(text)
                     for label, seconds in durations.items():
-                        activity_duration_seconds[label] += seconds
-                        user_stats["activity_duration_seconds"][label] += seconds
-                        collar_stats["activity_duration_seconds"][label] += seconds
+                        key = canonicalize_activity_label(label)
+                        activity_duration_seconds[key] += seconds
+                        user_stats["activity_duration_seconds"][key] += seconds
+                        collar_stats["activity_duration_seconds"][key] += seconds
                 elif ref.kind == "collar_collected":
                     parsed = parse_collar_collected(text)
                     if parsed.dog_name or parsed.collar_sn:
@@ -425,15 +442,15 @@ class LabelingDataAnalyzer:
                             ),
                         }
                     for event in parsed.activity_events:
-                        label = event["label"]
-                        activity_collar_events[label] += 1
-                        user_stats["collar_activity_events"][label] += 1
+                        key = canonicalize_activity_label(event["label"])
+                        activity_collar_events[key] += 1
+                        user_stats["collar_activity_events"][key] += 1
                 elif ref.kind == "user_reported":
                     parsed = parse_user_reported(text)
                     for event in parsed.events:
-                        label = event["label"]
-                        activity_user_reported_events[label] += 1
-                        user_stats["user_reported_events"][label] += 1
+                        key = canonicalize_activity_label(event["label"])
+                        activity_user_reported_events[key] += 1
+                        user_stats["user_reported_events"][key] += 1
             except Exception as exc:  # noqa: BLE001
                 parse_errors.append({"key": ref.key, "error": str(exc)})
 
@@ -555,11 +572,12 @@ def _activity_rows(duration_map: Dict[str, float], include_zero: bool = False) -
     for label, seconds in sorted(duration_map.items(), key=lambda kv: (-kv[1], kv[0])):
         if not include_zero and seconds <= 0:
             continue
+        name = canonicalize_activity_label(label)
         parsed = parse_activity_label(label)
         rows.append(
             {
-                "label": label,
-                "name": parsed[0] if parsed else label,
+                "label": name,
+                "name": name,
                 "activity_id": parsed[1] if parsed else None,
                 "seconds": round(float(seconds), 3),
                 "human": format_seconds(float(seconds)),
