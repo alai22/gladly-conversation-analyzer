@@ -4,15 +4,19 @@ API routes for Halo AI labeling: staging process + summaries.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+import boto3
 from flask import Blueprint, jsonify, request
 
 from backend.api.middleware.auth import require_admin_auth
 from backend.services.labeling_data_analyzer import LabelingDataAnalyzer, format_ui_summary
 from backend.services.labeling_ingest_service import LabelingIngestService
+from backend.utils.config import Config
 from backend.utils.logging import get_logger
 
 logger = get_logger("labeling_routes")
@@ -30,7 +34,10 @@ _PROCESS_STATE: Dict[str, Any] = {
     "finished_at": None,
     "last_report": None,
     "last_error": None,
+    "message": None,
 }
+_STALE_RUNNING_SEC = 2 * 60 * 60  # allow restart if marked running > 2h
+_PROCESS_STATUS_KEY = "labeling-jobs/process_status.json"
 
 
 def _cache_get(key: str) -> Optional[Dict[str, Any]]:
@@ -56,20 +63,121 @@ def _cache_clear() -> None:
         _CACHE["expires_at"] = 0.0
 
 
+def _s3_client():
+    return boto3.client("s3", region_name=Config.S3_REGION or "us-east-1")
+
+
+def _process_snapshot() -> Dict[str, Any]:
+    with _PROCESS_LOCK:
+        return {
+            "running": bool(_PROCESS_STATE["running"]),
+            "started_at": _PROCESS_STATE["started_at"],
+            "finished_at": _PROCESS_STATE["finished_at"],
+            "last_error": _PROCESS_STATE["last_error"],
+            "last_report": _PROCESS_STATE["last_report"],
+            "message": _PROCESS_STATE["message"],
+        }
+
+
+def _persist_process_state(state: Dict[str, Any]) -> None:
+    """Write job state to S3 so status survives tab close / other workers."""
+    bucket = Config.LABELING_S3_BUCKET_NAME
+    if not bucket:
+        return
+    try:
+        payload = {
+            **state,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        _s3_client().put_object(
+            Bucket=bucket,
+            Key=_PROCESS_STATUS_KEY,
+            Body=json.dumps(payload).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to persist labeling process status: %s", exc)
+
+
+def _load_persisted_process_state() -> Optional[Dict[str, Any]]:
+    bucket = Config.LABELING_S3_BUCKET_NAME
+    if not bucket:
+        return None
+    try:
+        body = _s3_client().get_object(Bucket=bucket, Key=_PROCESS_STATUS_KEY)["Body"].read()
+        data = json.loads(body.decode("utf-8"))
+        if not isinstance(data, dict):
+            return None
+        return data
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _merge_process_state() -> Dict[str, Any]:
+    """Prefer in-memory if this worker is running; else S3 (for other workers / reloads)."""
+    mem = _process_snapshot()
+    if mem.get("running"):
+        return mem
+    persisted = _load_persisted_process_state()
+    if not persisted:
+        return mem
+    # If S3 says running but started long ago, treat as stale
+    if persisted.get("running") and persisted.get("started_at"):
+        try:
+            started = datetime.strptime(
+                persisted["started_at"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - started).total_seconds()
+            if age > _STALE_RUNNING_SEC:
+                persisted = {
+                    **persisted,
+                    "running": False,
+                    "last_error": persisted.get("last_error")
+                    or "Process marked stale (exceeded 2h); you can start again.",
+                    "message": "Stale job cleared",
+                }
+        except Exception:  # noqa: BLE001
+            pass
+    # Keep last_report from whichever is newer
+    if not persisted.get("last_report") and mem.get("last_report"):
+        persisted["last_report"] = mem["last_report"]
+    return {
+        "running": bool(persisted.get("running")),
+        "started_at": persisted.get("started_at"),
+        "finished_at": persisted.get("finished_at"),
+        "last_error": persisted.get("last_error"),
+        "last_report": persisted.get("last_report"),
+        "message": persisted.get("message"),
+    }
+
+
+def _set_process_state(**kwargs: Any) -> Dict[str, Any]:
+    with _PROCESS_LOCK:
+        _PROCESS_STATE.update(kwargs)
+        snap = {
+            "running": bool(_PROCESS_STATE["running"]),
+            "started_at": _PROCESS_STATE["started_at"],
+            "finished_at": _PROCESS_STATE["finished_at"],
+            "last_error": _PROCESS_STATE["last_error"],
+            "last_report": _PROCESS_STATE["last_report"],
+            "message": _PROCESS_STATE["message"],
+        }
+    _persist_process_state(snap)
+    return snap
+
+
+def _is_process_busy() -> bool:
+    state = _merge_process_state()
+    return bool(state.get("running"))
+
+
 @labeling_bp.route("/status", methods=["GET"])
 @require_admin_auth
 def labeling_status():
-    """Staging vs processed output inventory + last process job state."""
+    """Staging vs processed output inventory + process job state."""
     try:
         status = LabelingIngestService().staging_status()
-        with _PROCESS_LOCK:
-            status["process"] = {
-                "running": _PROCESS_STATE["running"],
-                "started_at": _PROCESS_STATE["started_at"],
-                "finished_at": _PROCESS_STATE["finished_at"],
-                "last_error": _PROCESS_STATE["last_error"],
-                "last_report": _PROCESS_STATE["last_report"],
-            }
+        status["process"] = _merge_process_state()
         return jsonify({"success": True, "data": status})
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to get labeling status")
@@ -85,32 +193,32 @@ def labeling_process():
     JSON body (optional):
       dry_run: bool (default false)
       clear_output: bool (default true) — wipe extracted-txt before copy
-      async: bool (default false) — run in background thread
+      async: bool (default true) — run in background; poll GET /status
     """
     try:
         body = request.get_json(silent=True) or {}
         dry_run = bool(body.get("dry_run", False))
         clear_output = bool(body.get("clear_output", True))
-        run_async = bool(body.get("async", False))
+        # Default async so browser tabs are not held open for long S3 copies
+        run_async = bool(body.get("async", True))
 
-        with _PROCESS_LOCK:
-            if _PROCESS_STATE["running"]:
-                return jsonify({
-                    "success": False,
-                    "error": "A labeling process job is already running",
-                    "data": {
-                        "running": True,
-                        "started_at": _PROCESS_STATE["started_at"],
-                    },
-                }), 409
+        if _is_process_busy():
+            state = _merge_process_state()
+            return jsonify({
+                "success": False,
+                "error": "A labeling process job is already running",
+                "data": state,
+            }), 409
 
         if run_async:
-            with _PROCESS_LOCK:
-                _PROCESS_STATE["running"] = True
-                _PROCESS_STATE["started_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                _PROCESS_STATE["finished_at"] = None
-                _PROCESS_STATE["last_error"] = None
-                _PROCESS_STATE["last_report"] = None
+            _set_process_state(
+                running=True,
+                started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                finished_at=None,
+                last_error=None,
+                last_report=None,
+                message="Processing staging → extracted-txt…",
+            )
 
             def _worker():
                 try:
@@ -119,47 +227,61 @@ def labeling_process():
                         clear_output=clear_output,
                     )
                     _cache_clear()
-                    with _PROCESS_LOCK:
-                        _PROCESS_STATE["last_report"] = report
+                    _set_process_state(
+                        running=False,
+                        finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        last_report=report,
+                        last_error=None,
+                        message=(
+                            f"Done — copied {report.get('copied', 0)} files, "
+                            f"{report.get('sessions', 0)} sessions"
+                        ),
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Async labeling process failed")
-                    with _PROCESS_LOCK:
-                        _PROCESS_STATE["last_error"] = str(exc)
-                finally:
-                    with _PROCESS_LOCK:
-                        _PROCESS_STATE["running"] = False
-                        _PROCESS_STATE["finished_at"] = time.strftime(
-                            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
-                        )
+                    _set_process_state(
+                        running=False,
+                        finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        last_error=str(exc),
+                        message="Process failed",
+                    )
 
             threading.Thread(target=_worker, daemon=True).start()
             return jsonify({
                 "success": True,
                 "async": True,
-                "message": "Processing started",
+                "message": "Processing started in background. Safe to leave this page.",
+                "data": _merge_process_state(),
             })
 
-        with _PROCESS_LOCK:
-            _PROCESS_STATE["running"] = True
-            _PROCESS_STATE["started_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            _PROCESS_STATE["finished_at"] = None
-            _PROCESS_STATE["last_error"] = None
+        _set_process_state(
+            running=True,
+            started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            finished_at=None,
+            last_error=None,
+            message="Processing staging → extracted-txt…",
+        )
         try:
             report = LabelingIngestService().process_staging(
                 dry_run=dry_run,
                 clear_output=clear_output,
             )
             _cache_clear()
-            with _PROCESS_LOCK:
-                _PROCESS_STATE["last_report"] = report
-                _PROCESS_STATE["running"] = False
-                _PROCESS_STATE["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            return jsonify({"success": True, "async": False, "data": report})
+            state = _set_process_state(
+                running=False,
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                last_report=report,
+                last_error=None,
+                message=f"Done — copied {report.get('copied', 0)} files",
+            )
+            return jsonify({"success": True, "async": False, "data": report, "process": state})
         except Exception as exc:  # noqa: BLE001
-            with _PROCESS_LOCK:
-                _PROCESS_STATE["last_error"] = str(exc)
-                _PROCESS_STATE["running"] = False
-                _PROCESS_STATE["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            _set_process_state(
+                running=False,
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                last_error=str(exc),
+                message="Process failed",
+            )
             raise
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 400

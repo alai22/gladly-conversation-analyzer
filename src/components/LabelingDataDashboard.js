@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -9,8 +9,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, Clock, Dog, FolderOpen, Play, RefreshCw, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Dog, FolderOpen, Play, RefreshCw, Users } from 'lucide-react';
 import axios from 'axios';
+
+const PROCESS_POLL_MS = 4000;
 
 const COLORS = [
   '#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6',
@@ -32,25 +34,35 @@ const LabelingDataDashboard = () => {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
   const [processReport, setProcessReport] = useState(null);
+  const [processInfo, setProcessInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [processNotice, setProcessNotice] = useState(null); // success | error banner after job
   const [error, setError] = useState(null);
   const [cached, setCached] = useState(false);
   const [expandedUser, setExpandedUser] = useState(null);
+  const wasProcessingRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     try {
       const response = await axios.get('/api/labeling/status');
       if (response.data.success) {
-        setStatus(response.data.data);
-        if (response.data.data?.process?.last_report) {
-          setProcessReport(response.data.data.process.last_report);
+        const next = response.data.data;
+        setStatus(next);
+        const proc = next?.process || null;
+        setProcessInfo(proc);
+        if (proc?.last_report) {
+          setProcessReport(proc.last_report);
         }
+        const running = Boolean(proc?.running);
+        setProcessing(running);
+        return next;
       }
     } catch (err) {
       // Non-fatal; summary can still load
       console.error('Failed to load labeling status', err);
     }
+    return null;
   }, []);
 
   const fetchSummary = useCallback(async ({ refresh = false } = {}) => {
@@ -79,36 +91,78 @@ const LabelingDataDashboard = () => {
   }, []);
 
   const processStaging = useCallback(async () => {
-    setProcessing(true);
     setError(null);
+    setProcessNotice(null);
     try {
       const response = await axios.post('/api/labeling/process', {
         dry_run: false,
         clear_output: true,
-        async: false,
+        async: true,
       });
       if (!response.data.success) {
         throw new Error(response.data.error || 'Process failed');
       }
-      setProcessReport(response.data.data);
+      wasProcessingRef.current = true;
+      setProcessing(true);
+      setProcessInfo(response.data.data || { running: true, message: response.data.message });
+      setProcessNotice({
+        type: 'info',
+        text: 'Processing started in the background. Safe to leave this tab — it keeps running on the server.',
+      });
       await fetchStatus();
-      await fetchSummary({ refresh: true });
     } catch (err) {
+      if (err.response?.status === 409) {
+        wasProcessingRef.current = true;
+        setProcessing(true);
+        setProcessInfo(err.response.data?.data || { running: true });
+        setProcessNotice({
+          type: 'info',
+          text: 'A process is already running. Waiting for it to finish…',
+        });
+        await fetchStatus();
+        return;
+      }
       const errorMsg =
         err.response?.data?.error ||
         err.response?.data?.message ||
         err.message ||
         'Failed to process staging';
       setError(errorMsg);
-    } finally {
       setProcessing(false);
     }
-  }, [fetchStatus, fetchSummary]);
+  }, [fetchStatus]);
 
   useEffect(() => {
     fetchStatus();
     fetchSummary();
   }, [fetchStatus, fetchSummary]);
+
+  // Poll while a background process is running (also resumes after page reload)
+  useEffect(() => {
+    const running = Boolean(processInfo?.running || processing);
+    if (!running) return undefined;
+
+    wasProcessingRef.current = true;
+    const id = setInterval(async () => {
+      const next = await fetchStatus();
+      const stillRunning = Boolean(next?.process?.running);
+      if (!stillRunning && wasProcessingRef.current) {
+        wasProcessingRef.current = false;
+        const proc = next?.process;
+        if (proc?.last_error) {
+          setProcessNotice({ type: 'error', text: `Process failed: ${proc.last_error}` });
+        } else {
+          setProcessNotice({
+            type: 'success',
+            text: proc?.message || 'Processing finished. Refreshing summary…',
+          });
+          await fetchSummary({ refresh: true });
+        }
+      }
+    }, PROCESS_POLL_MS);
+
+    return () => clearInterval(id);
+  }, [processInfo?.running, processing, fetchStatus, fetchSummary]);
 
   const totals = data?.totals || {};
   const activities = data?.activities || [];
@@ -197,9 +251,13 @@ const LabelingDataDashboard = () => {
             onClick={processStaging}
             disabled={processing || loading}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
-            title="Copy staging/extracted → extracted-txt/<email>/<collar-sn>/ then refresh summary"
+            title="Starts a background job: staging → extracted-txt/<email>/<collar-sn>/"
           >
-            <Play className={`h-4 w-4 ${processing ? 'animate-pulse' : ''}`} />
+            {processing ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
             {processing ? 'Processing…' : 'Process staging'}
           </button>
           <button
@@ -208,7 +266,7 @@ const LabelingDataDashboard = () => {
               fetchStatus();
               fetchSummary({ refresh: true });
             }}
-            disabled={loading || processing}
+            disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -216,6 +274,59 @@ const LabelingDataDashboard = () => {
           </button>
         </div>
       </div>
+
+      {processing ? (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 flex items-start gap-3">
+          <RefreshCw className="h-5 w-5 animate-spin flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">Processing in progress</div>
+            <div className="mt-0.5">
+              {processInfo?.message || 'Copying staging files into extracted-txt by collar SN…'}
+            </div>
+            <div className="mt-1 text-xs text-blue-800">
+              Safe to close or leave this tab. Started{' '}
+              {processInfo?.started_at ? processInfo.started_at.replace('T', ' ').replace('Z', ' UTC') : 'just now'}.
+              This page polls every few seconds and will refresh when done.
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!processing && processNotice ? (
+        <div
+          className={`mb-4 p-4 rounded-lg text-sm flex items-start gap-3 border ${
+            processNotice.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : processNotice.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-900'
+                : 'bg-blue-50 border-blue-200 text-blue-900'
+          }`}
+        >
+          {processNotice.type === 'success' ? (
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          ) : processNotice.type === 'error' ? (
+            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          ) : (
+            <RefreshCw className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          )}
+          <div className="flex-1">
+            <div>{processNotice.text}</div>
+            {processReport && processNotice.type === 'success' ? (
+              <div className="mt-1 text-xs opacity-80">
+                Copied {processReport.copied} files · {processReport.sessions} sessions ·{' '}
+                {(processReport.errors || []).length} errors
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setProcessNotice(null)}
+            className="text-xs underline opacity-70 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {status ? (
         <div className="mb-4 p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-700">
