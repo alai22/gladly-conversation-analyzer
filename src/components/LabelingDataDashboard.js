@@ -112,7 +112,12 @@ const LabelingDataDashboard = () => {
 
   const totals = data?.totals || {};
   const activities = data?.activities || [];
-  const users = data?.users || [];
+  const users = useMemo(() => {
+    const list = data?.users || [];
+    return [...list].sort(
+      (a, b) => (b.total_duration_seconds || 0) - (a.total_duration_seconds || 0)
+    );
+  }, [data?.users]);
 
   const chartData = useMemo(
     () =>
@@ -123,6 +128,24 @@ const LabelingDataDashboard = () => {
       })),
     [activities]
   );
+
+  const userContributionData = useMemo(
+    () =>
+      users.map((u) => ({
+        email: u.email,
+        label: (u.email || '').split('@')[0] || u.email,
+        seconds: u.total_duration_seconds || 0,
+        files: u.files || 0,
+        sessions: u.sessions || 0,
+        human: u.total_duration_human || formatSecondsShort(u.total_duration_seconds),
+      })),
+    [users]
+  );
+
+  const stagingEmails = Object.keys(status?.staging_by_email || {});
+  const outputEmails = status?.output_emails || [];
+  const unprocessedEmails = stagingEmails.filter((e) => !outputEmails.includes(e));
+  const userChartHeight = Math.max(220, userContributionData.length * 48 + 48);
 
   if (loading && !data) {
     return (
@@ -207,12 +230,20 @@ const LabelingDataDashboard = () => {
               : ''}
           </div>
           <div>
-            Output: <span className="font-mono">{status.output_files ?? 0}</span> files under{' '}
+            Output (what totals below use):{' '}
+            <span className="font-mono">{status.output_files ?? 0}</span> files under{' '}
             <span className="font-mono">{status.output_prefix}</span>
             {(status.output_emails || []).length
               ? ` (${status.output_emails.join(', ')})`
               : ' (empty — click Process staging)'}
           </div>
+          {unprocessedEmails.length > 0 ? (
+            <div className="mt-2 text-amber-700 text-xs">
+              Staging has {unprocessedEmails.length} labeler(s) not in output yet:{' '}
+              {unprocessedEmails.join(', ')}. Click <span className="font-medium">Process staging</span> to
+              include them in Users / charts.
+            </div>
+          ) : null}
           {processReport ? (
             <div className="mt-2 text-xs text-gray-500">
               Last process: copied {processReport.copied}, sessions {processReport.sessions},
@@ -230,7 +261,16 @@ const LabelingDataDashboard = () => {
       ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <SummaryCard icon={Users} label="Users" value={totals.users ?? 0} />
+        <SummaryCard
+          icon={Users}
+          label="Processed users"
+          value={totals.users ?? 0}
+          hint={
+            stagingEmails.length > (totals.users ?? 0)
+              ? `${stagingEmails.length} in staging`
+              : null
+          }
+        />
         <SummaryCard icon={FolderOpen} label="Sessions" value={totals.sessions ?? 0} />
         <SummaryCard icon={Dog} label="Files" value={totals.files ?? 0} />
         <SummaryCard
@@ -238,6 +278,78 @@ const LabelingDataDashboard = () => {
           label="Total labeled duration"
           value={totals.duration_human || formatSecondsShort(totals.duration_seconds)}
         />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Contribution by user</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Ranked by total labeled duration from processed <span className="font-mono text-xs">*_durations.txt</span>
+        </p>
+        {userContributionData.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No processed users yet. Click Process staging to build extracted-txt from staging.
+          </p>
+        ) : (
+          <>
+            <div style={{ height: userChartHeight }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={userContributionData}
+                  layout="vertical"
+                  margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v) => formatSecondsShort(v)}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={120}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${formatSecondsShort(value)} · ${props.payload.sessions} sessions · ${props.payload.files} files`,
+                      props.payload.email,
+                    ]}
+                  />
+                  <Bar dataKey="seconds" radius={[0, 4, 4, 0]}>
+                    {userContributionData.map((entry, index) => (
+                      <Cell key={entry.email} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-4 font-medium">Rank</th>
+                    <th className="py-2 pr-4 font-medium">Labeler</th>
+                    <th className="py-2 pr-4 font-medium">Duration</th>
+                    <th className="py-2 pr-4 font-medium">Sessions</th>
+                    <th className="py-2 font-medium">Files</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userContributionData.map((u, i) => (
+                    <tr key={u.email} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 text-gray-500">{i + 1}</td>
+                      <td className="py-2 pr-4 text-gray-900">{u.email}</td>
+                      <td className="py-2 pr-4 text-gray-700">{u.human}</td>
+                      <td className="py-2 pr-4 text-gray-500">{u.sessions}</td>
+                      <td className="py-2 text-gray-500">{u.files}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
@@ -298,9 +410,9 @@ const LabelingDataDashboard = () => {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">By user</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">By user (detail)</h3>
         <p className="text-sm text-gray-500 mb-4">
-          File counts and summed activity durations per email folder
+          Ranked by contribution; expand for per-activity and collar SN breakdown
         </p>
 
         <div className="space-y-3">
@@ -410,7 +522,7 @@ const LabelingDataDashboard = () => {
   );
 };
 
-function SummaryCard({ icon: Icon, label, value }) {
+function SummaryCard({ icon: Icon, label, value, hint }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="flex items-center gap-2 text-gray-500 text-xs uppercase tracking-wide mb-2">
@@ -418,6 +530,7 @@ function SummaryCard({ icon: Icon, label, value }) {
         {label}
       </div>
       <div className="text-2xl font-semibold text-gray-900">{value}</div>
+      {hint ? <div className="text-xs text-amber-700 mt-1">{hint}</div> : null}
     </div>
   );
 }
