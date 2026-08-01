@@ -52,6 +52,14 @@ def main(argv=None) -> int:
             )
             for email, count in (status.get("staging_by_email") or {}).items():
                 print(f"  {email}: {count} extracted files")
+            fwd = status.get("forward_batches") or 0
+            if fwd:
+                print(
+                    f"Forwards quarantine: {fwd} batches / "
+                    f"{status.get('forward_extracted_files', 0)} extracted "
+                    f"(not processed until promoted) "
+                    f"ledger={status.get('forward_attributions', 0)}"
+                )
             print(
                 f"Output: {status['output_files']} files under {status['output_prefix']} "
                 f"({', '.join(status['output_emails']) or 'none'})"

@@ -40,6 +40,7 @@ _BG_REFRESH_RUNNING = False
 _PROCESS_LOCK = threading.Lock()
 _PROCESS_STATE: Dict[str, Any] = {
     "running": False,
+    "job": None,  # "process" | "promote-forwards"
     "started_at": None,
     "finished_at": None,
     "last_report": None,
@@ -192,6 +193,7 @@ def _process_snapshot() -> Dict[str, Any]:
     with _PROCESS_LOCK:
         return {
             "running": bool(_PROCESS_STATE["running"]),
+            "job": _PROCESS_STATE.get("job"),
             "started_at": _PROCESS_STATE["started_at"],
             "finished_at": _PROCESS_STATE["finished_at"],
             "last_error": _PROCESS_STATE["last_error"],
@@ -264,6 +266,7 @@ def _merge_process_state() -> Dict[str, Any]:
         persisted["last_report"] = mem["last_report"]
     return {
         "running": bool(persisted.get("running")),
+        "job": persisted.get("job"),
         "started_at": persisted.get("started_at"),
         "finished_at": persisted.get("finished_at"),
         "last_error": persisted.get("last_error"),
@@ -277,6 +280,7 @@ def _set_process_state(**kwargs: Any) -> Dict[str, Any]:
         _PROCESS_STATE.update(kwargs)
         snap = {
             "running": bool(_PROCESS_STATE["running"]),
+            "job": _PROCESS_STATE.get("job"),
             "started_at": _PROCESS_STATE["started_at"],
             "finished_at": _PROCESS_STATE["finished_at"],
             "last_error": _PROCESS_STATE["last_error"],
@@ -302,6 +306,125 @@ def labeling_status():
         return jsonify({"success": True, "data": status})
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to get labeling status")
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@labeling_bp.route("/promote-forwards", methods=["POST"])
+@require_admin_auth
+def labeling_promote_forwards():
+    """
+    Promote staging/_forwards/<id>/ → staging/<labeler>/<id>/.
+
+    JSON body (optional):
+      async: bool (default true)
+      dry_run: bool (default false)
+      message_ids: list[str] (optional subset)
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        dry_run = bool(body.get("dry_run", False))
+        run_async = bool(body.get("async", True))
+        message_ids = body.get("message_ids")
+        if message_ids is not None and not isinstance(message_ids, list):
+            return jsonify({"success": False, "error": "message_ids must be a list"}), 400
+
+        if _is_process_busy():
+            state = _merge_process_state()
+            return jsonify({
+                "success": False,
+                "error": "A labeling job is already running",
+                "data": state,
+            }), 409
+
+        def _run():
+            return LabelingIngestService().promote_forwards(
+                dry_run=dry_run,
+                message_ids=message_ids,
+            )
+
+        if run_async:
+            _set_process_state(
+                running=True,
+                job="promote-forwards",
+                started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                finished_at=None,
+                last_error=None,
+                last_report=None,
+                message="Promoting forwarded quarantine batches into staging…",
+            )
+
+            def _worker():
+                try:
+                    report = _run()
+                    promoted = len(report.get("promoted") or [])
+                    skipped = len(report.get("skipped") or [])
+                    _set_process_state(
+                        running=False,
+                        job="promote-forwards",
+                        finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        last_report=report,
+                        last_error=None,
+                        message=(
+                            f"Promote done — {promoted} batch(es), {skipped} skipped. "
+                            "Run Process staging to refresh charts."
+                        ),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Async promote-forwards failed")
+                    _set_process_state(
+                        running=False,
+                        job="promote-forwards",
+                        finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        last_error=str(exc),
+                        message="Promote forwards failed",
+                    )
+
+            threading.Thread(target=_worker, daemon=True).start()
+            return jsonify({
+                "success": True,
+                "async": True,
+                "message": "Promote started in background. Safe to leave this page.",
+                "data": _merge_process_state(),
+            })
+
+        _set_process_state(
+            running=True,
+            job="promote-forwards",
+            started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            finished_at=None,
+            last_error=None,
+            message="Promoting forwarded quarantine batches into staging…",
+        )
+        try:
+            report = _run()
+            promoted = len(report.get("promoted") or [])
+            state = _set_process_state(
+                running=False,
+                job="promote-forwards",
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                last_report=report,
+                last_error=None,
+                message=f"Promote done — {promoted} batch(es)",
+            )
+            return jsonify({
+                "success": True,
+                "async": False,
+                "data": report,
+                "process": state,
+            })
+        except Exception as exc:  # noqa: BLE001
+            _set_process_state(
+                running=False,
+                job="promote-forwards",
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                last_error=str(exc),
+                message="Promote forwards failed",
+            )
+            raise
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to promote labeling forwards")
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
@@ -334,6 +457,7 @@ def labeling_process():
         if run_async:
             _set_process_state(
                 running=True,
+                job="process",
                 started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 finished_at=None,
                 last_error=None,
@@ -350,6 +474,7 @@ def labeling_process():
                     _cache_clear()
                     _set_process_state(
                         running=False,
+                        job="process",
                         finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         last_report=report,
                         last_error=None,
@@ -362,6 +487,7 @@ def labeling_process():
                     logger.exception("Async labeling process failed")
                     _set_process_state(
                         running=False,
+                        job="process",
                         finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         last_error=str(exc),
                         message="Process failed",
@@ -377,6 +503,7 @@ def labeling_process():
 
         _set_process_state(
             running=True,
+            job="process",
             started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             finished_at=None,
             last_error=None,
@@ -390,6 +517,7 @@ def labeling_process():
             _cache_clear()
             state = _set_process_state(
                 running=False,
+                job="process",
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 last_report=report,
                 last_error=None,
@@ -399,6 +527,7 @@ def labeling_process():
         except Exception as exc:  # noqa: BLE001
             _set_process_state(
                 running=False,
+                job="process",
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 last_error=str(exc),
                 message="Process failed",

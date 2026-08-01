@@ -237,8 +237,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
           aria-haspopup="menu"
         >
           {Icon ? <Icon className="h-4 w-4 shrink-0 hidden sm:block" /> : null}
-          <span className="md:hidden whitespace-nowrap">{menu.shortLabel}</span>
-          <span className="hidden md:inline whitespace-nowrap">{menu.label}</span>
+          <span className="whitespace-nowrap">{menu.shortLabel}</span>
           <ChevronDown
             className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${
               isOpen ? 'rotate-180' : ''
@@ -253,6 +252,9 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
             onMouseEnter={clearCloseTimer}
             onMouseLeave={scheduleClose}
           >
+            <div className="px-3 py-1.5 text-xs font-medium text-gray-400">
+              {menu.label}
+            </div>
             {menu.items.map((mode) => {
               const ItemIcon = mode.icon;
               const itemActive = currentMode === mode.id;
@@ -325,8 +327,7 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
             className={tabBtn(activeTab === 'bug-triage')}
           >
             <Bug className="h-4 w-4 shrink-0" />
-            <span className="md:hidden whitespace-nowrap">Triage</span>
-            <span className="hidden md:inline whitespace-nowrap">Bug Triage</span>
+            <span className="whitespace-nowrap">Triage</span>
           </button>
         </div>
       </div>

@@ -32,6 +32,19 @@ function displayLabel(name) {
   return GPS_LABEL_DISPLAY[name] || name;
 }
 
+function CollapsibleTable({ label = 'Show data table', children }) {
+  return (
+    <details className="mt-4 group">
+      <summary className="cursor-pointer list-none text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 select-none">
+        <span className="underline decoration-dotted underline-offset-2">{label}</span>
+        <span className="text-gray-400 group-open:hidden">▸</span>
+        <span className="text-gray-400 hidden group-open:inline">▾</span>
+      </summary>
+      <div className="mt-3 overflow-x-auto">{children}</div>
+    </details>
+  );
+}
+
 function formatSecondsShort(seconds) {
   const s = Number(seconds) || 0;
   if (s < 60) return `${s.toFixed(1)}s`;
@@ -92,12 +105,14 @@ const LabelingDataDashboard = () => {
   const [loading, setLoading] = useState(!stored?.data);
   const [processing, setProcessing] = useState(false);
   const [processNotice, setProcessNotice] = useState(null); // success | error banner after job
+  const [promoting, setPromoting] = useState(false);
   const [error, setError] = useState(null);
   const [cached, setCached] = useState(Boolean(stored?.cached));
   const [stale, setStale] = useState(Boolean(stored?.stale));
   const [generatedAt, setGeneratedAt] = useState(stored?.generatedAt || null);
   const [expandedUser, setExpandedUser] = useState(null);
   const wasProcessingRef = useRef(false);
+  const autoPromoteAttemptedRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -112,6 +127,7 @@ const LabelingDataDashboard = () => {
         }
         const running = Boolean(proc?.running);
         setProcessing(running);
+        setPromoting(running && proc?.job === 'promote-forwards');
         return next;
       }
     } catch (err) {
@@ -201,11 +217,81 @@ const LabelingDataDashboard = () => {
     }
   }, [fetchStatus]);
 
+  const promoteForwards = useCallback(
+    async ({ silent = false } = {}) => {
+      setError(null);
+      if (!silent) setProcessNotice(null);
+      try {
+        const response = await axios.post('/api/labeling/promote-forwards', {
+          async: true,
+        });
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Promote failed');
+        }
+        wasProcessingRef.current = true;
+        setProcessing(true);
+        setPromoting(true);
+        setProcessInfo(
+          response.data.data || {
+            running: true,
+            job: 'promote-forwards',
+            message: response.data.message,
+          }
+        );
+        setProcessNotice({
+          type: 'info',
+          text: silent
+            ? 'Small forward batch detected — promoting into staging automatically…'
+            : 'Promoting forwarded quarantine batches in the background. Safe to leave this tab.',
+        });
+        await fetchStatus();
+      } catch (err) {
+        if (err.response?.status === 409) {
+          wasProcessingRef.current = true;
+          setProcessing(true);
+          setProcessInfo(err.response.data?.data || { running: true });
+          setProcessNotice({
+            type: 'info',
+            text: 'A labeling job is already running. Waiting for it to finish…',
+          });
+          await fetchStatus();
+          return;
+        }
+        const errorMsg =
+          err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          'Failed to promote forwards';
+        if (!silent) {
+          setError(errorMsg);
+        } else {
+          setProcessNotice({
+            type: 'error',
+            text: `Auto-promote failed: ${errorMsg}`,
+          });
+        }
+        setProcessing(false);
+        setPromoting(false);
+      }
+    },
+    [fetchStatus]
+  );
+
   useEffect(() => {
     fetchStatus();
     // Prefer cached/last results; only full-screen wait when nothing is stored yet
     fetchSummary({ refresh: false });
   }, [fetchStatus, fetchSummary]);
+
+  // Auto-promote tiny quarantine batches on load; larger ones need a click.
+  useEffect(() => {
+    const pending = status?.pending_forwards;
+    if (!pending || autoPromoteAttemptedRef.current) return;
+    if (processing || processInfo?.running) return;
+    if (!pending.auto_promote || !(pending.pending_count > 0)) return;
+    autoPromoteAttemptedRef.current = true;
+    promoteForwards({ silent: true });
+  }, [status?.pending_forwards, processing, processInfo?.running, promoteForwards]);
 
   // If server returned a stale snapshot, poll briefly so background rescan can land
   useEffect(() => {
@@ -257,7 +343,18 @@ const LabelingDataDashboard = () => {
         wasProcessingRef.current = false;
         const proc = next?.process;
         if (proc?.last_error) {
-          setProcessNotice({ type: 'error', text: `Process failed: ${proc.last_error}` });
+          setProcessNotice({
+            type: 'error',
+            text: `${proc?.job === 'promote-forwards' ? 'Promote' : 'Process'} failed: ${proc.last_error}`,
+          });
+        } else if (proc?.job === 'promote-forwards') {
+          setProcessNotice({
+            type: 'success',
+            text:
+              proc?.message ||
+              'Forwards promoted into staging. Click Process staging to include them in charts.',
+          });
+          setPromoting(false);
         } else {
           setProcessNotice({
             type: 'success',
@@ -273,6 +370,7 @@ const LabelingDataDashboard = () => {
 
   const totals = data?.totals || {};
   const activities = data?.activities || [];
+  const pendingForwards = status?.pending_forwards || null;
   const users = useMemo(() => {
     const list = data?.users || [];
     return [...list].sort(
@@ -453,6 +551,41 @@ const LabelingDataDashboard = () => {
         </div>
       ) : null}
 
+      {pendingForwards?.pending_count > 0 && !pendingForwards.auto_promote && !promoting ? (
+        <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-lg text-sm text-violet-950 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium">Forwarded quarantine ready to promote</div>
+            <div className="mt-0.5">
+              {pendingForwards.pending_count} batch(es) / {pendingForwards.pending_keys} files
+              resolved to{' '}
+              {(pendingForwards.pending || [])
+                .map((b) => b.labeler_email)
+                .filter(Boolean)
+                .join(', ') || 'labelers'}
+              . This is too large to auto-run on page load — promote into staging, then Process
+              staging.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => promoteForwards()}
+            disabled={processing}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-violet-700 text-white rounded-lg text-sm hover:bg-violet-800 disabled:opacity-50 shrink-0"
+          >
+            <Play className="h-4 w-4" />
+            Promote forwards
+          </button>
+        </div>
+      ) : null}
+
+      {(pendingForwards?.unresolved || []).length > 0 ? (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          {(pendingForwards.unresolved || []).length} forward batch(es) have no recoverable
+          original From in meta/body — add <span className="font-mono">Email Body</span> in Make or
+          promote via CLI with <span className="font-mono">--map</span>.
+        </div>
+      ) : null}
+
       {unprocessedEmails.length > 0 ? (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
           Staging has {unprocessedEmails.length} labeler(s) not in output yet:{' '}
@@ -465,9 +598,16 @@ const LabelingDataDashboard = () => {
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 flex items-start gap-3">
           <RefreshCw className="h-5 w-5 animate-spin flex-shrink-0 mt-0.5" />
           <div>
-            <div className="font-medium">Processing in progress</div>
+            <div className="font-medium">
+              {promoting || processInfo?.job === 'promote-forwards'
+                ? 'Promoting forwards'
+                : 'Processing in progress'}
+            </div>
             <div className="mt-0.5">
-              {processInfo?.message || 'Copying staging files into extracted-txt by collar SN…'}
+              {processInfo?.message ||
+                (promoting
+                  ? 'Copying quarantine batches into staging/<labeler>/…'
+                  : 'Copying staging files into extracted-txt by collar SN…')}
             </div>
             <div className="mt-1 text-xs text-blue-800">
               Safe to close or leave this tab. Started{' '}
@@ -575,7 +715,7 @@ const LabelingDataDashboard = () => {
         )}
 
         {activities.length > 0 ? (
-          <div className="mt-4 overflow-x-auto">
+          <CollapsibleTable label="Show posture table">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
@@ -594,7 +734,7 @@ const LabelingDataDashboard = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </CollapsibleTable>
         ) : null}
       </div>
 
@@ -643,7 +783,7 @@ const LabelingDataDashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <CollapsibleTable label="Show labeler table">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 border-b">
@@ -666,7 +806,7 @@ const LabelingDataDashboard = () => {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </CollapsibleTable>
           </>
         )}
       </div>
@@ -702,7 +842,7 @@ const LabelingDataDashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <CollapsibleTable label="Show date table">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 border-b">
@@ -725,7 +865,7 @@ const LabelingDataDashboard = () => {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </CollapsibleTable>
           </>
         )}
       </div>
@@ -783,7 +923,7 @@ const LabelingDataDashboard = () => {
               </div>
             )}
             {gpsActivities.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
+              <CollapsibleTable label="Show environment table">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-500 border-b">
@@ -802,7 +942,7 @@ const LabelingDataDashboard = () => {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </CollapsibleTable>
             ) : null}
           </div>
 
@@ -1028,11 +1168,35 @@ const LabelingDataDashboard = () => {
                   ? ` (${status.output_emails.join(', ')})`
                   : ' (empty — click Process staging)'}
               </div>
+              {status.pending_forwards ? (
+                <div>
+                  Forwards: {status.pending_forwards.pending_count || 0} pending
+                  {status.pending_forwards.already_promoted?.length
+                    ? ` · ${status.pending_forwards.already_promoted.length} already promoted`
+                    : ''}
+                  {status.pending_forwards.unresolved?.length
+                    ? ` · ${status.pending_forwards.unresolved.length} unresolved`
+                    : ''}
+                  {status.forward_batches
+                    ? ` · ${status.forward_batches} quarantine batch(es)`
+                    : ''}
+                </div>
+              ) : null}
               {processReport ? (
                 <div className="text-xs text-gray-500">
-                  Last process: copied {processReport.copied}, sessions {processReport.sessions},
-                  unknown SN {processReport.unknown_sn_sessions}, errors{' '}
-                  {(processReport.errors || []).length}
+                  {processReport.promoted ? (
+                    <>
+                      Last promote: {processReport.promoted.length} batch(es), skipped{' '}
+                      {(processReport.skipped || []).length}, errors{' '}
+                      {(processReport.errors || []).length}
+                    </>
+                  ) : (
+                    <>
+                      Last process: copied {processReport.copied}, sessions {processReport.sessions},
+                      unknown SN {processReport.unknown_sn_sessions}, errors{' '}
+                      {(processReport.errors || []).length}
+                    </>
+                  )}
                 </div>
               ) : null}
             </>
