@@ -27,6 +27,33 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
 
   const sections = [
     {
+      id: 'hardware',
+      title: 'Hardware & ML',
+      description: 'Device modeling and labeling pipelines',
+      tools: [
+        {
+          id: 'neck-fit-modeler',
+          name: 'Neck Fit Modeler',
+          description: 'Hardware fit modeling tools',
+          icon: Cpu,
+          color: 'text-slate-700',
+          bgColor: 'bg-slate-50',
+          borderColor: 'border-slate-200',
+          action: () => openTool('neck-fit-modeler'),
+        },
+        {
+          id: 'labeling-data',
+          name: 'Labeling Data',
+          description: 'Activity labeling inventory, process staging, duration totals',
+          icon: Tags,
+          color: 'text-emerald-600',
+          bgColor: 'bg-emerald-50',
+          borderColor: 'border-emerald-200',
+          action: () => openTool('labeling-data'),
+        },
+      ],
+    },
+    {
       id: 'research',
       title: 'Product Research',
       description: 'Churn, surveys, and interviews',
@@ -117,33 +144,6 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
           bgColor: 'bg-purple-50',
           borderColor: 'border-purple-200',
           action: () => openTool('ask'),
-        },
-      ],
-    },
-    {
-      id: 'hardware',
-      title: 'Hardware & ML',
-      description: 'Device modeling and labeling pipelines',
-      tools: [
-        {
-          id: 'neck-fit-modeler',
-          name: 'Neck Fit Modeler',
-          description: 'Hardware fit modeling tools',
-          icon: Cpu,
-          color: 'text-slate-700',
-          bgColor: 'bg-slate-50',
-          borderColor: 'border-slate-200',
-          action: () => openTool('neck-fit-modeler'),
-        },
-        {
-          id: 'labeling-data',
-          name: 'Labeling Data',
-          description: 'Activity labeling inventory, process staging, duration totals',
-          icon: Tags,
-          color: 'text-emerald-600',
-          bgColor: 'bg-emerald-50',
-          borderColor: 'border-emerald-200',
-          action: () => openTool('labeling-data'),
         },
       ],
     },
@@ -241,7 +241,7 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 rounded-lg bg-gray-100">
@@ -261,7 +261,7 @@ const Tools = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
               <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
               <p className="text-sm text-gray-500">{section.description}</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.tools.map((tool) => {
                 const Icon = tool.icon;
                 const isActive = isToolActive(tool);

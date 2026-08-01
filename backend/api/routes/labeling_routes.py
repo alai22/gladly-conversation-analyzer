@@ -24,8 +24,17 @@ logger = get_logger("labeling_routes")
 labeling_bp = Blueprint("labeling", __name__, url_prefix="/api/labeling")
 
 _CACHE_LOCK = threading.Lock()
-_CACHE: Dict[str, Any] = {"key": None, "expires_at": 0.0, "payload": None}
-_DEFAULT_CACHE_TTL_SEC = 120
+# payload: ui summary dict; generated_at: unix ts; fresh_until: unix ts
+_CACHE: Dict[str, Any] = {
+    "key": None,
+    "payload": None,
+    "generated_at": 0.0,
+    "fresh_until": 0.0,
+}
+_DEFAULT_CACHE_TTL_SEC = 15 * 60  # treat as fresh for 15 minutes
+_SUMMARY_CACHE_KEY = "labeling-jobs/summary_cache.json"
+_BG_REFRESH_LOCK = threading.Lock()
+_BG_REFRESH_RUNNING = False
 
 _PROCESS_LOCK = threading.Lock()
 _PROCESS_STATE: Dict[str, Any] = {
@@ -40,31 +49,140 @@ _STALE_RUNNING_SEC = 2 * 60 * 60  # allow restart if marked running > 2h
 _PROCESS_STATUS_KEY = "labeling-jobs/process_status.json"
 
 
-def _cache_get(key: str) -> Optional[Dict[str, Any]]:
+def _s3_client():
+    return boto3.client("s3", region_name=Config.S3_REGION or "us-east-1")
+
+
+def _cache_entry(
+    payload: Dict[str, Any], generated_at: float, fresh_until: float
+) -> Dict[str, Any]:
+    return {
+        "data": payload,
+        "generated_at": generated_at,
+        "generated_at_iso": time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated_at)
+        ),
+        "fresh_until": fresh_until,
+        "stale": time.time() >= fresh_until,
+    }
+
+
+def _cache_get_memory(key: str) -> Optional[Dict[str, Any]]:
+    """Return last summary even if past TTL (stale-while-revalidate)."""
     with _CACHE_LOCK:
-        if _CACHE["key"] != key:
+        if _CACHE["key"] != key or _CACHE["payload"] is None:
             return None
-        if time.time() >= float(_CACHE["expires_at"] or 0):
-            return None
-        return _CACHE["payload"]
+        return _cache_entry(
+            _CACHE["payload"],
+            float(_CACHE["generated_at"] or 0),
+            float(_CACHE["fresh_until"] or 0),
+        )
 
 
-def _cache_set(key: str, payload: Dict[str, Any], ttl_sec: int) -> None:
+def _cache_set_memory(
+    key: str, payload: Dict[str, Any], ttl_sec: int, generated_at: Optional[float] = None
+) -> Dict[str, Any]:
+    now = time.time()
+    gen = float(generated_at if generated_at is not None else now)
+    fresh_until = gen + max(0, ttl_sec)
     with _CACHE_LOCK:
         _CACHE["key"] = key
         _CACHE["payload"] = payload
-        _CACHE["expires_at"] = time.time() + max(0, ttl_sec)
+        _CACHE["generated_at"] = gen
+        _CACHE["fresh_until"] = fresh_until
+    return _cache_entry(payload, gen, fresh_until)
+
+
+def _persist_summary_cache(payload: Dict[str, Any], generated_at: float, ttl_sec: int) -> None:
+    bucket = Config.LABELING_S3_BUCKET_NAME
+    if not bucket:
+        return
+    try:
+        body = {
+            "generated_at": generated_at,
+            "generated_at_iso": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated_at)
+            ),
+            "ttl_sec": ttl_sec,
+            "data": payload,
+        }
+        _s3_client().put_object(
+            Bucket=bucket,
+            Key=_SUMMARY_CACHE_KEY,
+            Body=json.dumps(body).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to persist labeling summary cache: %s", exc)
+
+
+def _load_summary_cache_s3(ttl_sec: int) -> Optional[Dict[str, Any]]:
+    bucket = Config.LABELING_S3_BUCKET_NAME
+    if not bucket:
+        return None
+    try:
+        raw = _s3_client().get_object(Bucket=bucket, Key=_SUMMARY_CACHE_KEY)["Body"].read()
+        body = json.loads(raw.decode("utf-8"))
+        if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+            return None
+        generated_at = float(body.get("generated_at") or 0)
+        if generated_at <= 0 and body.get("generated_at_iso"):
+            try:
+                generated_at = datetime.strptime(
+                    body["generated_at_iso"], "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=timezone.utc).timestamp()
+            except Exception:  # noqa: BLE001
+                generated_at = time.time()
+        # Hydrate memory so subsequent requests skip S3
+        return _cache_set_memory("summary:v1", body["data"], ttl_sec, generated_at=generated_at)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _cache_clear() -> None:
     with _CACHE_LOCK:
         _CACHE["key"] = None
         _CACHE["payload"] = None
-        _CACHE["expires_at"] = 0.0
+        _CACHE["generated_at"] = 0.0
+        _CACHE["fresh_until"] = 0.0
+    bucket = Config.LABELING_S3_BUCKET_NAME
+    if not bucket:
+        return
+    try:
+        _s3_client().delete_object(Bucket=bucket, Key=_SUMMARY_CACHE_KEY)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to clear labeling summary cache: %s", exc)
 
 
-def _s3_client():
-    return boto3.client("s3", region_name=Config.S3_REGION or "us-east-1")
+def _compute_summary(ttl_sec: int) -> Dict[str, Any]:
+    analyzer = LabelingDataAnalyzer()
+    raw = analyzer.analyze(include_content=True)
+    data = format_ui_summary(raw)
+    entry = _cache_set_memory("summary:v1", data, ttl_sec)
+    _persist_summary_cache(data, entry["generated_at"], ttl_sec)
+    return entry
+
+
+def _maybe_start_background_refresh(ttl_sec: int) -> None:
+    global _BG_REFRESH_RUNNING
+    with _BG_REFRESH_LOCK:
+        if _BG_REFRESH_RUNNING:
+            return
+        _BG_REFRESH_RUNNING = True
+
+    def _worker():
+        global _BG_REFRESH_RUNNING
+        try:
+            logger.info("Background labeling summary refresh started")
+            _compute_summary(ttl_sec)
+            logger.info("Background labeling summary refresh finished")
+        except Exception:  # noqa: BLE001
+            logger.exception("Background labeling summary refresh failed")
+        finally:
+            with _BG_REFRESH_LOCK:
+                _BG_REFRESH_RUNNING = False
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def _process_snapshot() -> Dict[str, Any]:
@@ -296,9 +414,14 @@ def labeling_summary():
     """
     Summarize processed labeling exports under extracted-txt/.
 
+    Serves the last computed summary immediately when available (memory, then S3).
+    If that snapshot is older than ttl, it is still returned and a background
+    rescan is kicked off. Full synchronous rescan only when no cache exists or
+    refresh=1.
+
     Query params:
-      refresh=1  — bypass cache
-      ttl=120    — cache TTL seconds (0 disables caching for this response)
+      refresh=1  — force synchronous rescan
+      ttl=900    — freshness window seconds (stale after this; 0 = always stale)
     """
     try:
         refresh = request.args.get("refresh", "").lower() in ("1", "true", "yes")
@@ -307,20 +430,35 @@ def labeling_summary():
         except ValueError:
             ttl = _DEFAULT_CACHE_TTL_SEC
 
-        cache_key = "summary:v1"
-        if not refresh and ttl > 0:
-            cached = _cache_get(cache_key)
-            if cached is not None:
-                return jsonify({"success": True, "cached": True, "data": cached})
+        if not refresh:
+            entry = _cache_get_memory("summary:v1")
+            if entry is None:
+                entry = _load_summary_cache_s3(ttl if ttl > 0 else _DEFAULT_CACHE_TTL_SEC)
+            if entry is not None:
+                if entry.get("stale"):
+                    _maybe_start_background_refresh(
+                        ttl if ttl > 0 else _DEFAULT_CACHE_TTL_SEC
+                    )
+                return jsonify(
+                    {
+                        "success": True,
+                        "cached": True,
+                        "stale": bool(entry.get("stale")),
+                        "generated_at": entry.get("generated_at_iso"),
+                        "data": entry["data"],
+                    }
+                )
 
-        analyzer = LabelingDataAnalyzer()
-        raw = analyzer.analyze(include_content=True)
-        data = format_ui_summary(raw)
-
-        if ttl > 0:
-            _cache_set(cache_key, data, ttl)
-
-        return jsonify({"success": True, "cached": False, "data": data})
+        entry = _compute_summary(ttl if ttl > 0 else _DEFAULT_CACHE_TTL_SEC)
+        return jsonify(
+            {
+                "success": True,
+                "cached": False,
+                "stale": False,
+                "generated_at": entry.get("generated_at_iso"),
+                "data": entry["data"],
+            }
+        )
     except ValueError as exc:
         logger.warning("Labeling summary misconfigured: %s", exc)
         return jsonify({"success": False, "error": str(exc)}), 400

@@ -13,6 +13,7 @@ import { AlertCircle, CheckCircle2, Clock, Dog, FolderOpen, Play, RefreshCw, Use
 import axios from 'axios';
 
 const PROCESS_POLL_MS = 4000;
+const SUMMARY_STORAGE_KEY = 'halo_labeling_summary_v1';
 
 const COLORS = [
   '#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6',
@@ -30,16 +31,59 @@ function formatSecondsShort(seconds) {
   return `${hours}h ${remMins}m`;
 }
 
+function formatUpdatedAt(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso.endsWith('Z') ? iso : `${iso}Z`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function readStoredSummary() {
+  try {
+    const raw = sessionStorage.getItem(SUMMARY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.data) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSummary({ data, generatedAt, cached, stale }) {
+  try {
+    sessionStorage.setItem(
+      SUMMARY_STORAGE_KEY,
+      JSON.stringify({
+        data,
+        generatedAt: generatedAt || null,
+        cached: Boolean(cached),
+        stale: Boolean(stale),
+        savedAt: Date.now(),
+      })
+    );
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 const LabelingDataDashboard = () => {
-  const [data, setData] = useState(null);
+  const stored = useMemo(() => readStoredSummary(), []);
+  const [data, setData] = useState(stored?.data || null);
   const [status, setStatus] = useState(null);
   const [processReport, setProcessReport] = useState(null);
   const [processInfo, setProcessInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!stored?.data);
   const [processing, setProcessing] = useState(false);
   const [processNotice, setProcessNotice] = useState(null); // success | error banner after job
   const [error, setError] = useState(null);
-  const [cached, setCached] = useState(false);
+  const [cached, setCached] = useState(Boolean(stored?.cached));
+  const [stale, setStale] = useState(Boolean(stored?.stale));
+  const [generatedAt, setGeneratedAt] = useState(stored?.generatedAt || null);
   const [expandedUser, setExpandedUser] = useState(null);
   const wasProcessingRef = useRef(false);
 
@@ -66,6 +110,7 @@ const LabelingDataDashboard = () => {
   }, []);
 
   const fetchSummary = useCallback(async ({ refresh = false } = {}) => {
+    // Keep showing last results while refreshing; only block when we have nothing.
     setLoading(true);
     setError(null);
     try {
@@ -73,8 +118,20 @@ const LabelingDataDashboard = () => {
         params: refresh ? { refresh: 1 } : undefined,
       });
       if (response.data.success) {
-        setData(response.data.data);
-        setCached(Boolean(response.data.cached));
+        const nextData = response.data.data;
+        const nextGenerated = response.data.generated_at || null;
+        const nextCached = Boolean(response.data.cached);
+        const nextStale = Boolean(response.data.stale);
+        setData(nextData);
+        setCached(nextCached);
+        setStale(nextStale);
+        setGeneratedAt(nextGenerated);
+        writeStoredSummary({
+          data: nextData,
+          generatedAt: nextGenerated,
+          cached: nextCached,
+          stale: nextStale,
+        });
       } else {
         setError(response.data.error || 'Failed to load labeling data');
       }
@@ -134,8 +191,46 @@ const LabelingDataDashboard = () => {
 
   useEffect(() => {
     fetchStatus();
-    fetchSummary();
+    // Prefer cached/last results; only full-screen wait when nothing is stored yet
+    fetchSummary({ refresh: false });
   }, [fetchStatus, fetchSummary]);
+
+  // If server returned a stale snapshot, poll briefly so background rescan can land
+  useEffect(() => {
+    if (!stale) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    const id = setInterval(async () => {
+      attempts += 1;
+      if (cancelled || attempts > 6) {
+        clearInterval(id);
+        return;
+      }
+      try {
+        const response = await axios.get('/api/labeling/summary');
+        if (!response.data?.success || cancelled) return;
+        if (!response.data.stale) {
+          setData(response.data.data);
+          setCached(Boolean(response.data.cached));
+          setStale(false);
+          setGeneratedAt(response.data.generated_at || null);
+          writeStoredSummary({
+            data: response.data.data,
+            generatedAt: response.data.generated_at || null,
+            cached: Boolean(response.data.cached),
+            stale: false,
+          });
+          clearInterval(id);
+        }
+      } catch {
+        // keep showing last results
+      }
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [stale]);
 
   // Poll while a background process is running (also resumes after page reload)
   useEffect(() => {
@@ -234,22 +329,26 @@ const LabelingDataDashboard = () => {
 
   return (
     <div className="flex flex-col p-6 bg-gray-50" style={{ minHeight: '100vh' }}>
-      <div className="flex items-center justify-between mb-6 flex-shrink-0">
-        <div>
+      <div className="flex items-center justify-between mb-6 flex-shrink-0 gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-gray-900">Labeling Data</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Processed data from{' '}
-            <span className="font-mono text-xs">
-              s3://{data?.bucket}/{data?.prefix}
-            </span>
-            {cached ? <span className="ml-2 text-xs text-gray-400">(cached)</span> : null}
+          <p className="text-sm text-gray-500 mt-1">
+            {generatedAt ? `Updated ${formatUpdatedAt(generatedAt)}` : 'Activity labeling totals'}
+            {loading && data ? (
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Checking…
+              </span>
+            ) : stale ? (
+              <span className="ml-2 text-xs text-gray-400">Refreshing in background…</span>
+            ) : null}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={processStaging}
-            disabled={processing || loading}
+            disabled={processing}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
             title="Starts a background job: staging → extracted-txt/<email>/<collar-sn>/"
           >
@@ -266,7 +365,7 @@ const LabelingDataDashboard = () => {
               fetchStatus();
               fetchSummary({ refresh: true });
             }}
-            disabled={loading}
+            disabled={loading && !data}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -274,6 +373,20 @@ const LabelingDataDashboard = () => {
           </button>
         </div>
       </div>
+
+      {error && data ? (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          Couldn’t refresh summary ({error}). Showing last results.
+        </div>
+      ) : null}
+
+      {unprocessedEmails.length > 0 ? (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          Staging has {unprocessedEmails.length} labeler(s) not in output yet:{' '}
+          {unprocessedEmails.join(', ')}. Click <span className="font-medium">Process staging</span> to
+          include them in charts.
+        </div>
+      ) : null}
 
       {processing ? (
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 flex items-start gap-3">
@@ -286,7 +399,6 @@ const LabelingDataDashboard = () => {
             <div className="mt-1 text-xs text-blue-800">
               Safe to close or leave this tab. Started{' '}
               {processInfo?.started_at ? processInfo.started_at.replace('T', ' ').replace('Z', ' UTC') : 'just now'}.
-              This page polls every few seconds and will refresh when done.
             </div>
           </div>
         </div>
@@ -325,49 +437,6 @@ const LabelingDataDashboard = () => {
           >
             Dismiss
           </button>
-        </div>
-      ) : null}
-
-      {status ? (
-        <div className="mb-4 p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-700">
-          <div className="font-medium text-gray-900 mb-1">Pipeline</div>
-          <div>
-            Staging: <span className="font-mono">{status.staging_extracted_files ?? 0}</span> extracted
-            files in <span className="font-mono">{status.staging_batches ?? 0}</span> Gmail batches
-            {status.staging_by_email
-              ? ` (${Object.entries(status.staging_by_email)
-                  .map(([email, n]) => `${email}: ${n}`)
-                  .join(' · ')})`
-              : ''}
-          </div>
-          <div>
-            Output (what totals below use):{' '}
-            <span className="font-mono">{status.output_files ?? 0}</span> files under{' '}
-            <span className="font-mono">{status.output_prefix}</span>
-            {(status.output_emails || []).length
-              ? ` (${status.output_emails.join(', ')})`
-              : ' (empty — click Process staging)'}
-          </div>
-          {unprocessedEmails.length > 0 ? (
-            <div className="mt-2 text-amber-700 text-xs">
-              Staging has {unprocessedEmails.length} labeler(s) not in output yet:{' '}
-              {unprocessedEmails.join(', ')}. Click <span className="font-medium">Process staging</span> to
-              include them in Users / charts.
-            </div>
-          ) : null}
-          {processReport ? (
-            <div className="mt-2 text-xs text-gray-500">
-              Last process: copied {processReport.copied}, sessions {processReport.sessions},
-              unknown SN {processReport.unknown_sn_sessions}, errors{' '}
-              {(processReport.errors || []).length}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-          {error}
         </div>
       ) : null}
 
@@ -629,6 +698,59 @@ const LabelingDataDashboard = () => {
           })}
         </div>
       </div>
+
+      <details className="mt-8 group">
+        <summary className="cursor-pointer list-none text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1">
+          <span className="underline decoration-dotted underline-offset-2">Pipeline & source details</span>
+          <span className="text-gray-400 group-open:hidden">▸</span>
+          <span className="text-gray-400 hidden group-open:inline">▾</span>
+        </summary>
+        <div className="mt-3 p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 space-y-2">
+          <div>
+            <span className="text-gray-500">Source:</span>{' '}
+            <span className="font-mono text-xs">
+              s3://{data?.bucket}/{data?.prefix}
+            </span>
+            {cached ? (
+              <span className="ml-2 text-xs text-gray-400">
+                {stale ? '(stale cache)' : '(cached)'}
+              </span>
+            ) : null}
+          </div>
+          {status ? (
+            <>
+              <div>
+                <span className="text-gray-500">Staging:</span>{' '}
+                <span className="font-mono">{status.staging_extracted_files ?? 0}</span> extracted
+                files in <span className="font-mono">{status.staging_batches ?? 0}</span> Gmail
+                batches
+                {status.staging_by_email
+                  ? ` (${Object.entries(status.staging_by_email)
+                      .map(([email, n]) => `${email}: ${n}`)
+                      .join(' · ')})`
+                  : ''}
+              </div>
+              <div>
+                <span className="text-gray-500">Output:</span>{' '}
+                <span className="font-mono">{status.output_files ?? 0}</span> files under{' '}
+                <span className="font-mono text-xs">{status.output_prefix}</span>
+                {(status.output_emails || []).length
+                  ? ` (${status.output_emails.join(', ')})`
+                  : ' (empty — click Process staging)'}
+              </div>
+              {processReport ? (
+                <div className="text-xs text-gray-500">
+                  Last process: copied {processReport.copied}, sessions {processReport.sessions},
+                  unknown SN {processReport.unknown_sn_sessions}, errors{' '}
+                  {(processReport.errors || []).length}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="text-xs text-gray-400">Pipeline status not loaded yet.</div>
+          )}
+        </div>
+      </details>
     </div>
   );
 };

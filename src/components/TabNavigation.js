@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -13,12 +13,16 @@ import {
   ClipboardList,
   Home,
   Tags,
+  ChevronDown,
 } from 'lucide-react';
 import { getPathFromMode, isHomeTabMode, isProductResearchMode, isHardwareMode } from '../utils/routes';
 
 const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [openMenu, setOpenMenu] = useState(null); // 'research' | 'gladly' | 'hardware' | null
+  const closeTimerRef = useRef(null);
+  const navRef = useRef(null);
 
   const setModeAndUrl = (modeId, nextAdminMode = null) => {
     setCurrentMode(modeId);
@@ -44,11 +48,21 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
     return 'home';
   };
 
-  const [activeTab, setActiveTab] = useState(() => resolveActiveTab(currentMode, adminMode));
+  const activeTab = resolveActiveTab(currentMode, adminMode);
 
   useEffect(() => {
-    setActiveTab(resolveActiveTab(currentMode, adminMode));
-  }, [currentMode, adminMode]);
+    const onDocClick = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
 
   const productResearchModes = [
     {
@@ -58,7 +72,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: BarChart3,
       color: 'text-red-600',
       bgColor: 'bg-red-50',
-      borderColor: 'border-red-200',
     },
     {
       id: 'survicate',
@@ -67,7 +80,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: FileText,
       color: 'text-teal-600',
       bgColor: 'bg-teal-50',
-      borderColor: 'border-teal-200',
     },
     {
       id: 'survey-manager',
@@ -76,7 +88,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: ClipboardList,
       color: 'text-orange-600',
       bgColor: 'bg-orange-50',
-      borderColor: 'border-orange-200',
     },
     {
       id: 'halo-surveys',
@@ -85,7 +96,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: ClipboardList,
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
-      borderColor: 'border-amber-200',
     },
     {
       id: 'text-interview',
@@ -94,7 +104,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: Users,
       color: 'text-violet-600',
       bgColor: 'bg-violet-50',
-      borderColor: 'border-violet-200',
     },
   ];
 
@@ -106,7 +115,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: TrendingUp,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200',
     },
     {
       id: 'conversations',
@@ -115,7 +123,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: Search,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      borderColor: 'border-green-200',
     },
     {
       id: 'ask',
@@ -124,7 +131,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: MessageSquare,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      borderColor: 'border-purple-200',
     },
   ];
 
@@ -136,7 +142,6 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: Cpu,
       color: 'text-slate-700',
       bgColor: 'bg-slate-50',
-      borderColor: 'border-slate-200',
     },
     {
       id: 'labeling-data',
@@ -145,12 +150,56 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       icon: Tags,
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
-      borderColor: 'border-emerald-200',
     },
   ];
 
-  const handleModeChange = (modeId) => {
+  const menus = {
+    research: {
+      label: 'Product Research',
+      shortLabel: 'Research',
+      icon: FlaskConical,
+      defaultMode: 'churn-trends',
+      items: productResearchModes,
+      isActive: () => isProductResearchMode(currentMode),
+    },
+    gladly: {
+      label: 'Gladly Conversations',
+      shortLabel: 'Gladly',
+      icon: null,
+      defaultMode: 'conversation-trends',
+      items: gladlyModes,
+      isActive: () => ['conversations', 'ask', 'conversation-trends'].includes(currentMode),
+    },
+    hardware: {
+      label: 'Hardware',
+      shortLabel: 'Hardware',
+      icon: Cpu,
+      defaultMode: 'neck-fit-modeler',
+      items: hardwareModes,
+      isActive: () => isHardwareMode(currentMode),
+    },
+  };
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => setOpenMenu(null), 160);
+  };
+
+  const openMenuFor = (key) => {
+    clearCloseTimer();
+    setOpenMenu(key);
+  };
+
+  const selectMode = (modeId) => {
     setModeAndUrl(modeId, null);
+    setOpenMenu(null);
   };
 
   const tabBtn = (active) =>
@@ -158,115 +207,129 @@ const TabNavigation = ({ currentMode, setCurrentMode, adminMode, setAdminMode })
       active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
     }`;
 
-  const researchActive = isProductResearchMode(currentMode);
-  const hardwareActive = isHardwareMode(currentMode);
+  const renderMenuTab = (key) => {
+    const menu = menus[key];
+    const Icon = menu.icon;
+    const isActive = activeTab === key;
+    const isOpen = openMenu === key;
 
-  const subNavModes =
-    activeTab === 'gladly'
-      ? gladlyModes
-      : activeTab === 'research'
-        ? productResearchModes
-        : activeTab === 'hardware'
-          ? hardwareModes
-          : [];
+    return (
+      <div
+        key={key}
+        className="relative shrink-0 md:flex-1 md:min-w-0"
+        onMouseEnter={() => openMenuFor(key)}
+        onMouseLeave={scheduleClose}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (isOpen) {
+              setOpenMenu(null);
+              return;
+            }
+            openMenuFor(key);
+            if (!menu.isActive()) {
+              setModeAndUrl(menu.defaultMode, null);
+            }
+          }}
+          className={`${tabBtn(isActive)} w-full`}
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+        >
+          {Icon ? <Icon className="h-4 w-4 shrink-0 hidden sm:block" /> : null}
+          <span className="md:hidden whitespace-nowrap">{menu.shortLabel}</span>
+          <span className="hidden md:inline whitespace-nowrap">{menu.label}</span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${
+              isOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+
+        {isOpen ? (
+          <div
+            role="menu"
+            className="absolute left-0 top-full z-50 mt-1 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-1.5 shadow-lg"
+            onMouseEnter={clearCloseTimer}
+            onMouseLeave={scheduleClose}
+          >
+            {menu.items.map((mode) => {
+              const ItemIcon = mode.icon;
+              const itemActive = currentMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => selectMode(mode.id)}
+                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${
+                    itemActive
+                      ? `${mode.bgColor} ${mode.color}`
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <ItemIcon
+                    className={`h-4 w-4 mt-0.5 shrink-0 ${
+                      itemActive ? mode.color : 'text-gray-400'
+                    }`}
+                  />
+                  <span className="min-w-0">
+                    <span
+                      className={`block text-sm font-medium ${
+                        itemActive ? mode.color : 'text-gray-900'
+                      }`}
+                    >
+                      {mode.name}
+                    </span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      {mode.description}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
-    <div className="flex flex-col space-y-3 min-w-0 w-full">
+    <div className="min-w-0 w-full" ref={navRef}>
       <div className="overflow-x-auto min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-nowrap w-max min-w-full md:w-full md:min-w-0">
-        <button
-          onClick={() => {
-            setActiveTab('home');
-            setModeAndUrl('tools', null);
-          }}
-          className={tabBtn(activeTab === 'home')}
-        >
-          <Home className="h-4 w-4 shrink-0 hidden sm:block" />
-          <span className="whitespace-nowrap">Home</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('research');
-            if (!researchActive) {
-              setModeAndUrl('churn-trends', null);
-            }
-          }}
-          className={tabBtn(activeTab === 'research')}
-        >
-          <FlaskConical className="h-4 w-4 shrink-0 hidden sm:block" />
-          <span className="md:hidden whitespace-nowrap">Research</span>
-          <span className="hidden md:inline whitespace-nowrap">Product Research</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('gladly');
-            if (!['conversations', 'ask', 'conversation-trends'].includes(currentMode)) {
-              setModeAndUrl('conversation-trends', null);
-            }
-          }}
-          className={tabBtn(activeTab === 'gladly')}
-        >
-          <span className="md:hidden whitespace-nowrap">Gladly</span>
-          <span className="hidden md:inline whitespace-nowrap">Gladly Conversations</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('hardware');
-            if (!hardwareActive) {
-              setModeAndUrl('neck-fit-modeler', null);
-            }
-          }}
-          className={tabBtn(activeTab === 'hardware')}
-        >
-          <Cpu className="h-4 w-4 shrink-0 hidden sm:block" />
-          <span className="whitespace-nowrap">Hardware</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('bug-triage');
-            if (currentMode !== 'bug-triage') {
-              setModeAndUrl('bug-triage', null);
-            }
-          }}
-          className={tabBtn(activeTab === 'bug-triage')}
-        >
-          <Bug className="h-4 w-4 shrink-0" />
-          <span className="md:hidden whitespace-nowrap">Triage</span>
-          <span className="hidden md:inline whitespace-nowrap">Bug Triage</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              setModeAndUrl('tools', null);
+            }}
+            className={tabBtn(activeTab === 'home')}
+          >
+            <Home className="h-4 w-4 shrink-0 hidden sm:block" />
+            <span className="whitespace-nowrap">Home</span>
+          </button>
+
+          {renderMenuTab('research')}
+          {renderMenuTab('gladly')}
+          {renderMenuTab('hardware')}
+
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              if (currentMode !== 'bug-triage') {
+                setModeAndUrl('bug-triage', null);
+              }
+            }}
+            className={tabBtn(activeTab === 'bug-triage')}
+          >
+            <Bug className="h-4 w-4 shrink-0" />
+            <span className="md:hidden whitespace-nowrap">Triage</span>
+            <span className="hidden md:inline whitespace-nowrap">Bug Triage</span>
+          </button>
         </div>
       </div>
-
-      {subNavModes.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 min-w-0 -mx-1 px-1 sm:mx-0 sm:px-0 overscroll-x-contain [scrollbar-width:thin]">
-          {subNavModes.map((mode) => {
-            const Icon = mode.icon;
-            const isActive = currentMode === mode.id;
-
-            return (
-              <button
-                key={mode.id}
-                onClick={() => handleModeChange(mode.id)}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg border-2 transition-all shrink-0 min-h-[44px] ${
-                  isActive
-                    ? `${mode.bgColor} ${mode.borderColor} border-2 ${mode.color}`
-                    : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Icon className={`h-4 w-4 shrink-0 ${isActive ? mode.color : 'text-gray-500'}`} />
-                <div className="text-left">
-                  <div className={`text-sm font-medium ${isActive ? mode.color : 'text-gray-900'}`}>
-                    {mode.name}
-                  </div>
-                  <div className="text-xs text-gray-500 max-w-[14rem] sm:max-w-none">
-                    {mode.description}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };

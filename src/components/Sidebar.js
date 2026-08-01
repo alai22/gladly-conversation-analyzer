@@ -401,7 +401,16 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode, setAdminMode, set
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-start justify-between gap-2 mb-4">
-          <div className="flex items-center space-x-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => {
+              setAdminMode?.(null);
+              setCurrentMode?.('tools');
+              onCloseMobile?.();
+            }}
+            className="flex items-center space-x-3 min-w-0 text-left rounded-lg hover:bg-gray-50 -m-1 p-1 transition-colors"
+            title="Go to Home"
+          >
             <img 
               src="/dog-spark.jpg" 
               alt="Halo Insight Logo" 
@@ -411,7 +420,7 @@ const Sidebar = ({ healthStatus, onRefreshHealth, currentMode, setAdminMode, set
               <h2 className="text-lg font-semibold text-gray-900">Halo Insight</h2>
               <p className="text-sm text-gray-500">Customer Intelligence</p>
             </div>
-          </div>
+          </button>
           {onCloseMobile && (
             <button
               type="button"
