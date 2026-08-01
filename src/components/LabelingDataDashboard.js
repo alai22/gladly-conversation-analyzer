@@ -13,12 +13,24 @@ import { AlertCircle, CheckCircle2, Clock, Dog, FolderOpen, Play, RefreshCw, Use
 import axios from 'axios';
 
 const PROCESS_POLL_MS = 4000;
-const SUMMARY_STORAGE_KEY = 'halo_labeling_summary_v2';
+const SUMMARY_STORAGE_KEY = 'halo_labeling_summary_v3';
 
 const COLORS = [
   '#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#9334E6',
   '#00ACC1', '#64B5F6', '#F28B82', '#81C784', '#FFB74D', '#BA68C8',
 ];
+
+const GPS_LABEL_DISPLAY = {
+  IndoorBlocked: 'Indoor (blocked)',
+  IndoorSeeSky: 'Indoor (see sky)',
+  Door: 'Door',
+  OutdoorCovered: 'Outdoor (covered)',
+  OutdoorOpenSky: 'Outdoor (open sky)',
+};
+
+function displayLabel(name) {
+  return GPS_LABEL_DISPLAY[name] || name;
+}
 
 function formatSecondsShort(seconds) {
   const s = Number(seconds) || 0;
@@ -306,10 +318,56 @@ const LabelingDataDashboard = () => {
     [byDate]
   );
 
+  const gps = data?.gps || null;
+  const gpsTotals = gps?.totals || {};
+  const gpsActivities = gps?.activities || [];
+  const gpsUsers = useMemo(() => {
+    const list = gps?.users || [];
+    return [...list].sort(
+      (a, b) => (b.total_duration_seconds || 0) - (a.total_duration_seconds || 0)
+    );
+  }, [gps?.users]);
+  const gpsChartData = useMemo(
+    () =>
+      gpsActivities.map((a) => ({
+        name: displayLabel(a.name),
+        label: displayLabel(a.label),
+        seconds: a.seconds,
+      })),
+    [gpsActivities]
+  );
+  const gpsUserContributionData = useMemo(
+    () =>
+      gpsUsers.map((u) => ({
+        email: u.email,
+        label: (u.email || '').split('@')[0] || u.email,
+        seconds: u.total_duration_seconds || 0,
+        files: u.files || 0,
+        sessions: u.sessions || 0,
+        human: u.total_duration_human || formatSecondsShort(u.total_duration_seconds),
+      })),
+    [gpsUsers]
+  );
+  const gpsByDateChartData = useMemo(
+    () =>
+      (gps?.by_date || []).map((d) => ({
+        date: d.date,
+        label: d.date && d.date.length >= 10 ? d.date.slice(5) : d.date,
+        seconds: d.duration_seconds || 0,
+        sessions: d.sessions || 0,
+        files: d.files || 0,
+        users: d.users || 0,
+        human: d.duration_human || formatSecondsShort(d.duration_seconds),
+      })),
+    [gps?.by_date]
+  );
+
   const stagingEmails = Object.keys(status?.staging_by_email || {});
   const outputEmails = status?.output_emails || [];
   const unprocessedEmails = stagingEmails.filter((e) => !outputEmails.includes(e));
   const userChartHeight = Math.max(220, userContributionData.length * 48 + 48);
+  const gpsUserChartHeight = Math.max(180, gpsUserContributionData.length * 48 + 48);
+  const hasGps = (gpsTotals.files || 0) > 0 || gpsChartData.length > 0;
 
   if (loading && !data) {
     return (
@@ -455,6 +513,13 @@ const LabelingDataDashboard = () => {
         </div>
       ) : null}
 
+      <div className="mb-2">
+        <h2 className="text-xl font-semibold text-gray-900">Posture</h2>
+        <p className="text-sm text-gray-500">
+          From <span className="font-mono text-xs">activity_session_*</span>
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           icon={Users}
@@ -476,68 +541,68 @@ const LabelingDataDashboard = () => {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">Volume by date</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Duration by posture</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Labeled duration per session day (from activity_session timestamps)
+          Posture / activity labels from{' '}
+          <span className="font-mono text-xs">activity_session_*_durations.txt</span>
         </p>
-        {byDateChartData.length === 0 ? (
-          <p className="text-sm text-gray-500">No dated sessions found.</p>
+        {chartData.length === 0 ? (
+          <p className="text-sm text-gray-500">No non-zero activity durations found.</p>
         ) : (
-          <>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={byDateChartData}
-                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(v) => formatSecondsShort(v)}
-                  />
-                  <Tooltip
-                    formatter={(value, _name, props) => [
-                      `${formatSecondsShort(value)} · ${props.payload.sessions} sessions · ${props.payload.users} users`,
-                      props.payload.date,
-                    ]}
-                  />
-                  <Bar dataKey="seconds" fill="#4285F4" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b">
-                    <th className="py-2 pr-4 font-medium">Date</th>
-                    <th className="py-2 pr-4 font-medium">Duration</th>
-                    <th className="py-2 pr-4 font-medium">Sessions</th>
-                    <th className="py-2 pr-4 font-medium">Users</th>
-                    <th className="py-2 font-medium">Files</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...byDateChartData].reverse().map((d) => (
-                    <tr key={d.date} className="border-b border-gray-100">
-                      <td className="py-2 pr-4 text-gray-900 font-mono text-xs">{d.date}</td>
-                      <td className="py-2 pr-4 text-gray-700">{d.human}</td>
-                      <td className="py-2 pr-4 text-gray-500">{d.sessions}</td>
-                      <td className="py-2 pr-4 text-gray-500">{d.users}</td>
-                      <td className="py-2 text-gray-500">{d.files}</td>
-                    </tr>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(v) => formatSecondsShort(v)}
+                />
+                <Tooltip
+                  formatter={(value, _name, props) => [
+                    `${formatSecondsShort(value)} (${Number(value).toFixed(1)}s)`,
+                    props.payload.label,
+                  ]}
+                />
+                <Bar dataKey="seconds" radius={[4, 4, 0, 0]}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={entry.label} fill={COLORS[index % COLORS.length]} />
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         )}
+
+        {activities.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="py-2 pr-4 font-medium">Posture</th>
+                  <th className="py-2 pr-4 font-medium">Duration</th>
+                  <th className="py-2 font-medium">Seconds</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activities.map((a) => (
+                  <tr key={a.label} className="border-b border-gray-100">
+                    <td className="py-2 pr-4 text-gray-900">{a.label}</td>
+                    <td className="py-2 pr-4 text-gray-700">{a.human}</td>
+                    <td className="py-2 text-gray-500">{a.seconds.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">Contribution by user</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Contribution by labeler</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Ranked by total labeled duration from processed <span className="font-mono text-xs">*_durations.txt</span>
+          Ranked by total labeled duration from processed{' '}
+          <span className="font-mono text-xs">activity_session_*_durations.txt</span>
         </p>
         {userContributionData.length === 0 ? (
           <p className="text-sm text-gray-500">
@@ -607,66 +672,211 @@ const LabelingDataDashboard = () => {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">Duration by activity</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Volume by date</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Summed from <span className="font-mono text-xs">*_durations.txt</span> across all users
+          Labeled duration per session day (from activity_session timestamps)
         </p>
-        {chartData.length === 0 ? (
-          <p className="text-sm text-gray-500">No non-zero activity durations found.</p>
+        {byDateChartData.length === 0 ? (
+          <p className="text-sm text-gray-500">No dated sessions found.</p>
         ) : (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(v) => formatSecondsShort(v)}
-                />
-                <Tooltip
-                  formatter={(value, _name, props) => [
-                    `${formatSecondsShort(value)} (${Number(value).toFixed(1)}s)`,
-                    props.payload.label,
-                  ]}
-                />
-                <Bar dataKey="seconds" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={entry.label} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {activities.length > 0 ? (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="py-2 pr-4 font-medium">Activity</th>
-                  <th className="py-2 pr-4 font-medium">Duration</th>
-                  <th className="py-2 font-medium">Seconds</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activities.map((a) => (
-                  <tr key={a.label} className="border-b border-gray-100">
-                    <td className="py-2 pr-4 text-gray-900">{a.label}</td>
-                    <td className="py-2 pr-4 text-gray-700">{a.human}</td>
-                    <td className="py-2 text-gray-500">{a.seconds.toFixed(1)}</td>
+          <>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={byDateChartData}
+                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v) => formatSecondsShort(v)}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${formatSecondsShort(value)} · ${props.payload.sessions} sessions · ${props.payload.users} users`,
+                      props.payload.date,
+                    ]}
+                  />
+                  <Bar dataKey="seconds" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-4 font-medium">Date</th>
+                    <th className="py-2 pr-4 font-medium">Duration</th>
+                    <th className="py-2 pr-4 font-medium">Sessions</th>
+                    <th className="py-2 pr-4 font-medium">Users</th>
+                    <th className="py-2 font-medium">Files</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+                </thead>
+                <tbody>
+                  {[...byDateChartData].reverse().map((d) => (
+                    <tr key={d.date} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 text-gray-900 font-mono text-xs">{d.date}</td>
+                      <td className="py-2 pr-4 text-gray-700">{d.human}</td>
+                      <td className="py-2 pr-4 text-gray-500">{d.sessions}</td>
+                      <td className="py-2 pr-4 text-gray-500">{d.users}</td>
+                      <td className="py-2 text-gray-500">{d.files}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
+
+      <div className="mb-2 mt-2">
+        <h2 className="text-xl font-semibold text-gray-900">Indoor / Outdoor</h2>
+        <p className="text-sm text-gray-500">
+          Separate GPS environment model from{' '}
+          <span className="font-mono text-xs">gps_session_*</span>
+          {!hasGps ? ' — none processed yet (run Process staging)' : null}
+        </p>
+      </div>
+
+      {hasGps ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <SummaryCard icon={Users} label="GPS labelers" value={gpsTotals.users ?? 0} />
+            <SummaryCard icon={FolderOpen} label="GPS sessions" value={gpsTotals.sessions ?? 0} />
+            <SummaryCard icon={Dog} label="GPS files" value={gpsTotals.files ?? 0} />
+            <SummaryCard
+              icon={Clock}
+              label="GPS labeled duration"
+              value={gpsTotals.duration_human || formatSecondsShort(gpsTotals.duration_seconds)}
+            />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Duration by environment</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Indoor / outdoor labels from{' '}
+              <span className="font-mono text-xs">gps_session_*_durations.txt</span>
+            </p>
+            {gpsChartData.length === 0 ? (
+              <p className="text-sm text-gray-500">No non-zero GPS durations found.</p>
+            ) : (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={gpsChartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatSecondsShort(v)} />
+                    <Tooltip
+                      formatter={(value, _name, props) => [
+                        `${formatSecondsShort(value)} (${Number(value).toFixed(1)}s)`,
+                        props.payload.label,
+                      ]}
+                    />
+                    <Bar dataKey="seconds" radius={[4, 4, 0, 0]}>
+                      {gpsChartData.map((entry, index) => (
+                        <Cell key={entry.label} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {gpsActivities.length > 0 ? (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b">
+                      <th className="py-2 pr-4 font-medium">Environment</th>
+                      <th className="py-2 pr-4 font-medium">Duration</th>
+                      <th className="py-2 font-medium">Seconds</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gpsActivities.map((a) => (
+                      <tr key={a.label} className="border-b border-gray-100">
+                        <td className="py-2 pr-4 text-gray-900">{displayLabel(a.label)}</td>
+                        <td className="py-2 pr-4 text-gray-700">{a.human}</td>
+                        <td className="py-2 text-gray-500">{a.seconds.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              GPS contribution by labeler
+            </h3>
+            {gpsUserContributionData.length === 0 ? (
+              <p className="text-sm text-gray-500">No GPS labelers yet.</p>
+            ) : (
+              <div style={{ height: gpsUserChartHeight }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={gpsUserContributionData}
+                    layout="vertical"
+                    margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(v) => formatSecondsShort(v)}
+                    />
+                    <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(value, _name, props) => [
+                        `${formatSecondsShort(value)} · ${props.payload.sessions} sessions`,
+                        props.payload.email,
+                      ]}
+                    />
+                    <Bar dataKey="seconds" radius={[0, 4, 4, 0]}>
+                      {gpsUserContributionData.map((entry, index) => (
+                        <Cell key={entry.email} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">GPS volume by date</h3>
+            {gpsByDateChartData.length === 0 ? (
+              <p className="text-sm text-gray-500">No dated GPS sessions found.</p>
+            ) : (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={gpsByDateChartData}
+                    margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatSecondsShort(v)} />
+                    <Tooltip
+                      formatter={(value, _name, props) => [
+                        `${formatSecondsShort(value)} · ${props.payload.sessions} sessions`,
+                        props.payload.date,
+                      ]}
+                    />
+                    <Bar dataKey="seconds" fill="#34A853" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
 
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-1">By user (detail)</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Ranked by contribution; expand for per-activity and collar SN breakdown
+          Posture model — ranked by contribution; expand for per-activity and collar SN breakdown
         </p>
 
         <div className="space-y-3">
@@ -798,6 +1008,9 @@ const LabelingDataDashboard = () => {
                 <span className="font-mono">{status.staging_extracted_files ?? 0}</span> extracted
                 files in <span className="font-mono">{status.staging_batches ?? 0}</span> Gmail
                 batches
+                {status.staging_by_family
+                  ? ` · activity ${status.staging_by_family.activity || 0} · gps ${status.staging_by_family.gps || 0}`
+                  : ''}
                 {status.staging_by_email
                   ? ` (${Object.entries(status.staging_by_email)
                       .map(([email, n]) => `${email}: ${n}`)
@@ -808,6 +1021,9 @@ const LabelingDataDashboard = () => {
                 <span className="text-gray-500">Output:</span>{' '}
                 <span className="font-mono">{status.output_files ?? 0}</span> files under{' '}
                 <span className="font-mono text-xs">{status.output_prefix}</span>
+                {status.output_by_family
+                  ? ` · activity ${status.output_by_family.activity || 0} · gps ${status.output_by_family.gps || 0}`
+                  : ''}
                 {(status.output_emails || []).length
                   ? ` (${status.output_emails.join(', ')})`
                   : ' (empty — click Process staging)'}

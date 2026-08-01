@@ -31,9 +31,19 @@ class TestParsers:
             "activity_session_2026-04-21T18:38:31_0_collar_collected.txt"
         )
         assert parsed == {
+            "family": "activity",
             "timestamp": "2026-04-21T18:38:31",
             "index": 0,
             "kind": "collar_collected",
+        }
+        gps = parse_filename(
+            "gps_session_2025-10-10T12:13:33_0_durations.txt"
+        )
+        assert gps == {
+            "family": "gps",
+            "timestamp": "2025-10-10T12:13:33",
+            "index": 0,
+            "kind": "durations",
         }
         assert parse_filename("random.txt") is None
 
@@ -122,6 +132,17 @@ class TestLocalAnalyze:
         assert ui["users"][0]["collar_sns"]
         assert ui["users"][0]["collars"]
         assert ui["users"][0]["collars"][0]["collar_sn"] == "24h4290312rt"
+
+    def test_gps_indoor_outdoor_summary(self):
+        analyzer = LabelingDataAnalyzer(bucket_name="local", prefix="extracted-txt/")
+        summary = analyzer.analyze_local(str(TREE))
+        gps = summary.get("gps") or {}
+        assert gps.get("total_files", 0) >= 3
+        assert gps["activity_duration_seconds"].get("IndoorBlocked", 0) > 0
+        assert gps["activity_duration_seconds"].get("OutdoorOpenSky", 0) > 0
+        ui = format_ui_summary(summary)
+        assert ui["gps"]["totals"]["duration_seconds"] > 0
+        assert any(a["name"] == "IndoorBlocked" for a in ui["gps"]["activities"])
 
     def test_merges_bare_and_id_duration_labels(self, tmp_path: Path):
         user_dir = tmp_path / "labeler@x.com" / "collar1"

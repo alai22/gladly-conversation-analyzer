@@ -32,8 +32,8 @@ _CACHE: Dict[str, Any] = {
     "fresh_until": 0.0,
 }
 _DEFAULT_CACHE_TTL_SEC = 15 * 60  # treat as fresh for 15 minutes
-_SUMMARY_CACHE_KEY = "labeling-jobs/summary_cache_v2.json"
-_SUMMARY_CACHE_MEM_KEY = "summary:v2"
+_SUMMARY_CACHE_KEY = "labeling-jobs/summary_cache_v3.json"
+_SUMMARY_CACHE_MEM_KEY = "summary:v3"
 _BG_REFRESH_LOCK = threading.Lock()
 _BG_REFRESH_RUNNING = False
 

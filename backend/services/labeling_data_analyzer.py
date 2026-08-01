@@ -35,10 +35,12 @@ logger = get_logger("labeling_data_analyzer")
 FILE_KINDS = ("collar_collected", "durations", "user_reported")
 UNKNOWN_COLLAR_SN = "_unknown"
 
+# activity_session_* = posture model; gps_session_* = indoor/outdoor model
 FILENAME_RE = re.compile(
-    r"^activity_session_(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})_"
+    r"^(?P<family>activity|gps)_session_(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})_"
     r"(?P<index>\d+)_(?P<kind>collar_collected|durations|user_reported)\.txt$"
 )
+SESSION_FAMILIES = ("activity", "gps")
 
 # "Standing (10)" or "OnShelf (12) (initial state)"
 ACTIVITY_RE = re.compile(r"(?P<name>[A-Za-z][A-Za-z0-9]*)\s*\((?P<id>\d+)\)")
@@ -163,6 +165,7 @@ class SessionFileRef:
     timestamp: str
     index: int
     kind: str
+    family: str = "activity"
     size: int = 0
     collar_sn: Optional[str] = None
 
@@ -188,6 +191,7 @@ def parse_filename(filename: str) -> Optional[Dict[str, Any]]:
     if not match:
         return None
     return {
+        "family": match.group("family"),
         "timestamp": match.group("timestamp"),
         "index": int(match.group("index")),
         "kind": match.group("kind"),
@@ -303,7 +307,7 @@ class LabelingDataAnalyzer:
             raise ValueError("LABELING_S3_BUCKET_NAME is not configured")
 
     def list_session_files(self) -> List[SessionFileRef]:
-        """List all recognized activity_session files under the prefix."""
+        """List all recognized activity_session / gps_session files under the prefix."""
         files: List[SessionFileRef] = []
         paginator = self.s3_client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix):
@@ -323,6 +327,7 @@ class LabelingDataAnalyzer:
                         timestamp=parsed["timestamp"],
                         index=parsed["index"],
                         kind=parsed["kind"],
+                        family=parsed.get("family") or "activity",
                         size=int(obj.get("Size") or 0),
                         collar_sn=parsed.get("collar_sn"),
                     )
@@ -335,13 +340,31 @@ class LabelingDataAnalyzer:
 
     def analyze(self, include_content: bool = True) -> Dict[str, Any]:
         """
-        Inventory files by user and optionally parse contents for activity stats.
+        Inventory files by user and aggregate posture (activity) + GPS indoor/outdoor.
 
-        Args:
-            include_content: When True, download and parse durations / event files.
+        Top-level stats are posture/activity_session for backward compatibility.
+        GPS indoor/outdoor stats are under the ``gps`` key.
         """
         files = self.list_session_files()
+        activity_files = [f for f in files if f.family == "activity"]
+        gps_files = [f for f in files if f.family == "gps"]
+        activity = self._analyze_file_set(activity_files, include_content=include_content)
+        gps = self._analyze_file_set(gps_files, include_content=include_content)
+        return {
+            "bucket": self.bucket_name,
+            "prefix": self.prefix,
+            **activity,
+            "gps": gps,
+            "files_by_family": {
+                "activity": len(activity_files),
+                "gps": len(gps_files),
+            },
+        }
 
+    def _analyze_file_set(
+        self, files: List[SessionFileRef], include_content: bool = True
+    ) -> Dict[str, Any]:
+        """Aggregate one session family (activity or gps)."""
         by_user: Dict[str, Dict[str, Any]] = {}
         activity_duration_seconds: Dict[str, float] = defaultdict(float)
         activity_collar_events: Dict[str, int] = defaultdict(int)
@@ -536,9 +559,7 @@ class LabelingDataAnalyzer:
                 }
             )
 
-        summary = {
-            "bucket": self.bucket_name,
-            "prefix": self.prefix,
+        return {
             "total_files": len(files),
             "total_users": len(by_user),
             "total_sessions": sum(len(s) for s in sessions_seen.values()),
@@ -565,7 +586,6 @@ class LabelingDataAnalyzer:
             "dogs": list(dogs.values()),
             "parse_errors": parse_errors,
         }
-        return summary
 
     def analyze_local(self, root_dir: str) -> Dict[str, Any]:
         """
@@ -590,6 +610,7 @@ class LabelingDataAnalyzer:
                         timestamp=parsed["timestamp"],
                         index=parsed["index"],
                         kind=parsed["kind"],
+                        family=parsed.get("family") or "activity",
                         size=os.path.getsize(full),
                         collar_sn=parsed.get("collar_sn"),
                     )
@@ -642,15 +663,15 @@ def _activity_rows(duration_map: Dict[str, float], include_zero: bool = False) -
     return rows
 
 
-def format_ui_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
-    """Shape analyze() output for the frontend dashboard."""
-    duration_map = summary.get("activity_duration_seconds") or {}
+def _format_family_ui(family_summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Shape one session-family summary for the frontend."""
+    duration_map = family_summary.get("activity_duration_seconds") or {}
     total_duration = float(sum(duration_map.values()))
     activity_rows = _activity_rows(duration_map, include_zero=False)
     all_activity_rows = _activity_rows(duration_map, include_zero=True)
 
     users_out: List[Dict[str, Any]] = []
-    for user in summary.get("users") or []:
+    for user in family_summary.get("users") or []:
         user_durations = user.get("activity_duration_seconds") or {}
         user_total = float(sum(user_durations.values()))
         collars = []
@@ -686,24 +707,36 @@ def format_ui_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     return {
-        "bucket": summary.get("bucket"),
-        "prefix": summary.get("prefix"),
         "totals": {
-            "users": summary.get("total_users", 0),
-            "sessions": summary.get("total_sessions", 0),
-            "files": summary.get("total_files", 0),
-            "files_by_kind": summary.get("files_by_kind") or {},
+            "users": family_summary.get("total_users", 0),
+            "sessions": family_summary.get("total_sessions", 0),
+            "files": family_summary.get("total_files", 0),
+            "files_by_kind": family_summary.get("files_by_kind") or {},
             "duration_seconds": round(total_duration, 3),
             "duration_human": format_seconds(total_duration),
         },
         "activities": activity_rows,
         "all_activities": all_activity_rows,
         "users": users_out,
-        "by_date": summary.get("by_date") or [],
-        "collar_activity_events": summary.get("collar_activity_events") or {},
-        "user_reported_events": summary.get("user_reported_events") or {},
-        "dogs": summary.get("dogs") or [],
-        "parse_errors": summary.get("parse_errors") or [],
+        "by_date": family_summary.get("by_date") or [],
+        "collar_activity_events": family_summary.get("collar_activity_events") or {},
+        "user_reported_events": family_summary.get("user_reported_events") or {},
+        "dogs": family_summary.get("dogs") or [],
+        "parse_errors": family_summary.get("parse_errors") or [],
+    }
+
+
+def format_ui_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Shape analyze() output for the frontend dashboard."""
+    # Top-level fields are posture/activity; GPS is nested under summary["gps"].
+    posture = _format_family_ui(summary)
+    gps = _format_family_ui(summary.get("gps") or {})
+    return {
+        "bucket": summary.get("bucket"),
+        "prefix": summary.get("prefix"),
+        "files_by_family": summary.get("files_by_family") or {},
+        **posture,
+        "gps": gps,
     }
 
 

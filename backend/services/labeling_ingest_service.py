@@ -5,10 +5,12 @@ Staging layout (input):
   staging/<email>/<gmail-message-id>/
     _meta.json
     raw/*.zip
-    extracted/activity_session_*.txt
+    extracted/activity_session_*.txt   # posture model
+    extracted/gps_session_*.txt        # indoor/outdoor model
 
 Processed layout (output):
   extracted-txt/<email>/<collar-sn>/activity_session_*.txt
+  extracted-txt/<email>/<collar-sn>/gps_session_*.txt
 
 Session trios (collar_collected / durations / user_reported) stay together.
 Collar SN is read from *_collar_collected.txt when present; otherwise _unknown.
@@ -47,6 +49,7 @@ class StagingFile:
     timestamp: str
     index: int
     kind: str
+    family: str = "activity"
     size: int = 0
 
 
@@ -135,6 +138,7 @@ class LabelingIngestService:
                         timestamp=match.group("timestamp"),
                         index=int(match.group("index")),
                         kind=match.group("kind"),
+                        family=match.group("family"),
                         size=int(obj.get("Size") or 0),
                     )
                 )
@@ -145,11 +149,14 @@ class LabelingIngestService:
         staging_files = self.list_staging_extracted()
         batches = sorted({(f.email, f.message_id) for f in staging_files})
         by_email: Dict[str, int] = defaultdict(int)
+        staging_by_family: Dict[str, int] = defaultdict(int)
         for f in staging_files:
             by_email[f.email] += 1
+            staging_by_family[f.family] += 1
 
         output_count = 0
         output_emails = set()
+        output_by_family: Dict[str, int] = defaultdict(int)
         paginator = self.s3_client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.output_prefix):
             for obj in page.get("Contents", []) or []:
@@ -161,6 +168,11 @@ class LabelingIngestService:
                 parts = rel.split("/")
                 if parts:
                     output_emails.add(parts[0])
+                fname = parts[-1] if parts else ""
+                if fname.startswith("gps_session_"):
+                    output_by_family["gps"] += 1
+                elif fname.startswith("activity_session_"):
+                    output_by_family["activity"] += 1
 
         return {
             "bucket": self.bucket_name,
@@ -169,10 +181,12 @@ class LabelingIngestService:
             "staging_batches": len(batches),
             "staging_extracted_files": len(staging_files),
             "staging_by_email": dict(sorted(by_email.items())),
+            "staging_by_family": dict(sorted(staging_by_family.items())),
             "staging_batch_ids": [
                 {"email": e, "message_id": m} for e, m in batches
             ],
             "output_files": output_count,
+            "output_by_family": dict(sorted(output_by_family.items())),
             "output_emails": sorted(output_emails),
         }
 
@@ -243,12 +257,12 @@ class LabelingIngestService:
         report.staging_files = len(files)
         report.staging_batches = len({(f.email, f.message_id) for f in files})
 
-        # Group by labeler + session identity (timestamp+index).
+        # Group by labeler + family + session identity (timestamp+index).
         # If the same session appears in multiple Gmail messages, prefer the
         # lexicographically latest message_id's files.
-        sessions: Dict[Tuple[str, str, int], List[StagingFile]] = defaultdict(list)
+        sessions: Dict[Tuple[str, str, str, int], List[StagingFile]] = defaultdict(list)
         for f in files:
-            sessions[(f.email, f.timestamp, f.index)].append(f)
+            sessions[(f.email, f.family, f.timestamp, f.index)].append(f)
 
         report.sessions = len(sessions)
         sn_seen = set()
@@ -262,7 +276,7 @@ class LabelingIngestService:
             }
         )
 
-        for (email, timestamp, index), members in sorted(sessions.items()):
+        for (email, _family, timestamp, index), members in sorted(sessions.items()):
             # Resolve preferred member per kind from latest message_id
             by_kind: Dict[str, StagingFile] = {}
             for m in sorted(members, key=lambda x: x.message_id):

@@ -1,0 +1,1 @@
+{"IndoorBlocked":"00:01:32.9000000","IndoorSeeSky":"00:00:00.3000000","Door":"00:00:12.7000000","OutdoorCovered":"00:00:00","OutdoorOpenSky":"00:00:35.6000000"}

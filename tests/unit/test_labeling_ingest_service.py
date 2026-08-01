@@ -12,6 +12,10 @@ def test_sanitize_and_filename_helpers():
     )
     assert m is not None
     assert m.group("kind") == "collar_collected"
+    assert m.group("family") == "activity"
+    g = FILENAME_RE.match("gps_session_2025-10-10T12:13:33_0_durations.txt")
+    assert g is not None
+    assert g.group("family") == "gps"
 
 
 def test_staging_status_requires_bucket(monkeypatch):

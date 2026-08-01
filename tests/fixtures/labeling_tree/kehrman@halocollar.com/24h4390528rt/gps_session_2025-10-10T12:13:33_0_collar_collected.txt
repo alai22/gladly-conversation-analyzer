@@ -1,0 +1,8 @@
+12:13:33.488: Dog's name: Reeses Midnight
+12:13:33.498: Dog's breed: NotSelected
+12:13:33.499: Dog's weight: 
+12:13:33.499: Collar SN: 24h4390528rt
+12:13:33.500 / 12:13:32.000: Session started
+12:13:33.500 / 12:13:32.000: Outdoor (open sky) (initial state)
+12:14:22.086 / 12:14:22.000: Indoor (blocked)
+12:16:19.817: End of session
