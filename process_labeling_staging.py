@@ -36,6 +36,12 @@ def main(argv=None) -> int:
         help="Print staging vs output inventory and exit",
     )
     parser.add_argument("--json", action="store_true", help="Print JSON report")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=16,
+        help="Parallel S3 workers for collar-SN reads and copies (default 16)",
+    )
     args = parser.parse_args(argv)
 
     svc = LabelingIngestService()
@@ -60,6 +66,18 @@ def main(argv=None) -> int:
                     f"(not processed until promoted) "
                     f"ledger={status.get('forward_attributions', 0)}"
                 )
+            health = status.get("staging_health") or {}
+            if health:
+                print(
+                    f"Health: unique_sessions={health.get('unique_sessions')} "
+                    f"unique_files≈{health.get('unique_files_after_dedupe')} "
+                    f"dup_refs={health.get('duplicate_file_refs')} "
+                    f"ratio={health.get('duplicate_ratio')} "
+                    f"incomplete={health.get('incomplete_sessions')} "
+                    f"size_mismatches={health.get('size_mismatch_sessions')}"
+                )
+                for warning in health.get("warnings") or []:
+                    print(f"WARNING: {warning}")
             print(
                 f"Output: {status['output_files']} files under {status['output_prefix']} "
                 f"({', '.join(status['output_emails']) or 'none'})"
@@ -69,6 +87,7 @@ def main(argv=None) -> int:
     report = svc.process_staging(
         dry_run=args.dry_run,
         clear_output=not args.no_clear_output,
+        workers=args.workers,
     )
 
     if args.json:
@@ -85,14 +104,27 @@ def main(argv=None) -> int:
         )
         print(
             f"Copied={report['copied']} skipped_unchanged={report['skipped_unchanged']} "
-            f"unknown_sn_sessions={report['unknown_sn_sessions']} errors={len(report['errors'])}"
+            f"unknown_sn_sessions={report['unknown_sn_sessions']} "
+            f"incomplete_sessions={report.get('incomplete_sessions', 0)} "
+            f"errors={len(report['errors'])}"
         )
+        health = report.get("health") or {}
+        if health:
+            print(
+                f"Health: raw_files={health.get('raw_extracted_files')} "
+                f"unique_sessions={health.get('unique_sessions')} "
+                f"unique_files≈{health.get('unique_files_after_dedupe')} "
+                f"dup_refs={health.get('duplicate_file_refs')} "
+                f"ratio={health.get('duplicate_ratio')}"
+            )
         for email, stats in (report.get("by_email") or {}).items():
             print(
                 f"  {email}: sessions={stats['sessions']} files={stats['files_copied']} "
                 f"sns={','.join(stats['collar_sns']) or '-'} "
                 f"msgs={len(stats['message_ids'])}"
             )
+        for warning in report.get("warnings") or []:
+            print(f"WARNING: {warning}", file=sys.stderr)
         if report["errors"]:
             print("Errors:", file=sys.stderr)
             for err in report["errors"][:20]:

@@ -34,11 +34,12 @@ import hashlib
 import json
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parseaddr
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import boto3
 
@@ -186,6 +187,119 @@ class StagingFile:
     size: int = 0
 
 
+# Warn when staging file refs are this many times larger than unique session files.
+DUPLICATE_RATIO_WARN = 3.0
+# Promote: batch looks cumulative if this fraction of its extracted names
+# already exist under the destination labeler.
+CUMULATIVE_OVERLAP_WARN = 0.85
+
+
+def analyze_staging_health(files: List[StagingFile]) -> Dict[str, Any]:
+    """
+    Detect duplicate session copies, incomplete trios, and size mismatches.
+
+    Process already dedupes by (email, family, timestamp, index); this surfaces
+    Make/quarantine stacking so we notice before S3/process blows up.
+    """
+    by_session: Dict[Tuple[str, str, str, int], List[StagingFile]] = defaultdict(list)
+    for f in files:
+        by_session[(f.email, f.family, f.timestamp, f.index)].append(f)
+
+    multi_message_sessions = 0
+    size_mismatch_sessions = 0
+    incomplete_sessions = 0
+    duplicate_file_refs = 0
+    mismatch_samples: List[Dict[str, Any]] = []
+    incomplete_samples: List[Dict[str, Any]] = []
+
+    for (email, family, timestamp, index), members in by_session.items():
+        mids = {m.message_id for m in members}
+        if len(mids) > 1:
+            multi_message_sessions += 1
+            # Count extra copies beyond one trio (or partial) worth of kinds.
+            by_kind_mids: Dict[str, Set[str]] = defaultdict(set)
+            by_kind_sizes: Dict[str, Set[int]] = defaultdict(set)
+            for m in members:
+                by_kind_mids[m.kind].add(m.message_id)
+                by_kind_sizes[m.kind].add(int(m.size or 0))
+            for mid_set in by_kind_mids.values():
+                duplicate_file_refs += max(0, len(mid_set) - 1)
+            if any(len(sizes) > 1 for sizes in by_kind_sizes.values()):
+                size_mismatch_sessions += 1
+                if len(mismatch_samples) < 8:
+                    mismatch_samples.append(
+                        {
+                            "email": email,
+                            "family": family,
+                            "timestamp": timestamp,
+                            "index": index,
+                            "message_ids": sorted(mids)[:6],
+                            "message_id_count": len(mids),
+                        }
+                    )
+
+        expected = {"collar_collected", "durations", "user_reported"}
+        # Completeness from latest message_id only (what process keeps).
+        latest_mid = max(mids)
+        latest_kinds = {m.kind for m in members if m.message_id == latest_mid}
+        if not expected.issubset(latest_kinds):
+            incomplete_sessions += 1
+            if len(incomplete_samples) < 8:
+                incomplete_samples.append(
+                    {
+                        "email": email,
+                        "family": family,
+                        "timestamp": timestamp,
+                        "index": index,
+                        "message_id": latest_mid,
+                        "kinds": sorted(latest_kinds),
+                        "missing": sorted(expected - latest_kinds),
+                    }
+                )
+
+    unique_sessions = len(by_session)
+    unique_file_estimate = 0
+    for members in by_session.values():
+        latest_mid = max(m.message_id for m in members)
+        unique_file_estimate += len(
+            {m.kind for m in members if m.message_id == latest_mid}
+        )
+    raw_files = len(files)
+    ratio = (raw_files / unique_file_estimate) if unique_file_estimate else 0.0
+
+    warnings: List[str] = []
+    if ratio >= DUPLICATE_RATIO_WARN:
+        warnings.append(
+            f"Staging has {raw_files} extracted files but only ~{unique_file_estimate} "
+            f"unique after session dedupe ({ratio:.1f}x). Make/quarantine is likely "
+            f"re-uploading cumulative extracted trees."
+        )
+    if size_mismatch_sessions:
+        warnings.append(
+            f"{size_mismatch_sessions} session(s) have the same id in multiple emails "
+            f"with differing file sizes — dedupe kept the latest message_id; inspect samples."
+        )
+    if incomplete_sessions:
+        warnings.append(
+            f"{incomplete_sessions} session(s) missing collar_collected/durations/user_reported "
+            f"in the winning message batch."
+        )
+
+    return {
+        "raw_extracted_files": raw_files,
+        "unique_sessions": unique_sessions,
+        "unique_files_after_dedupe": unique_file_estimate,
+        "duplicate_file_refs": duplicate_file_refs,
+        "multi_message_sessions": multi_message_sessions,
+        "size_mismatch_sessions": size_mismatch_sessions,
+        "incomplete_sessions": incomplete_sessions,
+        "duplicate_ratio": round(ratio, 2),
+        "warnings": warnings,
+        "mismatch_samples": mismatch_samples,
+        "incomplete_samples": incomplete_samples,
+    }
+
+
 @dataclass
 class ProcessReport:
     bucket: str
@@ -199,6 +313,9 @@ class ProcessReport:
     copied: int = 0
     skipped_unchanged: int = 0
     unknown_sn_sessions: int = 0
+    incomplete_sessions: int = 0
+    health: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
     errors: List[Dict[str, str]] = field(default_factory=list)
     by_email: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     collar_sns: List[str] = field(default_factory=list)
@@ -216,6 +333,9 @@ class ProcessReport:
             "copied": self.copied,
             "skipped_unchanged": self.skipped_unchanged,
             "unknown_sn_sessions": self.unknown_sn_sessions,
+            "incomplete_sessions": self.incomplete_sessions,
+            "health": self.health,
+            "warnings": self.warnings,
             "errors": self.errors,
             "by_email": self.by_email,
             "collar_sns": self.collar_sns,
@@ -426,6 +546,20 @@ class LabelingIngestService:
             Key=dest,
         )
 
+    def _labeler_extracted_filenames(self, labeler: str) -> Set[str]:
+        """Filenames already under staging/<labeler>/*/extracted/."""
+        names: Set[str] = set()
+        prefix = f"{self.staging_prefix}{labeler}/"
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                key = obj["Key"]
+                parts = key.split("/")
+                # staging/<email>/<mid>/extracted/<filename>
+                if len(parts) >= 5 and parts[-2] == "extracted":
+                    names.add(parts[-1])
+        return names
+
     def _append_forward_attribution(
         self, entry: Dict[str, Any], dry_run: bool
     ) -> None:
@@ -477,7 +611,10 @@ class LabelingIngestService:
             "promoted": [],
             "skipped": [],
             "errors": [],
+            "warnings": [],
         }
+        # Avoid re-promoting cumulative extracted trees Make stacked into each forward.
+        labeler_extracted_cache: Dict[str, Set[str]] = {}
 
         batches = self.list_forward_batches()
         for batch in batches:
@@ -523,7 +660,16 @@ class LabelingIngestService:
                 continue
 
             dest_prefix = f"{self.staging_prefix}{labeler}/{message_id}/"
+            if labeler not in labeler_extracted_cache:
+                labeler_extracted_cache[labeler] = self._labeler_extracted_filenames(
+                    labeler
+                )
+            existing_extracted = labeler_extracted_cache[labeler]
+
             keys_to_copy: List[Tuple[str, str]] = []
+            skipped_duplicate_extracted = 0
+            extracted_seen = 0
+            new_extracted_names: Set[str] = set()
             paginator = self.s3_client.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
                 for obj in page.get("Contents", []) or []:
@@ -535,6 +681,12 @@ class LabelingIngestService:
                         # Meta rewritten below with attribution.
                         continue
                     if rel.startswith("extracted/"):
+                        extracted_seen += 1
+                        fname = rel.split("/", 1)[-1]
+                        if fname in existing_extracted:
+                            skipped_duplicate_extracted += 1
+                            continue
+                        new_extracted_names.add(fname)
                         dest = f"{dest_prefix}{rel}"
                     elif rel.startswith("raw/"):
                         dest = f"{dest_prefix}{rel}"
@@ -544,6 +696,20 @@ class LabelingIngestService:
                     else:
                         dest = f"{dest_prefix}{rel}"
                     keys_to_copy.append((src, dest))
+
+            overlap = (
+                (skipped_duplicate_extracted / extracted_seen) if extracted_seen else 0.0
+            )
+            cumulative = overlap >= CUMULATIVE_OVERLAP_WARN and extracted_seen > 0
+            if cumulative:
+                warn = (
+                    f"Forward {message_id} looks cumulative for {labeler}: "
+                    f"{skipped_duplicate_extracted}/{extracted_seen} extracted files "
+                    f"already in staging (overlap {overlap:.0%}). "
+                    f"Copied only {len(new_extracted_names)} new extracted file(s)."
+                )
+                report["warnings"].append(warn)
+                logger.warning(warn)
 
             envelope_from = None
             if meta:
@@ -563,6 +729,9 @@ class LabelingIngestService:
                 "original_sender": labeler,
                 "forwarder": envelope_from or "alai@halocollar.com",
                 "promoted_at": promoted_at,
+                "skipped_duplicate_extracted": skipped_duplicate_extracted,
+                "new_extracted_files": len(new_extracted_names),
+                "likely_cumulative_extract": cumulative,
             }
 
             new_meta: Dict[str, Any] = deepcopy(meta) if meta else {}
@@ -580,6 +749,7 @@ class LabelingIngestService:
             try:
                 for src, dest in keys_to_copy:
                     self._copy_key(src, dest, dry_run=dry_run)
+                existing_extracted.update(new_extracted_names)
                 self._put_json_object(
                     f"{dest_prefix}_meta.json", new_meta, dry_run=dry_run
                 )
@@ -591,6 +761,8 @@ class LabelingIngestService:
                         "email": labeler,
                         "prefix": dest_prefix,
                         "promoted_at": promoted_at,
+                        "skipped_duplicate_extracted": skipped_duplicate_extracted,
+                        "new_extracted_files": len(new_extracted_names),
                     }
                     quarantine_meta["attribution"] = attribution
                     self._put_json_object(meta_key, quarantine_meta, dry_run=dry_run)
@@ -605,6 +777,9 @@ class LabelingIngestService:
                     "promoted_at": promoted_at,
                     "extracted_files": batch["extracted_files"],
                     "copied_keys": len(keys_to_copy) + 1,
+                    "skipped_duplicate_extracted": skipped_duplicate_extracted,
+                    "new_extracted_files": len(new_extracted_names),
+                    "likely_cumulative_extract": cumulative,
                     "dry_run": dry_run,
                 }
                 self._append_forward_attribution(ledger_entry, dry_run=dry_run)
@@ -617,14 +792,19 @@ class LabelingIngestService:
                         "dest_prefix": dest_prefix,
                         "copied_keys": len(keys_to_copy) + 1,
                         "extracted_files": batch["extracted_files"],
+                        "skipped_duplicate_extracted": skipped_duplicate_extracted,
+                        "new_extracted_files": len(new_extracted_names),
+                        "likely_cumulative_extract": cumulative,
                     }
                 )
                 logger.info(
-                    "Promoted forward %s → %s (from=%s, keys=%s)",
+                    "Promoted forward %s → %s (from=%s, keys=%s, new_extracted=%s, skipped_dup=%s)",
                     message_id,
                     labeler,
                     source,
                     len(keys_to_copy) + 1,
+                    len(new_extracted_names),
+                    skipped_duplicate_extracted,
                 )
             except Exception as exc:  # noqa: BLE001
                 report["errors"].append(
@@ -685,6 +865,7 @@ class LabelingIngestService:
             ),
             "forward_attributions": len(attributions.get("entries") or []),
             "pending_forwards": pending_forwards,
+            "staging_health": analyze_staging_health(staging_files),
             "output_files": output_count,
             "output_by_family": dict(sorted(output_by_family.items())),
             "output_emails": sorted(output_emails),
@@ -725,17 +906,45 @@ class LabelingIngestService:
         except Exception:  # noqa: BLE001
             return None
 
+    def _list_output_keys(self) -> Set[str]:
+        keys: Set[str] = set()
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.output_prefix):
+            for obj in page.get("Contents", []) or []:
+                key = obj["Key"]
+                if not key.endswith("/"):
+                    keys.add(key)
+        return keys
+
+    def _resolve_collar_sn(self, collar_key: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+        """Return (sn, error)."""
+        if not collar_key:
+            return None, None
+        try:
+            text = self._get_text(collar_key)
+            match = COLLAR_SN_RE.search(text)
+            if match:
+                return sanitize_collar_sn(match.group(1)), None
+            return None, None
+        except Exception as exc:  # noqa: BLE001
+            return None, f"read SN failed: {exc}"
+
     def process_staging(
         self,
         dry_run: bool = False,
         clear_output: bool = True,
+        workers: int = 16,
     ) -> Dict[str, Any]:
         """
         Process all staging extracted files into extracted-txt/<email>/<collar-sn>/.
 
+        Dedupes identical sessions across message_ids (keeps latest message_id).
+        Skips dest keys that already exist (no per-file MD5) unless clear_output.
+
         Args:
             dry_run: Plan only; do not copy/delete.
             clear_output: Wipe extracted-txt/ before copying (clean reprocess).
+            workers: Parallel S3 copy / SN-read threads.
         """
         report = ProcessReport(
             bucket=self.bucket_name,
@@ -743,6 +952,7 @@ class LabelingIngestService:
             output_prefix=self.output_prefix,
             dry_run=dry_run,
         )
+        workers = max(1, int(workers or 1))
 
         if clear_output:
             report.cleared_output_keys = self._clear_output_prefix(dry_run=dry_run)
@@ -756,6 +966,12 @@ class LabelingIngestService:
         files = self.list_staging_extracted()
         report.staging_files = len(files)
         report.staging_batches = len({(f.email, f.message_id) for f in files})
+        health = analyze_staging_health(files)
+        report.health = health
+        report.warnings = list(health.get("warnings") or [])
+        report.incomplete_sessions = int(health.get("incomplete_sessions") or 0)
+        for warning in report.warnings:
+            logger.warning("Staging health: %s", warning)
 
         # Group by labeler + family + session identity (timestamp+index).
         # If the same session appears in multiple Gmail messages, prefer the
@@ -765,6 +981,55 @@ class LabelingIngestService:
             sessions[(f.email, f.family, f.timestamp, f.index)].append(f)
 
         report.sessions = len(sessions)
+        logger.info(
+            "Staging inventory: %s files → %s unique sessions "
+            "(~%s unique files after dedupe, %s duplicate refs)",
+            len(files),
+            len(sessions),
+            health.get("unique_files_after_dedupe"),
+            health.get("duplicate_file_refs"),
+        )
+
+        existing_dest: Set[str] = set()
+        if not clear_output and not dry_run:
+            existing_dest = self._list_output_keys()
+            logger.info("Existing output keys: %s", len(existing_dest))
+
+        # Resolve chosen files + collar keys first (CPU / local), then fetch SNs in parallel.
+        planned: List[Dict[str, Any]] = []
+        for (email, _family, _timestamp, _index), members in sorted(sessions.items()):
+            by_kind: Dict[str, StagingFile] = {}
+            for m in sorted(members, key=lambda x: x.message_id):
+                by_kind[m.kind] = m
+            chosen = list(by_kind.values())
+            collar = by_kind.get("collar_collected")
+            planned.append(
+                {
+                    "email": email,
+                    "chosen": chosen,
+                    "collar_key": collar.key if collar else None,
+                    "message_ids": {m.message_id for m in chosen},
+                }
+            )
+
+        sn_by_collar: Dict[str, Optional[str]] = {}
+        collar_keys = [p["collar_key"] for p in planned if p["collar_key"]]
+        if collar_keys:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(self._resolve_collar_sn, key): key for key in collar_keys
+                }
+                done = 0
+                for fut in as_completed(futures):
+                    key = futures[fut]
+                    sn, err = fut.result()
+                    sn_by_collar[key] = sn
+                    if err:
+                        report.errors.append({"key": key, "error": err})
+                    done += 1
+                    if done % 100 == 0 or done == len(futures):
+                        logger.info("Resolved collar SN %s/%s", done, len(futures))
+
         sn_seen = set()
         by_email: Dict[str, Dict[str, Any]] = defaultdict(
             lambda: {
@@ -775,28 +1040,12 @@ class LabelingIngestService:
                 "message_ids": set(),
             }
         )
+        copies: List[Tuple[str, str, str]] = []  # src, dest, email
 
-        for (email, _family, timestamp, index), members in sorted(sessions.items()):
-            # Resolve preferred member per kind from latest message_id
-            by_kind: Dict[str, StagingFile] = {}
-            for m in sorted(members, key=lambda x: x.message_id):
-                by_kind[m.kind] = m
-            chosen = list(by_kind.values())
-            for m in chosen:
-                by_email[email]["message_ids"].add(m.message_id)
-
-            sn = None
-            collar_member = by_kind.get("collar_collected")
-            if collar_member:
-                try:
-                    text = self._get_text(collar_member.key)
-                    match = COLLAR_SN_RE.search(text)
-                    if match:
-                        sn = sanitize_collar_sn(match.group(1))
-                except Exception as exc:  # noqa: BLE001
-                    report.errors.append(
-                        {"key": collar_member.key, "error": f"read SN failed: {exc}"}
-                    )
+        for item in planned:
+            email = item["email"]
+            collar_key = item["collar_key"]
+            sn = sn_by_collar.get(collar_key) if collar_key else None
             if not sn:
                 sn = UNKNOWN_COLLAR_SN
                 report.unknown_sn_sessions += 1
@@ -805,28 +1054,53 @@ class LabelingIngestService:
             by_email[email]["email"] = email
             by_email[email]["sessions"] += 1
             by_email[email]["collar_sns"].add(sn)
+            by_email[email]["message_ids"].update(item["message_ids"])
 
-            for m in chosen:
+            for m in item["chosen"]:
                 dest = f"{self.output_prefix}{email}/{sn}/{m.filename}"
                 if dry_run:
                     report.copied += 1
                     by_email[email]["files_copied"] += 1
                     continue
+                if dest in existing_dest:
+                    report.skipped_unchanged += 1
+                    continue
+                copies.append((m.key, dest, email))
+
+        logger.info(
+            "Copy plan: %s to copy, %s already present, dry_run=%s",
+            len(copies),
+            report.skipped_unchanged,
+            dry_run,
+        )
+
+        if copies and not dry_run:
+            def _copy_one(src_dest_email: Tuple[str, str, str]) -> Tuple[str, str, Optional[str]]:
+                src, dest, email = src_dest_email
                 try:
-                    src_md5 = self._object_md5(m.key)
-                    dst_md5 = self._object_md5(dest)
-                    if src_md5 and dst_md5 and src_md5 == dst_md5:
-                        report.skipped_unchanged += 1
-                        continue
                     self.s3_client.copy_object(
                         Bucket=self.bucket_name,
-                        CopySource={"Bucket": self.bucket_name, "Key": m.key},
+                        CopySource={"Bucket": self.bucket_name, "Key": src},
                         Key=dest,
                     )
-                    report.copied += 1
-                    by_email[email]["files_copied"] += 1
+                    return email, dest, None
                 except Exception as exc:  # noqa: BLE001
-                    report.errors.append({"key": m.key, "dest": dest, "error": str(exc)})
+                    return email, dest, str(exc)
+
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(_copy_one, item) for item in copies]
+                done = 0
+                for fut in as_completed(futures):
+                    email, dest, err = fut.result()
+                    done += 1
+                    if err:
+                        report.errors.append({"dest": dest, "error": err})
+                    else:
+                        report.copied += 1
+                        by_email[email]["files_copied"] += 1
+                        existing_dest.add(dest)
+                    if done % 100 == 0 or done == len(futures):
+                        logger.info("Copied %s/%s", done, len(futures))
 
         report.collar_sns = sorted(sn_seen)
         report.by_email = {

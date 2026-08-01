@@ -117,15 +117,23 @@ def main(argv=None) -> int:
             f"errors={len(report['errors'])}"
         )
         for item in report["promoted"]:
+            extra = ""
+            if item.get("skipped_duplicate_extracted"):
+                extra = (
+                    f", new_extracted={item.get('new_extracted_files', 0)} "
+                    f"skipped_dup={item['skipped_duplicate_extracted']}"
+                )
             print(
                 f"  ✓ {item['message_id']} → {item['labeler_email']} "
-                f"(via {item['labeler_resolved_from']}, keys={item['copied_keys']})"
+                f"(via {item['labeler_resolved_from']}, keys={item['copied_keys']}{extra})"
             )
         for item in report["skipped"]:
             print(
                 f"  · skipped {item['message_id']}: {item['reason']} "
                 f"(meta={item.get('has_meta')} body={item.get('has_body')})"
             )
+        for warning in report.get("warnings") or []:
+            print(f"WARNING: {warning}", file=sys.stderr)
         for err in report["errors"][:20]:
             print(f"  ! {err}", file=sys.stderr)
 

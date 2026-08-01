@@ -3,6 +3,8 @@
 from backend.services.labeling_data_analyzer import FILENAME_RE, sanitize_collar_sn
 from backend.services.labeling_ingest_service import (
     LabelingIngestService,
+    StagingFile,
+    analyze_staging_health,
     forward_body_from_meta,
     looks_like_labeler_email,
     normalize_labeler_email,
@@ -43,6 +45,54 @@ def test_looks_like_labeler_email():
     assert not looks_like_labeler_email("_forwards")
     assert not looks_like_labeler_email("adrian lai")
     assert not looks_like_labeler_email("24h4290093rt")
+
+
+def _sf(email, mid, ts, index, kind, size=10, family="activity"):
+    fname = f"{family}_session_{ts}_{index}_{kind}.txt"
+    return StagingFile(
+        key=f"staging/{email}/{mid}/extracted/{fname}",
+        email=email,
+        message_id=mid,
+        filename=fname,
+        timestamp=ts,
+        index=index,
+        kind=kind,
+        family=family,
+        size=size,
+    )
+
+
+def test_analyze_staging_health_flags_duplicates_and_incomplete():
+    email = "a@example.com"
+    ts = "2026-05-01T15:09:55"
+    files = [
+        _sf(email, "mid1", ts, 0, "collar_collected", size=10),
+        _sf(email, "mid1", ts, 0, "durations", size=11),
+        _sf(email, "mid1", ts, 0, "user_reported", size=12),
+        # Cumulative re-upload of same session in another message
+        _sf(email, "mid2", ts, 0, "collar_collected", size=10),
+        _sf(email, "mid2", ts, 0, "durations", size=11),
+        _sf(email, "mid2", ts, 0, "user_reported", size=12),
+        # Incomplete session
+        _sf(email, "mid3", "2026-05-02T10:00:00", 1, "collar_collected", size=9),
+    ]
+    # Pad with more duplicate copies so ratio warning fires
+    for i in range(3, 12):
+        mid = f"mid{i}"
+        files.extend(
+            [
+                _sf(email, mid, ts, 0, "collar_collected", size=10),
+                _sf(email, mid, ts, 0, "durations", size=11),
+                _sf(email, mid, ts, 0, "user_reported", size=12),
+            ]
+        )
+    health = analyze_staging_health(files)
+    assert health["unique_sessions"] == 2
+    assert health["multi_message_sessions"] >= 1
+    assert health["incomplete_sessions"] == 1
+    assert health["duplicate_ratio"] >= 3.0
+    assert health["warnings"]
+    assert health["size_mismatch_sessions"] == 0
 
 
 def test_parse_original_from_forward_body():
@@ -229,3 +279,52 @@ def test_promote_forwards_copies_and_records_attribution():
     again = svc.promote_forwards(dry_run=False)
     assert again["promoted"] == []
     assert again["skipped"][0]["reason"] == "already_promoted"
+
+
+def test_promote_skips_extracted_already_under_labeler():
+    import json
+
+    meta = json.dumps(
+        {
+            "Message ID": "fwd2",
+            "Labeler Email Address": "alai@halocollar.com",
+            "Email Body": (
+                "---------- Forwarded message ---------\n"
+                "From: Lindsey <lindseyw7485@gmail.com>\n"
+            ),
+        }
+    ).encode()
+    objects = {
+        "staging/_forwards/fwd2/_meta.json": meta,
+        "staging/_forwards/fwd2/logs.zip": b"ZIP",
+        "staging/_forwards/fwd2/extracted/activity_session_2026-05-01T16:00:00_1_collar_collected.txt": b"ONLY",
+    }
+    # 6 already-known names + 1 new → 86% overlap (cumulative)
+    for i in range(6):
+        name = f"activity_session_2026-05-01T15:0{i}:55_0_collar_collected.txt"
+        objects[f"staging/lindseyw7485@gmail.com/old/extracted/{name}"] = b"OLD"
+        objects[f"staging/_forwards/fwd2/extracted/{name}"] = b"NEW"
+    s3 = _FakeS3(objects)
+    svc = LabelingIngestService(
+        bucket_name="test-bucket",
+        staging_prefix="staging/",
+        output_prefix="extracted-txt/",
+        s3_client=s3,
+    )
+    report = svc.promote_forwards(dry_run=False)
+    assert len(report["promoted"]) == 1
+    item = report["promoted"][0]
+    assert item["skipped_duplicate_extracted"] == 6
+    assert item["new_extracted_files"] == 1
+    assert item["likely_cumulative_extract"] is True
+    assert (
+        "staging/lindseyw7485@gmail.com/fwd2/extracted/"
+        "activity_session_2026-05-01T15:00:55_0_collar_collected.txt"
+        not in s3.objects
+    )
+    assert (
+        "staging/lindseyw7485@gmail.com/fwd2/extracted/"
+        "activity_session_2026-05-01T16:00:00_1_collar_collected.txt"
+        in s3.objects
+    )
+    assert report["warnings"]

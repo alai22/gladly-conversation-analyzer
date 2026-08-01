@@ -371,6 +371,8 @@ const LabelingDataDashboard = () => {
   const totals = data?.totals || {};
   const activities = data?.activities || [];
   const pendingForwards = status?.pending_forwards || null;
+  const stagingHealth = status?.staging_health || null;
+  const stagingHealthWarnings = stagingHealth?.warnings || [];
   const users = useMemo(() => {
     const list = data?.users || [];
     return [...list].sort(
@@ -548,6 +550,30 @@ const LabelingDataDashboard = () => {
       {error && data ? (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
           Couldn’t refresh summary ({error}). Showing last results.
+        </div>
+      ) : null}
+
+      {stagingHealthWarnings.length > 0 ? (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-950">
+          <div className="font-medium">Staging health</div>
+          <div className="mt-1 text-xs text-amber-900/90">
+            {stagingHealth.raw_extracted_files} files → ~{stagingHealth.unique_files_after_dedupe}{' '}
+            unique after dedupe ({stagingHealth.duplicate_ratio}x)
+            {stagingHealth.multi_message_sessions
+              ? ` · ${stagingHealth.multi_message_sessions} sessions in multiple emails`
+              : ''}
+            {stagingHealth.incomplete_sessions
+              ? ` · ${stagingHealth.incomplete_sessions} incomplete`
+              : ''}
+            {stagingHealth.size_mismatch_sessions
+              ? ` · ${stagingHealth.size_mismatch_sessions} size mismatches`
+              : ''}
+          </div>
+          <ul className="mt-2 list-disc pl-5 space-y-1">
+            {stagingHealthWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -1168,6 +1194,18 @@ const LabelingDataDashboard = () => {
                   ? ` (${status.output_emails.join(', ')})`
                   : ' (empty — click Process staging)'}
               </div>
+              {status.staging_health ? (
+                <div>
+                  Health: ~{status.staging_health.unique_files_after_dedupe} unique /{' '}
+                  {status.staging_health.raw_extracted_files} raw
+                  {status.staging_health.duplicate_ratio
+                    ? ` (${status.staging_health.duplicate_ratio}x)`
+                    : ''}
+                  {status.staging_health.incomplete_sessions
+                    ? ` · incomplete ${status.staging_health.incomplete_sessions}`
+                    : ''}
+                </div>
+              ) : null}
               {status.pending_forwards ? (
                 <div>
                   Forwards: {status.pending_forwards.pending_count || 0} pending
